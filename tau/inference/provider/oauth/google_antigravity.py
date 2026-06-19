@@ -27,10 +27,10 @@ from tau.inference.provider.oauth.utils import parse_authorization_input, start_
 
 __all__ = ["GoogleAntigravityOAuthProvider"]
 
-_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())                                                       
 
-CLIENT_ID = os.getenv("GOOGLE_ANTIGRAVITY_CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("GOOGLE_ANTIGRAVITY_CLIENT_SECRET", "")
+CLIENT_ID = os.getenv("GOOGLE_ANTIGRAVITY_CLIENT_ID", "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com")
+CLIENT_SECRET = os.getenv("GOOGLE_ANTIGRAVITY_CLIENT_SECRET", "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")
 AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://www.googleapis.com/oauth2/v1/userinfo"
