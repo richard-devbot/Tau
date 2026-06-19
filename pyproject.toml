@@ -1,7 +1,7 @@
 [project]
 name = "tau-coding-agent"
 version = "0.1.0"
-description = "Interactive agent CLI with terminal UI for multi-provider LLM support"
+description = "A self-extensible agent CLI with terminal UI, multi-provider LLM support, session management with branching, and a plugin system for tools and commands"
 readme = "README.md"
 requires-python = "==3.13.*"
 dependencies = [
