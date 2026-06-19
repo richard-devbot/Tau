@@ -32,7 +32,7 @@ pip install -e .
 tau
 ```
 
-Authenticate with your LLM provider using `/login` or set environment variables (e.g., `ANTHROPIC_API_KEY`).
+Authenticate with your LLM provider using `/login` or set environment variables (e.g., `NVIDIA_API_KEY`).
 
 ### Common Commands
 
