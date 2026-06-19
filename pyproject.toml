@@ -1,0 +1,55 @@
+[project]
+name = "tau-coding-agent"
+version = "0.1.0"
+description = "Interactive agent CLI with terminal UI for multi-provider LLM support"
+readme = "README.md"
+requires-python = "==3.13.*"
+dependencies = [
+    "anthropic==0.109.1",
+    "certifi==2026.5.20",
+    "click==8.4.1",
+    "filelock==3.29.3",
+    "google-genai==2.8.0",
+    "httpx==0.28.1",
+    "mistralai==2.4.9",
+    "ollama==0.6.2",
+    "openai==2.41.1",
+    "packaging==26.2",
+    "pillow==12.2.0",
+    "pydantic==2.13.4",
+    "python-dotenv==1.2.2",
+    "uuid7==0.1.0",
+    "websockets==16.0",
+    "mistletoe==1.5.1",
+    "pyyaml==6.0.2",
+    "pygments==2.20.0",
+    "pathspec==1.1.1",
+    "gitpython==3.1.50",
+]
+
+[project.scripts]
+tau = "tau.console.cli:main"
+
+[tool.uv]
+# Supply chain security: enforce exact version pinning for direct dependencies
+# This prevents unexpected dependency updates that could introduce vulnerabilities
+resolution = "highest"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+tau = [
+    "builtins/**/*",
+]

@@ -1,0 +1,46 @@
+name: light
+
+colors:
+  # UI chrome
+  divider:          "#c8c8c8"
+  spinner_frame:    "#0066cc"
+  spinner_label:    "#999999"
+
+  # Markdown
+  heading:          { color: "#6d28d9", bold: true }
+  code_inline:      "#b45309"
+  code_block:       "#047857"
+  code_block_border: "#c8c8c8"
+  quote:            { color: "#9ca3af", italic: true }
+  quote_border:     "#c8c8c8"
+  hr:               "#c8c8c8"
+  list_bullet:      "#6d28d9"
+  link_text:        "#0066cc"
+  link_url:         "#9ca3af"
+
+  # Messages
+  you_label:        { color: "#0066cc", bold: true }
+  assistant_label:  { color: "#047857", bold: true }
+  tool_arrow:       "#b45309"
+  tool_result_ok:   "#9ca3af"
+  tool_result_err:  "#dc2626"
+  thinking:         { color: "#9ca3af", italic: true }
+  error_label:      { color: "#dc2626", bold: true }
+  dim:              "#9ca3af"
+  stream_cursor:    "#374151"
+
+  # Select list
+  selected_label:   { color: "#6d28d9", bold: true }
+  selected_desc:    "#0066cc"
+  normal_label:     "#374151"
+  normal_desc:      "#9ca3af"
+  indicator:        "#9ca3af"
+  empty:            "#9ca3af"
+
+input:
+  prefix:      "❯ "
+  placeholder: ""
+
+spinner:
+  frames:      ["▖", "▘", "▝", "▗"]
+  interval_ms: 120

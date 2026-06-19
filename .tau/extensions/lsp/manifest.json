@@ -1,0 +1,30 @@
+{
+  "tau": {
+    "settings": {
+      "title": "LSP (code intelligence)",
+      "fields": [
+        {
+          "key": "lsp",
+          "label": "Enabled",
+          "type": "bool",
+          "default": true,
+          "description": "Language-server code intelligence: diagnostics, hover, definitions."
+        },
+        {
+          "key": "servers",
+          "label": "Language servers",
+          "type": "group",
+          "description": "Enable/disable specific servers (enabled ones auto-start on demand).",
+          "fields": [
+            {"key": "pyright.enabled", "label": "pyright", "type": "bool", "default": true, "description": "Python — pyright."},
+            {"key": "ruff.enabled", "label": "ruff", "type": "bool", "default": true, "description": "Python — ruff linter."},
+            {"key": "typescript-language-server.enabled", "label": "typescript", "type": "bool", "default": true, "description": "JavaScript / TypeScript."},
+            {"key": "gopls.enabled", "label": "gopls", "type": "bool", "default": true, "description": "Go."},
+            {"key": "rust-analyzer.enabled", "label": "rust-analyzer", "type": "bool", "default": true, "description": "Rust."},
+            {"key": "clangd.enabled", "label": "clangd", "type": "bool", "default": true, "description": "C / C++."}
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,212 @@
+# Themes
+
+This page explains how to customise tau's terminal appearance.
+
+## Built-In Themes
+
+| Theme | Description |
+|-------|-------------|
+| `default` | tau's default dark colour palette |
+| `dracula` | Purple/pink accents on dark background |
+| `nord` | Arctic, north-bluish palette |
+| `gruvbox` | Retro groove colour scheme |
+| `catppuccin` | Pastel tones on dark background |
+| `ayu-dark` | Ayu dark theme with minimalist design |
+| `everforest` | Green-based forest palette |
+| `horizon` | Warm, horizon-inspired colors |
+| `kanagawa` | Japanese-inspired color palette |
+| `material-ocean` | Material Design with ocean blue tones |
+| `monokai` | Classic monokai dark theme |
+| `night-owl` | Night owl dark theme |
+| `one-dark` | Atom's One Dark theme |
+| `rose-pine` | Rose Pine color scheme |
+| `solarized-dark` | Solarized dark palette |
+| `tokyo-night` | Tokyo Night theme |
+
+## Base Themes
+
+Tau also supports light and dark base themes for creating variants:
+
+| Theme | Description |
+|-------|-------------|
+| `dark` | Base dark theme for extending |
+| `light` | Base light theme for extending |
+
+## Set a Theme
+
+### Command line
+
+```bash
+tau --theme dracula
+```
+
+### Settings
+
+Set your default theme in `~/.tau/settings.json` or `.tau/settings.json`:
+
+```json
+{
+  "theme": "dracula"
+}
+```
+
+### Interactive
+
+```text
+/theme
+```
+
+Opens an interactive picker. Use ↑↓ to preview, Enter to apply.
+
+---
+
+## Creating a Custom Theme
+
+Save a YAML file to either:
+
+- **Global**: `~/.tau/themes/my_theme.yaml`
+- **Project**: `.tau/themes/my_theme.yaml`
+
+Then use it with `--theme my_theme` or `"theme": "my_theme"` in settings.
+
+The `name` field in the file determines the theme name used in settings and `--theme` — the filename is ignored.
+
+> **Formats**: `.yaml` and `.yml` are recommended. `.json` is also accepted for backwards compatibility.
+
+### Theme YAML format
+
+```yaml
+name: my_theme
+
+# Toggle message visibility
+show_thinking:   true   # show/hide the model's thinking blocks
+show_tool_calls: true   # show/hide tool call output
+
+colors:
+  # UI chrome
+  divider:           "#374151"
+  spinner_frame:     "#0ea5e9"
+  spinner_label:     "#6b7280"
+
+  # Markdown
+  heading:           { color: "#a78bfa", bold: true }
+  code_inline:       "#f1fa8c"
+  code_block:        "#50fa7b"
+  code_block_border: "#374151"
+  quote:             { color: "#6b7280", italic: true }
+  quote_border:      "#374151"
+  hr:                "#374151"
+  list_bullet:       "#a78bfa"
+  bold:              "#ffffff"        # **bold** text
+  italic:            "#aaaaaa"        # _italic_ text
+  strikethrough:     "#888888"        # ~~strikethrough~~ text
+  link_text:         "#50fa7b"
+  link_url:          "#6b7280"
+
+  # Messages
+  you_label:         { color: "#a78bfa", bold: true }
+  assistant_label:   { color: "#50fa7b", bold: true }
+  tool_arrow:        "#ffb86c"
+  tool_result_ok:    "#6b7280"
+  tool_result_err:   "#ef4444"
+  thinking:          { color: "#6b7280", italic: true }
+  error_label:       { color: "#ef4444", bold: true }
+  dim:               "#6b7280"
+  stream_cursor:     "#0ea5e9"
+
+  # Select list
+  selected_label:    { color: "#a78bfa", bold: true }
+  selected_desc:     "#50fa7b"
+  selected_bg:       "#1a1a2e"        # full-row background on selected item (optional)
+  normal_label:      "#6b7280"
+  normal_desc:       "#6b7280"
+  indicator:         "#6b7280"
+  empty:             "#6b7280"
+
+input:
+  prefix:      "❯ "
+  placeholder: "Ask Anything…"
+
+spinner:
+  frames:          ["▖", "▘", "▝", "▗"]
+  interval_ms:     110
+  label_thinking:  "Thinking…"      # shown while the model generates
+  label_tool:      "Tool Calling…"  # shown during tool execution
+  label_compacting: "Compacting…"   # shown during context compaction
+```
+
+All fields are optional — omitted fields fall back to the default theme's values.
+
+### Color values
+
+Each color accepts:
+- Hex string: `"#0ea5e9"`
+- Object with styling: `{ color: "#a78bfa", bold: true }` or `{ color: "#6b7280", italic: true }`
+
+The `bold`, `italic`, `dim` modifiers can be combined: `{ color: "#a78bfa", bold: true, italic: true }`.
+
+### Starting from a built-in
+
+The built-in themes are a good starting point. Copy one from `tau/builtins/themes/` and modify the colors you want to change — everything else inherits from `default` automatically.
+
+---
+
+## Python Theme API
+
+For programmatic customisation (e.g. from an extension), tau exposes dataclass-based theme objects.
+
+### `LayoutTheme`
+
+The top-level theme that wires together all sub-themes:
+
+```python
+from tau.tui.theme import LayoutTheme, SpinnerTheme
+
+theme = LayoutTheme(
+    spinner=SpinnerTheme(
+        frames=["◐", "◓", "◑", "◒"],
+        interval_ms=100,
+    ),
+)
+```
+
+Pass to `App.create(runtime, theme=theme)` or register via an extension:
+
+```python
+def register(tau):
+    from tau.tui.theme import LayoutTheme, SpinnerTheme
+    tau.register_theme("my-theme", LayoutTheme(
+        spinner=SpinnerTheme(label_thinking="Working…"),
+    ))
+```
+
+### `SpinnerTheme`
+
+Controls the animated spinner shown while the agent is working:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `frames` | `list[str]` | `["▖","▘","▝","▗"]` | Animation frames cycled each tick |
+| `interval_ms` | `int` | `120` | Milliseconds between frame advances |
+| `frame_color` | `ColorFn` | bright cyan | Color applied to the spinner frame character |
+| `label_color` | `ColorFn` | passthrough | Color applied to the status label text |
+| `label_thinking` | `str` | `"Thinking…"` | Label shown while the model is generating |
+| `label_tool` | `str` | `"Tool Calling…"` | Label shown while a tool call is in progress |
+| `label_compacting` | `str` | `"Compacting…"` | Label shown during context compaction |
+
+### Other sub-themes
+
+| Class | Controls |
+|-------|---------|
+| `MessageTheme` | Chat message colours, `show_thinking`, `show_tool_calls`, markdown styles |
+| `MarkdownTheme` | Headings, code blocks, links, `bold`, `italic`, `strikethrough` |
+| `InputTheme` | Input prompt `prefix` and `placeholder` text |
+| `SelectListTheme` | Command palette appearance, `selected_bg` for full-row highlight |
+
+---
+
+## Next Steps
+
+- [Settings](settings.md) — Set default theme
+- [Extensions](extensions.md) — Register themes from extensions
+- [Usage Guide](usage.md) — Interactive mode

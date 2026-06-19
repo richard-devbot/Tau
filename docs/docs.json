@@ -1,0 +1,110 @@
+{
+  "navigation": [
+    {
+      "title": "Start here",
+      "items": [
+        {
+          "title": "Overview",
+          "path": "index.md"
+        },
+        {
+          "title": "Quickstart",
+          "path": "quickstart.md"
+        },
+        {
+          "title": "Installation",
+          "path": "installation.md"
+        },
+        {
+          "title": "Architecture",
+          "path": "architecture.md"
+        },
+        {
+          "title": "Usage Guide",
+          "path": "usage.md"
+        }
+      ]
+    },
+    {
+      "title": "Core Concepts",
+      "items": [
+        {
+          "title": "Inference Providers",
+          "path": "inference-providers.md"
+        },
+        {
+          "title": "Messages & Context",
+          "path": "messages.md"
+        },
+        {
+          "title": "Sessions",
+          "path": "sessions.md"
+        },
+        {
+          "title": "Tools",
+          "path": "tools.md"
+        }
+      ]
+    },
+    {
+      "title": "Customization",
+      "items": [
+        {
+          "title": "Settings",
+          "path": "settings.md"
+        },
+        {
+          "title": "Extensions",
+          "path": "extensions.md"
+        },
+        {
+          "title": "Themes",
+          "path": "themes.md"
+        },
+        {
+          "title": "Skills",
+          "path": "skills.md"
+        },
+        {
+          "title": "Prompts",
+          "path": "prompts.md"
+        },
+        {
+          "title": "Keybindings",
+          "path": "keybindings.md"
+        },
+        {
+          "title": "Authentication",
+          "path": "auth.md"
+        }
+      ]
+    },
+    {
+      "title": "Programmatic Usage",
+      "items": [
+        {
+          "title": "Python API",
+          "path": "python-api.md"
+        },
+        {
+          "title": "CLI Reference",
+          "path": "cli-reference.md"
+        }
+      ]
+    },
+    {
+      "title": "Development",
+      "items": [
+        {
+          "title": "Development Setup",
+          "path": "development.md"
+        },
+        {
+          "title": "Project Structure",
+          "path": "project-structure.md"
+        }
+      ]
+    }
+  ],
+  "redirects": []
+}

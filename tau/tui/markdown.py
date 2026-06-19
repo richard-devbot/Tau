@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any
+
+from mistletoe.base_renderer import BaseRenderer
+from mistletoe.block_token import Document
+
+from tau.tui.ansi import wrap, visible_width
+
+if TYPE_CHECKING:
+    from tau.tui.theme import MarkdownTheme
+
+
+class _MdContext(BaseRenderer):
+    """
+    A no-op renderer subclass.
+
+    mistletoe only tokenizes inline (span) content while a renderer is active,
+    so we instantiate one purely to establish that context, then walk the AST
+    ourselves to produce width-aware ANSI lines.  CommonMark + strikethrough are
+    enabled by mistletoe's default token set.
+    """
+
+    def render_inner(self, token: Any) -> str:  # pragma: no cover - unused
+        return ""
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
+def render_markdown(text: str, width: int, theme: MarkdownTheme) -> list[str]:
+    """Render a markdown string to a list of ANSI-coloured terminal lines."""
+    with _MdContext():
+        doc = Document(text.splitlines(keepends=True))
+        lines = _Renderer(width, theme).render_blocks(doc.children or [])
+    while lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+# ── Renderer ──────────────────────────────────────────────────────────────────
+
+class _Renderer:
+    def __init__(self, width: int, theme: MarkdownTheme) -> None:
+        self.width = width
+        self.theme = theme
+
+    # ── Block rendering ───────────────────────────────────────────────────────
+
+    def _render_blocks_at(self, nodes: Iterable[Any], width: int) -> list[str]:
+        """Render nested blocks at a reduced width (for indented/prefixed content).
+
+        Inner content that will be prefixed (a quote's ``▎ `` border, a list
+        item's bullet/indent) must wrap to the *remaining* width, not the full
+        width — otherwise each full-width inner line spills its last few columns
+        onto a tiny extra line once the prefix is added.
+        """
+        saved = self.width
+        self.width = max(1, width)
+        try:
+            return self.render_blocks(nodes)
+        finally:
+            self.width = saved
+
+    def render_blocks(self, nodes: Iterable[Any]) -> list[str]:
+        lines: list[str] = []
+        for node in nodes:
+            name = type(node).__name__
+
+            if name in ("Heading", "SetextHeading"):
+                text = self._render_inline(node.children or [])
+                for wl in wrap(text, self.width) or [text]:
+                    lines.append(self.theme.heading(wl))
+                lines.append("")
+
+            elif name == "Paragraph":
+                text = self._render_inline(node.children or [])
+                for wl in wrap(text, self.width) or [text]:
+                    lines.append(wl)
+                lines.append("")
+
+            elif name in ("CodeFence", "BlockCode"):
+                lang = (getattr(node, "language", "") or "").strip()
+                if lang:
+                    lines.append(self.theme.code_block_border(lang))
+                for cl in self._code_content(node).rstrip("\n").split("\n"):
+                    for wl in wrap(cl, self.width - 2) or [""]:
+                        lines.append("  " + self.theme.code_block(wl))
+                lines.append("")
+
+            elif name == "ThematicBreak":
+                lines.append(self.theme.hr("─" * self.width))
+                lines.append("")
+
+            elif name == "List":
+                lines.extend(self._render_list(node, depth=0))
+                lines.append("")
+
+            elif name == "Quote":
+                border  = self.theme.quote_border("▎ ")
+                inner_w = max(1, self.width - visible_width(border))
+                # Render inner content at the reduced width so it wraps to fit
+                # beside the border instead of spilling a 2-char remainder.
+                inner = self._render_blocks_at(node.children or [], inner_w)
+                while inner and inner[-1] == "":
+                    inner.pop()
+                for il in inner:
+                    for wl in wrap(il, inner_w) or [il]:
+                        lines.append(border + self.theme.quote(wl))
+                lines.append("")
+
+            elif name == "Table":
+                lines.extend(self._render_table(node))
+                lines.append("")
+
+            elif name in ("HTMLBlock", "HtmlBlock"):
+                lines.append(getattr(node, "content", "").rstrip())
+
+        return lines
+
+    @staticmethod
+    def _code_content(node: Any) -> str:
+        content = getattr(node, "content", None)
+        if content is not None:
+            return content
+        children = getattr(node, "children", None) or []
+        return "".join(getattr(c, "content", "") for c in children)
+
+    # ── List rendering ────────────────────────────────────────────────────────
+
+    def _render_list(self, node: Any, depth: int) -> list[str]:
+        lines: list[str] = []
+        indent  = "  " * depth
+        ordered = getattr(node, "start", None) is not None
+        num     = node.start if ordered else 1
+
+        for item in node.children or []:
+            bullet    = f"{num}." if ordered else "•"
+            marker    = self.theme.list_bullet(bullet)
+            prefix    = indent + marker + " "
+            cont_pref = indent + " " * (len(bullet) + 1)
+            inner_w   = max(1, self.width - visible_width(prefix))
+
+            item_lines = self._render_list_item(item, depth, inner_w)
+            for j, il in enumerate(item_lines):
+                lines.append((prefix if j == 0 else cont_pref) + il)
+            if ordered:
+                num += 1
+
+        return lines
+
+    def _render_list_item(self, item: Any, depth: int, inner_w: int) -> list[str]:
+        lines: list[str] = []
+        for child in item.children or []:
+            name = type(child).__name__
+            if name == "Paragraph":
+                text = self._render_inline(child.children or [])
+                for wl in wrap(text, inner_w) or [text]:
+                    lines.append(wl)
+            elif name == "List":
+                lines.extend(self._render_list(child, depth + 1))
+            else:
+                # Code blocks, quotes, etc. nested inside a list item — render at
+                # the item's inner width so they wrap to fit beside the bullet
+                # indent instead of spilling a few columns onto extra lines.
+                sub = self._render_blocks_at([child], inner_w)
+                while sub and sub[-1] == "":
+                    sub.pop()
+                lines.extend(sub)
+        return lines
+
+    # ── Table rendering ───────────────────────────────────────────────────────
+
+    def _render_table(self, node: Any) -> list[str]:
+        header = getattr(node, "header", None)
+        raw_rows: list[Any] = []   # mistletoe TableRow nodes (each has .children)
+        if header is not None:
+            raw_rows.append(header)
+        raw_rows.extend(node.children or [])
+
+        # Render all cell text up-front so we can measure column widths.
+        rendered: list[list[str]] = [
+            [self._render_inline(c.children or []) for c in (row.children or [])]
+            for row in raw_rows
+        ]
+        if not rendered:
+            return []
+
+        # Detect and drop an empty header row (no cell has visible text).
+        has_header = header is not None
+        if has_header and not any(c.strip() for c in rendered[0]):
+            rendered = rendered[1:]
+            has_header = False
+        if not rendered:
+            return []
+
+        ncols = max(len(r) for r in rendered)
+        # Pad short rows so every row has ncols cells.
+        for r in rendered:
+            while len(r) < ncols:
+                r.append("")
+
+        # Max visible width per column; leave room for outer borders + inner gaps:
+        # "│ " + cells joined by " │ " + " │" = 2 + (ncols-1)*3 + 2 = ncols*3+1 overhead
+        col_widths = [max(visible_width(r[c]) for r in rendered) for c in range(ncols)]
+        overhead = ncols * 3 + 1
+        available = max(ncols, self.width - overhead)
+        total = sum(col_widths)
+        if total > available:
+            col_widths = [max(1, int(w / total * available)) for w in col_widths]
+
+        def _border(left: str, mid: str, right: str, fill: str = "─") -> str:
+            segs = (fill * (w + 2) for w in col_widths)
+            return self.theme.hr(left + mid.join(segs) + right)
+
+        top    = _border("┌", "┬", "┐")
+        mid    = _border("├", "┼", "┤")
+        bottom = _border("└", "┴", "┘")
+
+        def _row(cells: list[str]) -> str:
+            padded = [
+                " " + cell + " " * max(1, col_widths[ci] - visible_width(cell) + 1)
+                for ci, cell in enumerate(cells)
+            ]
+            return self.theme.hr("│") + self.theme.hr("│").join(padded) + self.theme.hr("│")
+
+        lines: list[str] = [top]
+        for ri, cells in enumerate(rendered):
+            lines.append(_row(cells))
+            if ri == 0 and has_header:
+                lines.append(mid)
+        lines.append(bottom)
+        return lines
+
+    # ── Inline rendering ──────────────────────────────────────────────────────
+
+    def _render_inline(self, nodes: Iterable[Any]) -> str:
+        parts: list[str] = []
+        for node in nodes:
+            name = type(node).__name__
+
+            if name == "RawText":
+                parts.append(node.content)
+            elif name == "LineBreak":
+                parts.append(" " if getattr(node, "soft", True) else "\n")
+            elif name == "InlineCode":
+                parts.append(self.theme.code_inline(self._raw(node)))
+            elif name == "Strong":
+                parts.append(self.theme.bold(self._render_inline(node.children or [])))
+            elif name == "Emphasis":
+                parts.append(self.theme.italic(self._render_inline(node.children or [])))
+            elif name == "Strikethrough":
+                parts.append(self.theme.strikethrough(self._render_inline(node.children or [])))
+            elif name in ("Link", "AutoLink"):
+                inner = self._render_inline(node.children or []) or getattr(node, "target", "")
+                parts.append(
+                    self.theme.link_text(inner)
+                    + " "
+                    + self.theme.link_url(f"({getattr(node, 'target', '')})")
+                )
+            elif name == "Image":
+                alt = self._render_inline(node.children or [])
+                url = getattr(node, "src", "") or getattr(node, "target", "")
+                label = f"[image: {alt}]" if alt else "[image]"
+                parts.append(self.theme.italic(label))
+                if url:
+                    parts.append(" " + self.theme.link_url(f"({url})"))
+            elif name in ("HTMLSpan", "HtmlSpan"):
+                parts.append(getattr(node, "content", ""))
+            elif name == "EscapeSequence":
+                parts.append(self._raw(node))
+            else:
+                children = getattr(node, "children", None)
+                if children:
+                    parts.append(self._render_inline(children))
+                else:
+                    parts.append(getattr(node, "content", ""))
+        return "".join(parts)
+
+    @staticmethod
+    def _raw(node: Any) -> str:
+        """Concatenate the raw text of a token's children (or its own content)."""
+        children = getattr(node, "children", None)
+        if children:
+            return "".join(getattr(c, "content", "") for c in children)
+        return getattr(node, "content", "")

@@ -1,0 +1,141 @@
+# Quickstart
+
+This page gets you from install to a working first tau session in five minutes.
+
+## Install
+
+Tau requires Python 3.13 or higher. Clone the repository and install:
+
+```bash
+cd /path/to/tau
+pip install -e .
+```
+
+The `-e` flag installs tau in editable mode, allowing you to modify the code and see changes immediately.
+
+## Set Up Authentication
+
+Tau supports multiple inference providers. Choose one and set its API key:
+
+### Anthropic
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### OpenAI
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+### Google Gemini
+
+```bash
+export GEMINI_API_KEY=...
+```
+
+### Other Providers
+
+See [Inference Providers](inference-providers.md) for all supported providers and environment variables.
+
+## First Session
+
+Run tau in a project directory:
+
+```bash
+cd /path/to/your/project
+tau
+```
+
+You will be prompted to select a model from your configured providers. By default, tau gives the agent these tools:
+
+- `read` - read files
+- `write` - create or overwrite files
+- `edit` - patch files
+- `bash` - run shell commands
+
+Type a prompt and press Enter:
+
+```text
+Summarize this repository and tell me how to run its checks.
+```
+
+The agent will read files, run commands, and respond with a summary.
+
+### Media Support
+
+Tau can process multiple file types. Reference them with `@` during input:
+
+- **Images** — `.jpg`, `.png`, `.gif`, `.webp`
+- **Audio** — `.mp3`, `.wav`, `.m4a`, `.ogg`
+- **Video** — `.mp4`, `.webm`, `.mov`, `.mkv`
+- **Text** — `.py`, `.js`, `.md`, `.txt`, and more
+
+You can also paste files directly or drag them from your clipboard.
+
+## Common Things to Try
+
+### Reference Files
+
+Type `@` while typing your prompt to fuzzy-search project files and insert them:
+
+```bash
+cd /path/to/your/project
+tau
+# Then in the editor, type @ to open file picker
+```
+
+Or pass files as arguments:
+
+```bash
+tau --print "Explain this file" src/main.py
+```
+
+### Continue a Past Session
+
+Sessions are saved automatically to `~/.tau/sessions/`. Resume the most recent:
+
+```bash
+tau --resume
+```
+
+Or browse all sessions interactively:
+
+```bash
+tau -r
+```
+
+Then use `/tree` inside the session to navigate the message history.
+
+### Use a Different Model
+
+During a session, press `/` to open the command palette, then select `/model` to change models.
+
+Or set a model when starting:
+
+```bash
+tau --model claude-sonnet-4-6
+tau --model openai/gpt-4o
+```
+
+### One-Shot Mode
+
+For a single prompt without opening the TUI:
+
+```bash
+tau --print "Summarize this repository"
+```
+
+With a file reference:
+
+```bash
+tau --print "Explain the main.py file" README.md
+```
+
+## Next Steps
+
+- [Installation](installation.md) - Detailed provider setup and configuration
+- [Usage Guide](usage.md) - Interactive mode, slash commands, and features
+- [Settings](settings.md) - Global and project configuration options
+- [Inference Providers](inference-providers.md) - All supported providers

@@ -1,0 +1,13 @@
+{
+  "extensions": {
+    "list": [
+      {
+        "path": ".tau/extensions/lsp",
+        "settings": {
+          "lsp": true,
+          "eager": []
+        }
+      }
+    ]
+  }
+}
