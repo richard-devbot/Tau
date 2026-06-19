@@ -1,6 +1,6 @@
-# τ Tau
+# Tau (τ)
 
-Inspired by [Pi](https://pi.dev), **τ Tau** brings the same agent framework capabilities to Python developers. A self-extensible agent CLI with a terminal UI, multi-provider LLM support, session management with branching, and a plugin system for tools, commands, and customization.
+Inspired by [Pi](https://pi.dev), **Tau** brings the same agent framework capabilities to Python developers. A self-extensible agent CLI with a terminal UI, multi-provider LLM support, session management with branching, and a plugin system for tools, commands, and customization.
 
 <p align="center">
   <img src="assets/tui.png" alt="Tau TUI" width="700">
