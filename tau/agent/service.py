@@ -316,14 +316,12 @@ class Agent:
         llm_messages = _to_llm_messages(session_ctx.messages)
         llm_messages = strip_unusable_trailing_assistant(llm_messages, self._session_manager)
 
-        if opts.images:
-            user_message = UserMessage.with_images(text, list(opts.images))
-        elif opts.audio:
-            user_message = UserMessage.with_audio(text, list(opts.audio))
-        elif opts.video:
-            user_message = UserMessage.with_video(text, list(opts.video))
-        else:
-            user_message = UserMessage.from_text(text)
+        user_message = UserMessage.with_media(
+            text,
+            list(opts.images) if opts.images else None,
+            list(opts.audio) if opts.audio else None,
+            list(opts.video) if opts.video else None,
+        )
         self._session_manager.append_message(user_message, meta=opts.meta)
         llm_messages.append(user_message)
 

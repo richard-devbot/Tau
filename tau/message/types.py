@@ -4,7 +4,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, TYPE_CHECKING, Any, Optional, Annotated
+from typing import Literal, TYPE_CHECKING, Any, Optional, Annotated, Sequence
 from enum import Enum
 from pydantic import Field as PydanticField
 from tau.inference.types import StopReason
@@ -282,7 +282,7 @@ class UserMessage(BaseMessage):
         Returns:
             A UserMessage with text and image content.
         """
-        return cls(contents=[TextContent(content=content), ImageContent(images=images)])
+        return cls.with_media(content, images=images)
 
     @classmethod
     def with_audio(cls, content: str, audio: list[bytes | str]) -> UserMessage:
@@ -295,7 +295,7 @@ class UserMessage(BaseMessage):
         Returns:
             A UserMessage with text and audio content.
         """
-        return cls(contents=[TextContent(content=content), AudioContent(audio=audio)])
+        return cls.with_media(content, audio=audio)
 
     @classmethod
     def with_video(cls, content: str, video: list[bytes | str]) -> UserMessage:
@@ -308,7 +308,39 @@ class UserMessage(BaseMessage):
         Returns:
             A UserMessage with text and video content.
         """
-        return cls(contents=[TextContent(content=content), VideoContent(video=video)])
+        return cls.with_media(content, video=video)
+
+    @classmethod
+    def with_media(
+        cls,
+        content: str,
+        images: Sequence[str | Image.Image | bytes] | None = None,
+        audio: Sequence[bytes | str] | None = None,
+        video: Sequence[bytes | str] | None = None,
+    ) -> UserMessage:
+        """Construct UserMessage with text plus any combination of media.
+
+        Each present modality is appended as its own content block, so a single
+        message can carry images, audio, and video together. Providers that don't
+        support a given modality simply skip that block.
+
+        Args:
+            content: The user message text.
+            images: Optional images (PIL Images, bytes, or URLs).
+            audio: Optional audio (bytes, base64 strings, or 'file:' paths).
+            video: Optional video (bytes, base64 strings, or 'file:' paths).
+
+        Returns:
+            A UserMessage with text and every supplied media block.
+        """
+        contents: list[Content] = [TextContent(content=content)]
+        if images:
+            contents.append(ImageContent(images=list(images)))
+        if audio:
+            contents.append(AudioContent(audio=list(audio)))
+        if video:
+            contents.append(VideoContent(video=list(video)))
+        return cls(contents=contents)
 
 
 @dataclass

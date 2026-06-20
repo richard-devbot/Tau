@@ -148,14 +148,7 @@ class InputHandler:
         stripped = re.sub(r"\[image(?::[^\]]+| #\d+)\]", "", expanded).strip()
         model_text = stripped if stripped else expanded
 
-        if images:
-            user_msg = UserMessage.with_images(text, images)
-        elif audio:
-            user_msg = UserMessage.with_audio(text, [*audio])  # type: ignore[arg-type]
-        elif video:
-            user_msg = UserMessage.with_video(text, [*video])  # type: ignore[arg-type]
-        else:
-            user_msg = UserMessage.from_text(text)
+        user_msg = UserMessage.with_media(text, images, audio, video)
         self._layout.add_message(user_msg)
         self._last_user_text = text
         self._turn_has_content = False
@@ -367,19 +360,13 @@ class InputHandler:
         audio: list[bytes] | None = None,
         video: list[bytes] | None = None,
     ) -> "UserMessage":
-        """Build a UserMessage from text + optional media.
+        """Build a UserMessage from text plus any combination of media.
 
-        Mirrors the image→audio→video→text precedence used for a fresh turn so
-        steering and follow-up messages carry the same media a new turn would.
+        Carries the same media a fresh turn would, so steering and follow-up
+        messages match a freshly submitted message.
         """
         from tau.message.types import UserMessage
-        if images:
-            return UserMessage.with_images(text, images)
-        if audio:
-            return UserMessage.with_audio(text, [*audio])  # type: ignore[arg-type]
-        if video:
-            return UserMessage.with_video(text, [*video])  # type: ignore[arg-type]
-        return UserMessage.from_text(text)
+        return UserMessage.with_media(text, images, audio, video)
 
     async def _steer(
         self,
