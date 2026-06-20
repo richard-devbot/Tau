@@ -98,7 +98,15 @@ class InputHandler:
             asyncio.ensure_future(self._invoke(text))
             return
 
-        images = self._extract_clipboard_images(text)
+        images, missing_images = self._extract_clipboard_images(text)
+        if missing_images:
+            plural = "s" if missing_images > 1 else ""
+            self._notify(
+                f"{missing_images} image{plural} could not be found — the media file{plural} may have been deleted or moved.",
+                type="error",
+            )
+            return
+
         audio = self._extract_clipboard_audio(text)
         video = self._extract_clipboard_video(text)
         expanded = self._expand_pasted_texts(text)
@@ -121,6 +129,10 @@ class InputHandler:
             asyncio.ensure_future(self._steer(expanded, images))
             return
 
+        # Strip resolved image markers from the text sent to the model so the
+        # LLM doesn't see raw [image:uuid] placeholders alongside actual image bytes.
+        model_text = re.sub(r"\[image(?::[^\]]+| #\d+)\]", "", expanded).strip()
+
         if images:
             user_msg = UserMessage.with_images(text, images)
         elif audio:
@@ -133,10 +145,10 @@ class InputHandler:
         self._last_user_text = text
         self._turn_has_content = False
         self._tui.request_render()
-        asyncio.ensure_future(self._invoke(self._expand_at_mentions(expanded), images, audio, video))
+        asyncio.ensure_future(self._invoke(self._expand_at_mentions(model_text), images, audio, video))
 
     def _on_followup(self, text: str) -> None:
-        images = self._extract_clipboard_images(text)
+        images, _ = self._extract_clipboard_images(text)
         expanded = self._expand_pasted_texts(text)
         asyncio.ensure_future(self._queue_followup(expanded, images, display_text=text))
 
@@ -564,7 +576,12 @@ class InputHandler:
         result = re.sub(r"\[paste #\d+(?: \+\d+ lines| \d+ chars)\]", "", result)
         return result.strip()
 
-    def _extract_clipboard_images(self, text: str) -> list[bytes]:
+    def _extract_clipboard_images(self, text: str) -> tuple[list[bytes], int]:
+        """Extract image bytes from markers in text.
+
+        Returns (images, missing_count) where missing_count is the number of
+        persistent [image:uuid] markers whose media files could not be found.
+        """
         images: list[bytes] = []
         seen: set[int] = set()
         for m in re.finditer(r"\[image #(\d+)\]", text):
@@ -582,6 +599,7 @@ class InputHandler:
             except OSError:
                 pass
         # Also resolve persistent [image:{uuid}] markers from history
+        missing = 0
         seen_uuids: set[str] = set()
         for m in re.finditer(r"\[image:([^\]]+)\]", text):
             uid = m.group(1)
@@ -593,11 +611,13 @@ class InputHandler:
                 try:
                     images.append(p.read_bytes())
                 except OSError:
-                    pass
+                    missing += 1
+            else:
+                missing += 1
         self._clipboard_images.clear()
         self._clipboard_image_notes.clear()
         self._clipboard_image_counter = 0
-        return images
+        return images, missing
 
     def _extract_clipboard_image_contents(self, text: str) -> "list[Any]":
         """Like _extract_clipboard_images but returns ImageContent with dimension notes."""
