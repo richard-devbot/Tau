@@ -178,6 +178,8 @@ class Runtime:
                     expanded = prompt_registry.expand(name, " ".join(args))
                     if expanded is not None:
                         await self.invoke(expanded, options)
+                    else:
+                        self.notify(f"Unknown command: /{name}")
             case t:
                 await self.invoke(t, options)
 
