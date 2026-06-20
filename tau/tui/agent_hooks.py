@@ -306,7 +306,12 @@ class AgentHookHandler:
                         if text:
                             out.append(text)
 
-        self._layout.set_pending_queue(steering, followup)
+        # Only show pending queue display if there are actual messages waiting.
+        # This prevents showing stale queue hints after messages are drained.
+        if steering or followup:
+            self._layout.set_pending_queue(steering, followup)
+        else:
+            self._layout.set_pending_queue([], [])
         self._tui.request_render()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
