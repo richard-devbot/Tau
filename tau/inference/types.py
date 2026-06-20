@@ -9,6 +9,8 @@ from copy import deepcopy
 
 from pydantic import BaseModel
 
+from tau.inference.utils import ErrorKind
+
 if TYPE_CHECKING:
     from tau.message.types import LLMMessage, TextContent, ThinkingContent, ToolCallContent, ImageContent
     from tau.tool.types import Tool
@@ -224,6 +226,7 @@ class ErrorEvent:
     type: LLMEventType = field(default=LLMEventType.Error, init=False)
     reason: StopReason = StopReason.Stop
     error: str = ""
+    kind: ErrorKind = ErrorKind.UNKNOWN  # classification carried through for recovery (e.g. compact-on-overflow)
 
 
 @dataclass

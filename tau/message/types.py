@@ -8,6 +8,7 @@ from typing import Literal, TYPE_CHECKING, Any, Optional, Annotated, Sequence
 from enum import Enum
 from pydantic import Field as PydanticField
 from tau.inference.types import StopReason
+from tau.inference.utils import ErrorKind
 from tau.tool.types import ToolKind
 from tau.message.utils import image_to_base64, audio_to_base64, video_to_base64
 
@@ -350,6 +351,7 @@ class AssistantMessage(BaseMessage):
     usage: Usage = field(default_factory=Usage)
     stop_reason: StopReason = StopReason.Stop
     error: str = ""
+    error_kind: ErrorKind = ErrorKind.UNKNOWN  # classification of `error`, used to drive recovery (e.g. compaction on overflow)
 
     @classmethod
     def from_text(cls, content: str) -> 'AssistantMessage':

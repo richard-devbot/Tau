@@ -564,9 +564,10 @@ class Engine:
                                     _streaming_thinking = None
                                 else:
                                     message.contents.append(thinking)
-                            case ErrorEvent(reason=reason, error=error):
+                            case ErrorEvent(reason=reason, error=error, kind=kind):
                                 message.stop_reason = reason
                                 message.error = error
+                                message.error_kind = kind
                             case EndEvent() as ev:
                                 message.stop_reason = ev.reason
                                 message.usage = Usage(

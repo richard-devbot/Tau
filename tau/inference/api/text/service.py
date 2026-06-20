@@ -293,7 +293,7 @@ class TextLLM:
                     # Transient refresh failure: fall through to standard handling.
 
                 if received_any or not classified.retryable or attempt >= max_retries:
-                    yield ErrorEvent(reason=StopReason.Error, error=str(e))
+                    yield ErrorEvent(reason=StopReason.Error, error=str(e), kind=classified.kind)
                     return
                 yield RetryEvent(attempt=attempt + 1, max_retries=max_retries, error=str(e))
                 await asyncio.sleep(base_delay_s * (2 ** attempt))
@@ -323,10 +323,11 @@ class TextLLM:
             try:
                 return await self.api.invoke(api_context, model=self.model)
             except Exception as e:
+                classified = classify_error(e)
                 # OAuth access token rejected though not time-expired: force a
                 # refresh and retry once; if the refresh token is dead, ask the
                 # user to re-login (mirrors the recovery path in stream()).
-                if classify_error(e).kind == ErrorKind.AUTH and self._auth_manager.is_oauth(self.provider_id):
+                if classified.kind == ErrorKind.AUTH and self._auth_manager.is_oauth(self.provider_id):
                     refreshed = await self._auth_manager.force_refresh(
                         self.provider_id, stale_access=self.api.options.api_key
                     )
@@ -338,6 +339,6 @@ class TextLLM:
                             reason=StopReason.Error,
                             error="Authentication failed — your session has expired. Run /login to sign in again.",
                         )]
-                return [ErrorEvent(reason=StopReason.Error, error=str(e))]
+                return [ErrorEvent(reason=StopReason.Error, error=str(e), kind=classified.kind)]
         finally:
             self.api.options.thinking_level = original
