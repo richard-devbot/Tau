@@ -201,6 +201,14 @@ class SessionManager:
             self._rewrite_file()
         return True
 
+    def find_last_assistant_message(self) -> "AssistantMessage | None":
+        """Return the most recent AssistantMessage in the active branch, or None."""
+        from tau.message.types import AssistantMessage
+        for entry in reversed(self.get_branch()):
+            if isinstance(entry, MessageEntry) and isinstance(entry.message, AssistantMessage):
+                return entry.message
+        return None
+
     def append_thinking_level_change(self, thinking_level: ThinkingLevel) -> str:
         """Record a change in the thinking level setting."""
         entry = ThinkingLevelChangeEntry(thinking_level=thinking_level, parent_id=self.leaf_id)

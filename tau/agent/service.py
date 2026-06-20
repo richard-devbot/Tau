@@ -77,6 +77,7 @@ class Agent:
         self._phase: AgentPhase = AgentPhase.IDLE
         self._signal: asyncio.Event = asyncio.Event()
         self._compaction_failures: int = 0
+        self._overflow_recovery_attempted: bool = False
         self._engine.options.before_tool_call = self._before_tool_call
         self._engine.options.after_tool_call = self._after_tool_call
 
@@ -208,12 +209,25 @@ class Agent:
     async def compact(self, custom_instructions: str | None = None) -> bool:
         """Manually trigger context compaction. Returns True if compaction ran."""
         from tau.session.compaction import prepare_compaction
-        from tau.hooks.engine import CompactionEndEvent
         entries = self._session_manager.get_branch()
         preparation = prepare_compaction(entries, self._config.compaction)
         if preparation is None:
             return False
-        result, from_extension = await self._run_compaction(preparation, entries, manual=True, custom_instructions=custom_instructions)
+        await self._apply_compaction(preparation, entries, manual=True, custom_instructions=custom_instructions)
+        return True
+
+    async def _apply_compaction(
+        self,
+        preparation: "CompactionPreparation",
+        entries: list,
+        manual: bool,
+        custom_instructions: str | None = None,
+    ) -> None:
+        """Run a prepared compaction, persist the summary, and emit the end event."""
+        from tau.hooks.engine import CompactionEndEvent
+        result, from_extension = await self._run_compaction(
+            preparation, entries, manual=manual, custom_instructions=custom_instructions
+        )
         self._session_manager.append_compaction(
             summary=result.summary,
             first_kept_entry_id=result.first_kept_entry_id,
@@ -221,12 +235,19 @@ class Agent:
         )
         self._compaction_failures = 0
         await self.hooks.emit(CompactionEndEvent(
-            manual=True,
+            manual=manual,
             tokens_before=result.tokens_before,
             summary_length=len(result.summary),
             from_extension=from_extension,
         ))
-        return True
+
+    def _latest_compaction_timestamp(self) -> float | None:
+        """Timestamp of the most recent compaction in the active branch, if any."""
+        from tau.session.types import CompactionEntry
+        for entry in reversed(self._session_manager.get_branch()):
+            if isinstance(entry, CompactionEntry):
+                return entry.timestamp
+        return None
 
     async def _check_compaction(self) -> None:
         """Auto-compact if context usage exceeds the threshold. Circuit-breaks after 3 failures."""
@@ -234,7 +255,6 @@ class Agent:
             estimate_context_tokens, should_compact,
             prepare_compaction,
         )
-        from tau.hooks.engine import CompactionEndEvent
 
         if self._compaction_failures >= 3:
             return
@@ -251,26 +271,69 @@ class Agent:
         if not should_compact(usage.tokens, self._context_window, settings):
             return
 
+        # Stale-anchor guard: right after a compaction the kept messages still carry
+        # pre-compaction usage on their anchor, which would re-trigger compaction every
+        # turn. Skip if the usage anchor predates the latest compaction boundary.
+        if usage.last_usage_index is not None:
+            anchor = llm_messages[usage.last_usage_index]
+            comp_ts = self._latest_compaction_timestamp()
+            if comp_ts is not None and getattr(anchor, "timestamp", 0.0) <= comp_ts:
+                return
+
         preparation = prepare_compaction(entries, settings)
         if preparation is None:
             return
 
         try:
-            result, from_extension = await self._run_compaction(preparation, entries, manual=False)
-            self._session_manager.append_compaction(
-                summary=result.summary,
-                first_kept_entry_id=result.first_kept_entry_id,
-                tokens_before=result.tokens_before,
-            )
-            self._compaction_failures = 0
-            await self.hooks.emit(CompactionEndEvent(
-                manual=False,
-                tokens_before=result.tokens_before,
-                summary_length=len(result.summary),
-                from_extension=from_extension,
-            ))
+            await self._apply_compaction(preparation, entries, manual=False)
         except Exception:
             self._compaction_failures += 1
+
+    async def _try_overflow_recovery(self) -> bool:
+        """If the last turn died with a context-overflow error, compact once and signal a retry.
+
+        Mirrors pi's overflow recovery: drop the error message so it isn't kept or used as a
+        stale anchor, compact the history, and let the caller re-run the turn. Bounded to one
+        attempt per turn so a session that overflows even after compaction fails cleanly.
+        """
+        from tau.inference.utils import ErrorKind
+        from tau.session.compaction import prepare_compaction
+
+        last = self._session_manager.find_last_assistant_message()
+        if last is None or last.error_kind != ErrorKind.CONTEXT_OVERFLOW:
+            return False
+
+        if self._overflow_recovery_attempted:
+            self._notify(
+                "Context overflow recovery failed after compaction. "
+                "Reduce context or switch to a larger-context model."
+            )
+            return False
+        self._overflow_recovery_attempted = True
+
+        # Drop the error assistant message — it has no usable content and would otherwise
+        # anchor stale usage / be re-sent on retry.
+        self._session_manager.remove_last_message()
+
+        entries = self._session_manager.get_branch()
+        preparation = prepare_compaction(entries, self._config.compaction)
+        if preparation is None:
+            return False
+        try:
+            await self._apply_compaction(preparation, entries, manual=False)
+        except Exception:
+            self._compaction_failures += 1
+            return False
+        return True
+
+    def _notify(self, message: str) -> None:
+        """Surface a message to the UI if a runtime/UI is wired up."""
+        if self._runtime is None:
+            return
+        from tau.extensions.context import ExtensionContext
+        ctx = ExtensionContext.from_runtime(self._runtime)
+        if ctx.ui is not None:
+            ctx.ui.notify(message)
 
     async def _run_compaction(self, preparation: "CompactionPreparation", entries: list, manual: bool, custom_instructions: str | None = None) -> tuple:
         """Emit before_compaction (allowing interception), then run the default algorithm.
@@ -281,7 +344,7 @@ class Agent:
         consistent with error-fallthrough behaviour.
         """
         from tau.session.compaction import compact as _compact
-        from tau.hooks.types import BeforeCompactionEvent, BeforeCompactionResult, CompactionStartEvent
+        from tau.hooks.engine import BeforeCompactionEvent, BeforeCompactionResult, CompactionStartEvent
 
         before_results = await self.hooks.emit(BeforeCompactionEvent(
             preparation=preparation,
@@ -312,9 +375,9 @@ class Agent:
 
         opts = options or PromptOptions()
 
-        session_ctx = self._session_manager.build_session_context()
-        llm_messages = _to_llm_messages(session_ctx.messages)
-        llm_messages = strip_unusable_trailing_assistant(llm_messages, self._session_manager)
+        # Pre-flight: a resumed or already-oversized session can exceed the window on the
+        # very first send. Compact before appending and shipping the new turn.
+        await self._check_compaction()
 
         user_message = UserMessage.with_media(
             text,
@@ -323,20 +386,22 @@ class Agent:
             list(opts.video) if opts.video else None,
         )
         self._session_manager.append_message(user_message, meta=opts.meta)
-        llm_messages.append(user_message)
 
-        ctx = AgentContext(
-            system_prompt=self._system_prompt,
-            messages=llm_messages,
-            tools=self._engine.tools,
-        )
-
-        self._signal = asyncio.Event()
-        self._engine.llm.api.options.signal = self._signal
-
+        self._overflow_recovery_attempted = False
         self._phase = AgentPhase.TURN
         try:
-            await self._run(ctx)
+            while True:
+                ctx = self._build_turn_context()
+                self._signal = asyncio.Event()
+                self._engine.llm.api.options.signal = self._signal
+                try:
+                    await self._run(ctx)
+                    break
+                except RuntimeError:
+                    # On a context-overflow error, compact and retry the turn once.
+                    if await self._try_overflow_recovery():
+                        continue
+                    raise
         finally:
             self._phase = AgentPhase.IDLE
 
@@ -346,6 +411,17 @@ class Agent:
 
         if not self._engine.has_pending_messages():
             await self.hooks.emit(SettledEvent())
+
+    def _build_turn_context(self) -> AgentContext:
+        """Build the LLM context for a turn from the current (possibly compacted) session."""
+        session_ctx = self._session_manager.build_session_context()
+        llm_messages = _to_llm_messages(session_ctx.messages)
+        llm_messages = strip_unusable_trailing_assistant(llm_messages, self._session_manager)
+        return AgentContext(
+            system_prompt=self._system_prompt,
+            messages=llm_messages,
+            tools=self._engine.tools,
+        )
 
     async def _run(self, ctx: AgentContext) -> None:
         unsubscribe = self.hooks.register(
