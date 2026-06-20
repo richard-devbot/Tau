@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from tau.runtime.service import Runtime
     from tau.tui.components.layout import Layout
     from tau.tui.tui import TUI
+    from tau.message.types import UserMessage
 
 
 class InputHandler:
@@ -139,7 +140,7 @@ class InputHandler:
                     return
 
         if agent is not None and not agent.is_idle():
-            asyncio.ensure_future(self._steer(expanded, images))
+            asyncio.ensure_future(self._steer(expanded, images, audio, video))
             return
 
         # Strip resolved image markers from the text sent to the model so the
@@ -163,8 +164,12 @@ class InputHandler:
 
     def _on_followup(self, text: str) -> None:
         images, _ = self._extract_clipboard_images(text)
+        audio = self._extract_clipboard_audio(text)
+        video = self._extract_clipboard_video(text)
         expanded = self._expand_pasted_texts(text)
-        asyncio.ensure_future(self._queue_followup(expanded, images, display_text=text))
+        asyncio.ensure_future(
+            self._queue_followup(expanded, images, audio, video, display_text=text)
+        )
 
     # ── Deferred /command + !terminal ─────────────────────────────────────────
 
@@ -355,14 +360,40 @@ class InputHandler:
         finally:
             self._invoke_task = None
 
-    async def _steer(self, text: str, images: list[bytes] | None = None) -> None:
+    @staticmethod
+    def _build_user_message(
+        text: str,
+        images: list[bytes] | None = None,
+        audio: list[bytes] | None = None,
+        video: list[bytes] | None = None,
+    ) -> "UserMessage":
+        """Build a UserMessage from text + optional media.
+
+        Mirrors the image→audio→video→text precedence used for a fresh turn so
+        steering and follow-up messages carry the same media a new turn would.
+        """
+        from tau.message.types import UserMessage
+        if images:
+            return UserMessage.with_images(text, images)
+        if audio:
+            return UserMessage.with_audio(text, [*audio])  # type: ignore[arg-type]
+        if video:
+            return UserMessage.with_video(text, [*video])  # type: ignore[arg-type]
+        return UserMessage.from_text(text)
+
+    async def _steer(
+        self,
+        text: str,
+        images: list[bytes] | None = None,
+        audio: list[bytes] | None = None,
+        video: list[bytes] | None = None,
+    ) -> None:
         agent = self._runtime.agent
         if agent is None:
             return
-        from tau.message.types import UserMessage
         try:
             expanded = self._expand_at_mentions(text)
-            msg = UserMessage.with_images(expanded, images) if images else UserMessage.from_text(expanded)
+            msg = self._build_user_message(expanded, images, audio, video)
             await agent._engine.steer(msg)
         except Exception as exc:
             self._layout.spinner.set_label(f"error: {exc}")
@@ -372,25 +403,22 @@ class InputHandler:
         self,
         text: str,
         images: list[bytes] | None = None,
+        audio: list[bytes] | None = None,
+        video: list[bytes] | None = None,
         display_text: str | None = None,
     ) -> None:
-        from tau.message.types import UserMessage
-
         shown = display_text if display_text is not None else text
-
-        def _make_msg() -> UserMessage:
-            expanded = self._expand_at_mentions(text)
-            return UserMessage.with_images(expanded, images) if images else UserMessage.from_text(expanded)
 
         agent = self._runtime.agent
         if agent is None or agent.is_idle():
-            user_msg = UserMessage.with_images(shown, images) if images else UserMessage.from_text(shown)
+            user_msg = self._build_user_message(shown, images, audio, video)
             self._layout.add_message(user_msg)
             self._tui.request_render()
-            await self._invoke(self._expand_at_mentions(text), images)
+            await self._invoke(self._expand_at_mentions(text), images, audio, video)
         else:
             try:
-                await agent._engine.follow_up(_make_msg())
+                msg = self._build_user_message(self._expand_at_mentions(text), images, audio, video)
+                await agent._engine.follow_up(msg)
             except Exception as exc:
                 self._layout.spinner.set_label(f"error: {exc}")
                 self._tui.request_render()
