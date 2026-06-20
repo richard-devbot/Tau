@@ -233,7 +233,7 @@ class TextLLM:
             LLMEvent objects (TextDeltaEvent, ToolCallEndEvent, EndEvent, ErrorEvent, etc.).
         """
         from tau.inference.types import ErrorEvent, RetryEvent, StartEvent, StopReason
-        from tau.inference.utils import classify_error
+        from tau.inference.utils import classify_error, ErrorKind
         import asyncio
 
         api_key = await self._auth_manager.get_api_key(self.provider_id)
@@ -250,7 +250,9 @@ class TextLLM:
         max_retries = self.api.options.max_retries
         base_delay_s = self.api.options.retry_base_delay_ms / 1000
 
-        for attempt in range(max_retries + 1):
+        attempt = 0
+        oauth_recovery_attempted = False
+        while True:
             received_any = False
             try:
                 async with aclosing(self.api.stream(api_context, model=self.model)) as stream:
@@ -263,18 +265,47 @@ class TextLLM:
                 return
             except Exception as e:
                 classified = classify_error(e)
+
+                # OAuth token rejected before any data arrived: the access token was
+                # invalidated server-side (revoked/rotated) though not time-expired,
+                # so get_api_key's expiry check didn't catch it. Force a refresh and
+                # retry once for free; if the refresh token is dead, prompt re-login.
+                if (
+                    classified.kind == ErrorKind.AUTH
+                    and not received_any
+                    and not oauth_recovery_attempted
+                    and self._auth_manager.is_oauth(self.provider_id)
+                ):
+                    oauth_recovery_attempted = True
+                    refreshed = await self._auth_manager.force_refresh(
+                        self.provider_id, stale_access=self.api.options.api_key
+                    )
+                    if refreshed is not None:
+                        self.api.options.api_key = refreshed.access
+                        yield RetryEvent(attempt=attempt + 1, max_retries=max_retries, error=str(e))
+                        continue  # free retry — does not consume a normal attempt
+                    if not self._auth_manager.has(self.provider_id):
+                        yield ErrorEvent(
+                            reason=StopReason.Error,
+                            error="Authentication failed — your session has expired. Run /login to sign in again.",
+                        )
+                        return
+                    # Transient refresh failure: fall through to standard handling.
+
                 if received_any or not classified.retryable or attempt >= max_retries:
                     yield ErrorEvent(reason=StopReason.Error, error=str(e))
                     return
                 yield RetryEvent(attempt=attempt + 1, max_retries=max_retries, error=str(e))
                 await asyncio.sleep(base_delay_s * (2 ** attempt))
+                attempt += 1
 
     async def invoke(
         self,
         context: LLMContext,
         thinking_level: Optional["ThinkingLevel"] = None,
     ) -> list[LLMEvent]:
-        from tau.inference.types import ThinkingLevel
+        from tau.inference.types import ThinkingLevel, ErrorEvent, StopReason
+        from tau.inference.utils import classify_error, ErrorKind
         api_key = await self._auth_manager.get_api_key(self.provider_id)
         if api_key:
             self.api.options.api_key = api_key
@@ -289,9 +320,24 @@ class TextLLM:
                 tools=context.tools,
                 response_format=context.response_format,
             )
-            return await self.api.invoke(api_context, model=self.model)
-        except Exception as e:
-            from tau.inference.types import ErrorEvent, StopReason
-            return [ErrorEvent(reason=StopReason.Error, error=str(e))]
+            try:
+                return await self.api.invoke(api_context, model=self.model)
+            except Exception as e:
+                # OAuth access token rejected though not time-expired: force a
+                # refresh and retry once; if the refresh token is dead, ask the
+                # user to re-login (mirrors the recovery path in stream()).
+                if classify_error(e).kind == ErrorKind.AUTH and self._auth_manager.is_oauth(self.provider_id):
+                    refreshed = await self._auth_manager.force_refresh(
+                        self.provider_id, stale_access=self.api.options.api_key
+                    )
+                    if refreshed is not None:
+                        self.api.options.api_key = refreshed.access
+                        return await self.api.invoke(api_context, model=self.model)
+                    if not self._auth_manager.has(self.provider_id):
+                        return [ErrorEvent(
+                            reason=StopReason.Error,
+                            error="Authentication failed — your session has expired. Run /login to sign in again.",
+                        )]
+                return [ErrorEvent(reason=StopReason.Error, error=str(e))]
         finally:
             self.api.options.thinking_level = original

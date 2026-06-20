@@ -16,6 +16,28 @@ def _get_env_api_key(provider: str) -> str | None:
     return os.environ.get(f"{provider.upper()}_API_KEY")
 
 
+def _is_unrecoverable_refresh_error(error: Exception) -> bool:
+    """Return True when a failed token refresh means the refresh token itself is
+    dead (so the user must log in again), rather than a transient network/5xx blip.
+
+    Defers to the shared inference error classifier for the cases it understands
+    (auth → unrecoverable; rate-limit/overloaded/server/timeout → transient). OAuth
+    token endpoints, however, report a dead refresh token as ``invalid_grant`` /
+    HTTP 400 — which the inference-oriented classifier leaves as UNKNOWN — and the
+    provider wrappers raise these as ``RuntimeError("Request failed (<code>): ...")``
+    without a status_code attribute, so we match those markers explicitly.
+    """
+    from tau.inference.utils import classify_error, ErrorKind
+
+    kind = classify_error(error).kind
+    if kind in (ErrorKind.AUTH, ErrorKind.AUTH_PERMANENT):
+        return True
+    if kind in (ErrorKind.RATE_LIMIT, ErrorKind.OVERLOADED, ErrorKind.SERVER_ERROR, ErrorKind.TIMEOUT):
+        return False
+    text = str(error).lower()
+    return any(m in text for m in ("invalid_grant", "invalid_request", "invalid_token", "(400)", "(401)", "(403)"))
+
+
 class AuthManager:
     """Credential storage with pluggable backends."""
 
@@ -226,6 +248,66 @@ class AuthManager:
                 return LockResult(result=refreshed_credential, next=json.dumps(serialized, indent=2))
             except Exception as e:
                 self._record_error(e)
+                return LockResult(result=None)
+
+        result = await self.storage.with_lock_async(refresh_fn)
+        return result.result
+
+    def is_oauth(self, provider: str) -> bool:
+        """Return True if the stored credential for a provider is an OAuth credential."""
+        return isinstance(self.get(provider), OAuthCredential)
+
+    async def force_refresh(self, provider: str, stale_access: str | None = None) -> OAuthCredential | None:
+        """Force-refresh an OAuth credential whose access token was rejected (e.g. a
+        mid-request 401) even though it is not yet time-expired.
+
+        Returns the new credential on success. Returns None if the provider isn't
+        OAuth or the refresh failed; on an *unrecoverable* failure (dead refresh
+        token) the stored credential is removed so the caller can prompt re-login,
+        whereas a transient failure leaves it untouched.
+
+        ``stale_access`` is the access token that was just rejected: if another
+        instance has already refreshed it under the lock, we adopt that result
+        instead of rotating the refresh token a second time.
+        """
+        oauth_provider = self.registry.text.get_oauth_provider(provider=provider)
+        if not oauth_provider:
+            return None
+
+        async def refresh_fn(current: str | None) -> LockResult:
+            """Refresh (unconditionally) the OAuth token in storage under the lock."""
+            current_data = self._parse_storage_data(current)
+            credential = current_data.get(provider)
+
+            if not isinstance(credential, OAuthCredential):
+                return LockResult(result=None)
+
+            # Another instance already refreshed after our token was rejected.
+            if stale_access is not None and credential.access != stale_access:
+                self.data = current_data
+                return LockResult(result=credential)
+
+            try:
+                refreshed_credential = await oauth_provider.refresh_token(credential=credential)
+                if credential.extra:
+                    merged_extra = dict(credential.extra)
+                    merged_extra.update(refreshed_credential.extra)
+                    refreshed_credential.extra = merged_extra
+                current_data[provider] = refreshed_credential
+                self.data = current_data
+                serialized = {k: self._serialize_credential(v) for k, v in current_data.items()}
+                return LockResult(result=refreshed_credential, next=json.dumps(serialized, indent=2))
+            except Exception as e:
+                self._record_error(e)
+                if _is_unrecoverable_refresh_error(e):
+                    # Refresh token is dead — drop the credential so the user is
+                    # prompted to log in again rather than retrying a broken token.
+                    current_data.pop(provider, None)
+                    self.data = current_data
+                    serialized = {k: self._serialize_credential(v) for k, v in current_data.items()}
+                    return LockResult(result=None, next=json.dumps(serialized, indent=2))
+                # Transient failure — keep the credential for a later retry.
+                self.data = current_data
                 return LockResult(result=None)
 
         result = await self.storage.with_lock_async(refresh_fn)
