@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "tau-coding-agent"
 version = "0.1.0"
@@ -48,6 +52,12 @@ indent-style = "space"
 
 [tool.setuptools]
 include-package-data = true
+
+# Only package the `tau` import package. Without this, setuptools auto-discovery
+# trips over sibling top-level dirs (dist/, docs/, assets/, *.egg-info) and
+# aborts editable installs with "Multiple top-level packages discovered".
+[tool.setuptools.packages.find]
+include = ["tau*"]
 
 [tool.setuptools.package-data]
 tau = [

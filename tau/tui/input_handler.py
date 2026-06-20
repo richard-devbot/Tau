@@ -131,7 +131,8 @@ class InputHandler:
 
         # Strip resolved image markers from the text sent to the model so the
         # LLM doesn't see raw [image:uuid] placeholders alongside actual image bytes.
-        model_text = re.sub(r"\[image(?::[^\]]+| #\d+)\]", "", expanded).strip()
+        stripped = re.sub(r"\[image(?::[^\]]+| #\d+)\]", "", expanded).strip()
+        model_text = stripped if stripped else expanded
 
         if images:
             user_msg = UserMessage.with_images(text, images)

@@ -41,6 +41,21 @@ class ImageContent:
     images: list[str | Image.Image | bytes] = field(default_factory=list)
     dimension_note: str | None = None
 
+    def __post_init__(self) -> None:
+        # Normalize raw bytes / PIL images to base64 strings so the content is
+        # always JSON-serializable for session persistence (pydantic cannot
+        # encode non-UTF-8 image bytes). Existing base64 and URL strings pass
+        # through unchanged, and to_base64() re-detects the MIME type from the
+        # base64 magic bytes, so downstream API/render code is unaffected.
+        normalized: list[str | Image.Image | bytes] = []
+        for img in self.images:
+            if isinstance(img, str):
+                normalized.append(img)
+            else:
+                b64, _ = image_to_base64(img)
+                normalized.append(b64)
+        self.images = normalized
+
     def to_base64(self) -> list[tuple[str, str]]:
         """Convert all images to (base64_data, mime_type) pairs.
 
