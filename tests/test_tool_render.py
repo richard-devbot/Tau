@@ -1,0 +1,91 @@
+"""Tests for tau/tool/render.py and tau/tool/types.py — tool display utilities."""
+from __future__ import annotations
+
+from tau.tool.render import display_name, call_line
+from tau.tool.types import ToolResult, ToolKind
+from tau.tui.ansi import strip_ansi
+
+
+class TestDisplayName:
+    def test_single_word(self):
+        assert display_name("read") == "Read"
+
+    def test_snake_case(self):
+        assert display_name("read_file") == "Read File"
+
+    def test_three_words(self):
+        assert display_name("web_fetch_url") == "Web Fetch Url"
+
+    def test_already_capitalized(self):
+        assert display_name("Read") == "Read"
+
+    def test_empty_string(self):
+        assert display_name("") == ""
+
+    def test_no_underscore(self):
+        assert display_name("grep") == "Grep"
+
+
+class TestCallLine:
+    def test_single_value(self):
+        lines = call_line("read_file", "/path/to/file")
+        assert len(lines) == 1
+        plain = strip_ansi(lines[0])
+        assert "Read File" in plain
+        assert "/path/to/file" in plain
+
+    def test_multiple_values(self):
+        lines = call_line("grep", "pattern", "/path")
+        plain = strip_ansi(lines[0])
+        assert "pattern" in plain
+        assert "/path" in plain
+
+    def test_empty_values_skipped(self):
+        lines = call_line("tool", "arg1", "", "arg3")
+        plain = strip_ansi(lines[0])
+        assert "arg1" in plain
+        assert "arg3" in plain
+        # empty string should not add extra comma
+        assert ",," not in plain
+
+    def test_all_empty_values(self):
+        lines = call_line("tool", "", "")
+        plain = strip_ansi(lines[0])
+        assert "Tool" in plain
+
+    def test_no_values(self):
+        lines = call_line("tool")
+        assert len(lines) == 1
+        plain = strip_ansi(lines[0])
+        assert "Tool" in plain
+
+
+class TestToolResult:
+    def test_ok_constructor(self):
+        r = ToolResult.ok("call1", "output")
+        assert r.id == "call1"
+        assert r.content == "output"
+        assert r.is_error is False
+
+    def test_error_constructor(self):
+        r = ToolResult.error("call1", "something failed")
+        assert r.id == "call1"
+        assert r.content == "something failed"
+        assert r.is_error is True
+
+    def test_ok_with_metadata(self):
+        r = ToolResult.ok("c1", "data", metadata={"key": "val"})
+        assert r.metadata == {"key": "val"}
+
+    def test_error_with_metadata(self):
+        r = ToolResult.error("c1", "err", metadata={"key": "val"})
+        assert r.metadata == {"key": "val"}
+
+
+class TestToolKind:
+    def test_kinds_exist(self):
+        assert ToolKind.Read
+        assert ToolKind.Edit
+        assert ToolKind.Write
+        assert ToolKind.Execute
+        assert ToolKind.Web
