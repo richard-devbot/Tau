@@ -36,7 +36,6 @@ def resolve_model(model: str | None, provider: str | None) -> tuple[str | None, 
 
 
 @click.group(invoke_without_command=True, context_settings={"help_option_names": ["-h", "--help"]})
-@click.argument("message", required=False, default=None)
 @click.option("--version", "-v", is_flag=True, default=False, help="Print version and exit.")
 @click.option("--debug", "-d", is_flag=True, default=False, help="Enable debug logging.")
 @click.option("--cwd", "-c", default=None, metavar="PATH", help="Set the working directory.")
@@ -71,7 +70,6 @@ def resolve_model(model: str | None, provider: str | None) -> tuple[str | None, 
 @click.pass_context
 def cli(
     ctx: click.Context,
-    message: str | None,
     version: bool,
     debug: bool,
     cwd: str | None,
@@ -103,7 +101,7 @@ def cli(
         os.chdir(cwd)
 
     ctx.ensure_object(dict)
-    ctx.obj["message"] = prompt or message
+    ctx.obj["prompt"] = prompt
     ctx.obj["provider"] = provider
     ctx.obj["model"] = model
     ctx.obj["theme"] = theme
@@ -156,9 +154,9 @@ async def _start(opts: dict) -> None:
             case "interactive":
                 await _run_interactive(runtime, opts["theme"])
             case "print":
-                await _run_print(runtime, opts["message"], quiet=opts.get("quiet", False))
+                await _run_print(runtime, opts["prompt"], quiet=opts.get("quiet", False))
             case "json":
-                await _run_json(runtime, opts["message"], quiet=opts.get("quiet", False))
+                await _run_json(runtime, opts["prompt"], quiet=opts.get("quiet", False))
             case "rpc":
                 from tau.rpc.mode import run_rpc_mode
                 await run_rpc_mode(runtime)
