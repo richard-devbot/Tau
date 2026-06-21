@@ -4,27 +4,28 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tau.runtime.types import RuntimeConfig, RuntimeContext
 from tau.agent.service import Agent
 from tau.agent.types import PromptOptions
 from tau.commands.registry import CommandRegistry
-from tau.commands.types import ParsedCommand
+from tau.commands.types import CommandInfo, ParsedCommand
+from tau.hooks.runtime import InputEvent, InputEventResult, RuntimeReadyEvent, RuntimeStopEvent
 from tau.hooks.session import (
-    SessionStartEvent,
-    SessionStartReason,
-    SessionShutdownEvent,
-    SessionShutdownReason,
+    SessionBeforeForkEvent,
+    SessionBeforeForkResult,
     SessionBeforeSwitchEvent,
     SessionBeforeSwitchReason,
     SessionBeforeSwitchResult,
-    SessionBeforeForkEvent,
-    SessionBeforeForkResult,
     SessionBeforeTreeEvent,
     SessionBeforeTreeResult,
-    TreePreparation,
+    SessionShutdownEvent,
+    SessionShutdownReason,
+    SessionStartEvent,
+    SessionStartReason,
     SessionTreeEvent,
+    TreePreparation,
 )
-from tau.hooks.runtime import InputEvent, InputEventResult, RuntimeReadyEvent, RuntimeStopEvent
+from tau.runtime.types import RuntimeConfig, RuntimeContext
+from tau.skills.types import Skill
 
 if TYPE_CHECKING:
     from tau.tui.components.layout import Layout
@@ -48,6 +49,7 @@ class Runtime:
         self._context = context
         self._config = config
         self.commands = CommandRegistry(runtime=self)
+        self._skill_command_names: set[str] = set()
         self._layout: Layout | None = None
         self._stopped: bool = False
         self.version_check_task: asyncio.Task[str | None] | None = None
@@ -60,6 +62,7 @@ class Runtime:
         if context.ext_runtime is not None:
             for cmd in context.ext_runtime.get_commands():
                 self.commands.register(cmd)
+        self.register_skill_commands()
 
     # -------------------------------------------------------------------------
     # Factory
@@ -129,6 +132,7 @@ class Runtime:
         if self._layout is None:
             return
         import time
+
         from tau.message.types import CustomMessage, LinesContent
 
         msg = CustomMessage(
@@ -138,12 +142,58 @@ class Runtime:
         )
         self._layout.add_message(msg)
 
+    def _expand_skill(self, skill: Skill, args: str = "") -> str:
+        """Expand a skill into the prompt sent to the agent."""
+        expanded = (
+            f'<skill name="{skill.name}" location="{skill.file_path}">\n'
+            f"References are relative to {skill.base_dir}.\n\n"
+            f"{skill.content}\n</skill>"
+        )
+        if args:
+            expanded += f"\n\n{args}"
+        return expanded
+
+    def _skill_command_info(self, skill: Skill, command_name: str) -> CommandInfo:
+        """Build a command entry that invokes a skill."""
+
+        async def call(_registry: CommandRegistry, args: list[str]) -> None:
+            await self.invoke(self._expand_skill(skill, " ".join(args)))
+
+        return CommandInfo(
+            name=command_name,
+            description=skill.description,
+            call=call,
+            aliases=skill.aliases,
+            argument_hint=skill.argument_hint,
+        )
+
+    def register_skill_commands(self) -> None:
+        """Register user-invocable skills as slash commands."""
+        from tau.skills.registry import skill_registry
+
+        for name in self._skill_command_names:
+            self.commands.unregister(name)
+        self._skill_command_names.clear()
+
+        for skill in skill_registry.list_user_invocable():
+            names = [skill.name, *skill.commands]
+            seen: set[str] = set()
+            for name in names:
+                name = name.strip().lower()
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                command = self._skill_command_info(skill, name)
+                self.commands.register(command)
+                self._skill_command_names.add(name)
+                self._skill_command_names.update(command.aliases)
+
     # -------------------------------------------------------------------------
     # Core input entry point
     # -------------------------------------------------------------------------
 
     async def user_input(self, text: str, options: PromptOptions | None = None) -> None:
-        """Accept raw user text. ! runs a shell command; / goes to CommandRegistry; everything else to the agent."""
+        """Accept raw user text and dispatch shell, slash, or agent input."""
         match text.strip():
             case "":
                 return
@@ -159,14 +209,7 @@ class Runtime:
 
                 skill = skill_registry.get(skill_name)
                 if skill is not None:
-                    expanded = (
-                        f'<skill name="{skill.name}" location="{skill.file_path}">\n'
-                        f"References are relative to {skill.base_dir}.\n\n"
-                        f"{skill.content}\n</skill>"
-                    )
-                    if skill_args:
-                        expanded += f"\n\n{skill_args}"
-                    await self.invoke(expanded, options)
+                    await self.invoke(self._expand_skill(skill, skill_args), options)
             case t if t.startswith("/"):
                 parts = t[1:].strip().split()
                 name, args = parts[0].lower(), parts[1:]
@@ -185,8 +228,8 @@ class Runtime:
 
     async def set_model(self, model_id: str, provider: str | None = None) -> None:
         """Swap the active model. Only safe to call when the agent is idle."""
-        from tau.inference.api.text.service import TextLLM
         from tau.hooks.tui import ModelSelectEvent
+        from tau.inference.api.text.service import TextLLM
 
         agent = self._context.agent
         if agent is None:
@@ -219,13 +262,14 @@ class Runtime:
         """Run a shell command, stream output chunks, persist to session, and emit events."""
         import asyncio
         from asyncio.subprocess import PIPE, STDOUT
-        from tau.message.types import TerminalExecutionMessage
+
         from tau.hooks.types import (
             TerminalExecutionEvent,
             TerminalOutputEvent,
             UserTerminalEvent,
             UserTerminalResult,
         )
+        from tau.message.types import TerminalExecutionMessage
 
         exit_code: int | None = None
         cancelled = False
@@ -295,15 +339,16 @@ class Runtime:
         immediately — no new session required.
         """
         from pathlib import Path
+
         from tau.agent.prompt.builder import build_prompt
         from tau.agent.prompt.types import PromptOptions
-        from tau.extensions.api import _RuntimeRef, LoadExtensionsResult
+        from tau.extensions.api import LoadExtensionsResult, _RuntimeRef
         from tau.extensions.events import EventBus
         from tau.extensions.loader import ExtensionLoader
         from tau.extensions.runtime import ExtensionRuntime
+        from tau.prompts.registry import prompt_registry
         from tau.settings.paths import get_extensions_dir
         from tau.skills.registry import skill_registry
-        from tau.prompts.registry import prompt_registry
 
         sm = self._context.settings_manager
         if sm is None:
@@ -335,8 +380,9 @@ class Runtime:
 
         # extra_theme_paths: load each directory into the theme registry
         if extra_theme_paths:
-            from tau.themes.registry import theme_registry
             import logging as _logging
+
+            from tau.themes.registry import theme_registry
 
             _log = _logging.getLogger(__name__)
             for tp in extra_theme_paths:
@@ -378,6 +424,7 @@ class Runtime:
 
         for cmd in new_ext.get_commands():
             self.commands.register(cmd)
+        self.register_skill_commands()
 
         # ── Sync tools via registry then push to engine ───────────────────────
         engine = self._context.engine
@@ -416,6 +463,7 @@ class Runtime:
         can't be resolved.
         """
         from pathlib import Path
+
         from tau.agent.prompt.builder import build_prompt
         from tau.agent.prompt.types import PromptOptions
         from tau.extensions.api import LoadExtensionsResult
@@ -521,6 +569,7 @@ class Runtime:
         """
         import inspect
         from types import SimpleNamespace
+
         from tau.extensions.context import ExtensionContext
 
         handlers = ext.handlers.get(event_type, [])
@@ -538,6 +587,7 @@ class Runtime:
                 # silently — a botched dispose (e.g. servers not reaped) must be
                 # visible rather than leaking resources unnoticed.
                 import logging
+
                 logging.getLogger(__name__).exception(
                     "extension %s handler for %r raised", ext.path, event_type
                 )
@@ -719,6 +769,7 @@ class Runtime:
         if with_session is None:
             return
         import inspect
+
         from tau.extensions.context import ExtensionContext
 
         ctx = ExtensionContext.from_runtime(self)
