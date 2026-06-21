@@ -292,9 +292,9 @@ class Agent:
     async def _try_overflow_recovery(self) -> bool:
         """If the last turn died with a context-overflow error, compact once and signal a retry.
 
-        Mirrors pi's overflow recovery: drop the error message so it isn't kept or used as a
-        stale anchor, compact the history, and let the caller re-run the turn. Bounded to one
-        attempt per turn so a session that overflows even after compaction fails cleanly.
+        Drops the error message so it isn't kept or used as a stale anchor, compacts the
+        history, and lets the caller re-run the turn. Bounded to one attempt per turn so a
+        session that overflows even after compaction fails cleanly.
         """
         from tau.inference.utils import ErrorKind
         from tau.session.compaction import prepare_compaction

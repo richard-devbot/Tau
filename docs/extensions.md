@@ -457,8 +457,6 @@ Multiple extensions run in registration order. The first non-`None` result wins.
 If a handler raises, it is logged and the next handler runs; if all fall through,
 the default algorithm runs.
 
-Runnable examples live in `examples/extensions/`: `full_summary_compaction.py` (replace the default with a single comprehensive summary via `ctx.llm`) and `block_auto_compaction.py` (cancel automatic compaction, keep manual `/compact`).
-
 ### Example — use a different model for summarisation
 
 ```python
