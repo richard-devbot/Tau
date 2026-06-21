@@ -155,10 +155,14 @@ class AgentHookHandler:
             await self._on_settled_cb()
 
     async def _on_compaction_start(self, _event: object) -> None:
-        self._spinner(self._layout.spinner._theme.label_compacting, running=True)
+        # Layered reason so compaction can run alongside (and outlive) a turn's
+        # spinner without either clobbering the other.
+        self._layout.spinner.push_reason("compaction", self._layout.spinner._theme.label_compacting)
+        self._tui.request_render()
 
     async def _on_compaction_end(self, _event: object) -> None:
-        self._spinner(running=False)
+        self._layout.spinner.pop_reason("compaction")
+        self._tui.request_render()
 
     # ── Messages ──────────────────────────────────────────────────────────────
 
