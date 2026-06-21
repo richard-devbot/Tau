@@ -35,8 +35,13 @@ _MINIMAL_LEVELS = {ThinkingLevel.Low, ThinkingLevel.Minimal}
 
 
 
-def _messages_to_mistral(messages: list[LLMMessage]) -> list[dict[str, Any]]:
-    """Convert a message list to Mistral Chat API format, preserving thinking content blocks."""
+def _messages_to_mistral(messages: list[LLMMessage], supports_thinking: bool = True) -> list[dict[str, Any]]:
+    """Convert a message list to Mistral Chat API format.
+
+    When supports_thinking is False, ThinkingContent blocks are stripped from
+    assistant messages so non-reasoning models (e.g. devstral) don't receive
+    reasoning input they cannot accept.
+    """
     result: list[dict[str, Any]] = []
     for msg in messages:
         match msg:
@@ -51,15 +56,16 @@ def _messages_to_mistral(messages: list[LLMMessage]) -> list[dict[str, Any]]:
                 text_parts: list[str] = []
                 tool_calls: list[dict[str, Any]] = []
                 content_chunks: list[dict[str, Any]] = []
-                has_thinking = any(isinstance(c, ThinkingContent) for c in msg.contents)
+                has_thinking = supports_thinking and any(isinstance(c, ThinkingContent) for c in msg.contents)
                 for item in msg.contents:
                     match item:
                         case ThinkingContent():
-                            content_chunks.append({
-                                "type": "thinking",
-                                "thinking": [{"type": "text", "text": item.content}],
-                                "signature": item.signature,
-                            })
+                            if supports_thinking:
+                                content_chunks.append({
+                                    "type": "thinking",
+                                    "thinking": [{"type": "text", "text": item.content}],
+                                    "signature": item.signature,
+                                })
                         case TextContent():
                             if has_thinking:
                                 content_chunks.append({"type": "text", "text": item.content})
@@ -121,7 +127,7 @@ class MistralChatAPI(BaseAPI):
     async def stream(self, context: LLMContext, model: Model) -> AsyncGenerator[LLMEvent, None]:  # type: ignore[override]
         """Stream LLMEvents from the Mistral Chat API."""
         self._sync_client()
-        mistral_messages = _messages_to_mistral(context.messages)
+        mistral_messages = _messages_to_mistral(context.messages, supports_thinking=bool(model.thinking))
         if context.system_prompt:
             mistral_messages = [{"role": "system", "content": context.system_prompt}] + mistral_messages
 
