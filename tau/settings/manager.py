@@ -1,44 +1,60 @@
 from __future__ import annotations
+
+import contextlib
 import copy
 import dataclasses as dc
 import json
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional, Set, Dict, List, Any, Callable
+from typing import Any
 
-from tau.settings.storage import SettingsStorage, FileSettingsStorage, InMemorySettingsStorage, LockResult
-from tau.settings.types import (
-    Settings, SCOPE, SettingsError,
-    RetrySettings, ProviderRetrySettings, ThinkingBudgetsSettings,
-    ImageSettings, CompactionSettings, BranchSummarySettings,
-    HTTPProxySettings, TerminalSettings,
-    ExtensionEntry, ExtensionsSettings,
-    PackageEntry, PackagesSettings,
+from tau.engine.types import FollowupMode, SteeringMode
+from tau.inference.types import ThinkingLevel, Transport
+from tau.settings.storage import (
+    FileSettingsStorage,
+    InMemorySettingsStorage,
+    LockResult,
+    SettingsStorage,
 )
-from tau.engine.types import SteeringMode, FollowupMode
-from tau.inference.types import Transport, ThinkingLevel
-from tau.settings.utils import set_nested, coerce_enum
+from tau.settings.types import (
+    SCOPE,
+    BranchSummarySettings,
+    CompactionSettings,
+    ExtensionEntry,
+    ExtensionsSettings,
+    HTTPProxySettings,
+    ImageSettings,
+    PackageEntry,
+    PackagesSettings,
+    ProviderRetrySettings,
+    RetrySettings,
+    Settings,
+    SettingsError,
+    TerminalSettings,
+    ThinkingBudgetsSettings,
+)
+from tau.settings.utils import coerce_enum, set_nested
 
 _NESTED_FIELD_TYPES: dict[str, type] = {
-    'retry': RetrySettings,
-    'thinking_budgets': ThinkingBudgetsSettings,
-    'image': ImageSettings,
-    'compaction': CompactionSettings,
-    'branch_summary': BranchSummarySettings,
-    'http_proxy': HTTPProxySettings,
-    'terminal': TerminalSettings,
+    "retry": RetrySettings,
+    "thinking_budgets": ThinkingBudgetsSettings,
+    "image": ImageSettings,
+    "compaction": CompactionSettings,
+    "branch_summary": BranchSummarySettings,
+    "http_proxy": HTTPProxySettings,
+    "terminal": TerminalSettings,
 }
 
 # Enum-typed top-level fields — JSON stores these as plain strings, so they must
 # be coerced back into enum instances on load (the type hints promise enums and
 # callers rely on `.value` / enum comparisons).
 _ENUM_FIELD_TYPES: dict[str, type] = {
-    'thinking_level': ThinkingLevel,
-    'transport': Transport,
-    'steering_mode': SteeringMode,
-    'follow_up_mode': FollowupMode,
+    "thinking_level": ThinkingLevel,
+    "transport": Transport,
+    "steering_mode": SteeringMode,
+    "follow_up_mode": FollowupMode,
 }
-
 
 
 class SettingsManager:
@@ -47,9 +63,9 @@ class SettingsManager:
         storage: SettingsStorage,
         initial_global: Settings,
         initial_project: Settings,
-        global_load_error: Optional[Exception] = None,
-        project_load_error: Optional[Exception] = None,
-        initial_errors: Optional[List[SettingsError]] = None,
+        global_load_error: Exception | None = None,
+        project_load_error: Exception | None = None,
+        initial_errors: list[SettingsError] | None = None,
         project_trusted: bool = True,
     ):
         """Initialise with pre-loaded global and project settings and any load errors."""
@@ -59,20 +75,20 @@ class SettingsManager:
         # Don't merge project settings if the project is untrusted
         self.project_settings = initial_project if project_trusted else Settings()
         self.settings = self._deep_merge_settings(initial_global, self.project_settings)
-        self.modified_fields: Set[str] = set()
-        self.modified_nested_fields: Dict[str, Set[str]] = {}
-        self.modified_project_fields: Set[str] = set()
-        self.modified_project_nested_fields: Dict[str, Set[str]] = {}
-        self.global_settings_load_error: Optional[Exception] = global_load_error
-        self.project_settings_load_error: Optional[Exception] = project_load_error
-        self.errors: List[SettingsError] = initial_errors.copy() if initial_errors else []
+        self.modified_fields: set[str] = set()
+        self.modified_nested_fields: dict[str, set[str]] = {}
+        self.modified_project_fields: set[str] = set()
+        self.modified_project_nested_fields: dict[str, set[str]] = {}
+        self.global_settings_load_error: Exception | None = global_load_error
+        self.project_settings_load_error: Exception | None = project_load_error
+        self.errors: list[SettingsError] = initial_errors.copy() if initial_errors else []
         self._write_queue = None
         self._batch_mode: bool = False
 
     @staticmethod
     def create(
         cwd: Path,
-        config_dir: Optional[Path] = None,
+        config_dir: Path | None = None,
         project_trusted: bool = True,
     ) -> SettingsManager:
         """Create a SettingsManager backed by files in cwd (and optional config_dir for global settings)."""
@@ -82,34 +98,48 @@ class SettingsManager:
     @staticmethod
     def from_storage(storage: SettingsStorage, project_trusted: bool = True) -> SettingsManager:
         """Create a SettingsManager from an arbitrary storage backend."""
-        global_settings, global_error = SettingsManager._try_load_from_storage(storage, SCOPE.GLOBAL)
-        project_settings, project_error = SettingsManager._try_load_from_storage(storage, SCOPE.PROJECT)
+        global_settings, global_error = SettingsManager._try_load_from_storage(
+            storage, SCOPE.GLOBAL
+        )
+        project_settings, project_error = SettingsManager._try_load_from_storage(
+            storage, SCOPE.PROJECT
+        )
         initial_errors = []
         if global_error:
             initial_errors.append(SettingsError(scope=SCOPE.GLOBAL, error=global_error))
         if project_error:
             initial_errors.append(SettingsError(scope=SCOPE.PROJECT, error=project_error))
-        return SettingsManager(storage, global_settings, project_settings,
-                global_error, project_error, initial_errors, project_trusted=project_trusted)
+        return SettingsManager(
+            storage,
+            global_settings,
+            project_settings,
+            global_error,
+            project_error,
+            initial_errors,
+            project_trusted=project_trusted,
+        )
 
     @staticmethod
-    def in_memory(settings: Optional[Dict] = None) -> SettingsManager:
+    def in_memory(settings: dict | None = None) -> SettingsManager:
         """Create an in-memory SettingsManager with optional seed data (no file I/O, useful for testing)."""
         storage = InMemorySettingsStorage()
         settings_dict = settings or {}
-        storage.with_lock(SCOPE.GLOBAL, lambda _: LockResult(result=None, next=json.dumps(settings_dict, indent=2)))
+        storage.with_lock(
+            SCOPE.GLOBAL,
+            lambda _: LockResult(result=None, next=json.dumps(settings_dict, indent=2)),
+        )
         return SettingsManager.from_storage(storage)
 
     @staticmethod
     def _parse_extension_entry(raw: Any) -> ExtensionEntry | None:
-        if not isinstance(raw, dict) or 'path' not in raw:
+        if not isinstance(raw, dict) or "path" not in raw:
             return None
         valid = {f.name for f in dc.fields(ExtensionEntry)}
         return ExtensionEntry(**{k: v for k, v in raw.items() if k in valid})
 
     @staticmethod
     def _parse_package_entry(raw: Any) -> PackageEntry | None:
-        if not isinstance(raw, dict) or 'source' not in raw or 'name' not in raw:
+        if not isinstance(raw, dict) or "source" not in raw or "name" not in raw:
             return None
         valid = {f.name for f in dc.fields(PackageEntry)}
         return PackageEntry(**{k: v for k, v in raw.items() if k in valid})
@@ -126,35 +156,41 @@ class SettingsManager:
                 nested_cls = _NESTED_FIELD_TYPES[key]
                 valid_nested = {f.name for f in dc.fields(nested_cls)}
                 kwargs[key] = nested_cls(**{k: v for k, v in value.items() if k in valid_nested})
-            elif key == 'retry' and isinstance(value, dict):
-                provider = value.get('provider')
+            elif key == "retry" and isinstance(value, dict):
+                provider = value.get("provider")
                 if isinstance(provider, dict):
                     valid_provider = {f.name for f in dc.fields(ProviderRetrySettings)}
-                    provider = ProviderRetrySettings(**{k: v for k, v in provider.items() if k in valid_provider})
+                    provider = ProviderRetrySettings(
+                        **{k: v for k, v in provider.items() if k in valid_provider}
+                    )
                 valid_retry = {f.name for f in dc.fields(RetrySettings)}
-                retry_kwargs = {k: v for k, v in value.items() if k in valid_retry and k != 'provider'}
+                retry_kwargs = {
+                    k: v for k, v in value.items() if k in valid_retry and k != "provider"
+                }
                 kwargs[key] = RetrySettings(**retry_kwargs, provider=provider)
-            elif key == 'extensions' and isinstance(value, dict):
+            elif key == "extensions" and isinstance(value, dict):
                 entries = None
-                if isinstance(value.get('list'), list):
+                if isinstance(value.get("list"), list):
                     entries = [
-                        e for e in (
-                            SettingsManager._parse_extension_entry(item)
-                            for item in value['list']
-                        ) if e is not None
+                        e
+                        for e in (
+                            SettingsManager._parse_extension_entry(item) for item in value["list"]
+                        )
+                        if e is not None
                     ]
                 kwargs[key] = ExtensionsSettings(
-                    enabled=value.get('enabled'),
+                    enabled=value.get("enabled"),
                     list=entries,
                 )
-            elif key == 'packages' and isinstance(value, dict):
+            elif key == "packages" and isinstance(value, dict):
                 pkg_entries = None
-                if isinstance(value.get('list'), list):
+                if isinstance(value.get("list"), list):
                     pkg_entries = [
-                        e for e in (
-                            SettingsManager._parse_package_entry(item)
-                            for item in value['list']
-                        ) if e is not None
+                        e
+                        for e in (
+                            SettingsManager._parse_package_entry(item) for item in value["list"]
+                        )
+                        if e is not None
                     ]
                 kwargs[key] = PackagesSettings(list=pkg_entries)
             elif key in _ENUM_FIELD_TYPES:
@@ -166,21 +202,29 @@ class SettingsManager:
     @staticmethod
     def _load_from_storage(storage: SettingsStorage, scope: SCOPE) -> Settings:
         """Read and parse settings for the given scope from storage."""
+
         def load_fn(current):
             if not current:
                 return LockResult(result=Settings(), next=None)
-            return LockResult(result=SettingsManager._settings_from_dict(json.loads(current)), next=None)
+            return LockResult(
+                result=SettingsManager._settings_from_dict(json.loads(current)), next=None
+            )
+
         return storage.with_lock(scope, load_fn).result
 
     @staticmethod
-    def _try_load_from_storage(storage: SettingsStorage, scope: SCOPE) -> tuple[Settings, Optional[Exception]]:
+    def _try_load_from_storage(
+        storage: SettingsStorage, scope: SCOPE
+    ) -> tuple[Settings, Exception | None]:
         """Load settings for the given scope, returning an empty Settings and the error on failure."""
         try:
             return (SettingsManager._load_from_storage(storage, scope), None)
         except Exception as e:
             return (Settings(), e)
 
-    def _deep_merge_settings(self, global_settings: Settings, project_settings: Settings) -> Settings:
+    def _deep_merge_settings(
+        self, global_settings: Settings, project_settings: Settings
+    ) -> Settings:
         """Merge global and project settings; project wins, nested dataclasses merge field by field."""
         merged = copy.deepcopy(global_settings)
         for key, value in vars(project_settings).items():
@@ -198,19 +242,19 @@ class SettingsManager:
                 setattr(merged, key, value)
         return merged
 
-    def _mark_modified(self, field: str, nested_field: Optional[str] = None):
+    def _mark_modified(self, field: str, nested_field: str | None = None):
         """Record a global settings field (and optional nested key) as modified."""
         self.modified_fields.add(field)
         if nested_field:
             self.modified_nested_fields.setdefault(field, set()).add(nested_field)
 
-    def _mark_project_modified(self, field: str, nested_field: Optional[str] = None):
+    def _mark_project_modified(self, field: str, nested_field: str | None = None):
         """Record a project settings field (and optional nested key) as modified."""
         self.modified_project_fields.add(field)
         if nested_field:
             self.modified_project_nested_fields.setdefault(field, set()).add(nested_field)
 
-    def _clone_modified_nested_fields(self, source: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
+    def _clone_modified_nested_fields(self, source: dict[str, set[str]]) -> dict[str, set[str]]:
         """Snapshot the nested-field modification tracker so async writes see state at enqueue time."""
         return {key: set(value) for key, value in source.items()}
 
@@ -231,14 +275,13 @@ class SettingsManager:
     def _enqueue_write(self, scope: SCOPE, task: Callable[..., None]):
         """Chain an async write task so concurrent saves are serialised and never interleave."""
         import asyncio
+
         prev = self._write_queue
 
         async def chained() -> None:
             if prev is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await prev
-                except Exception:
-                    pass
             try:
                 task()
                 self._clear_modified_scope(scope)
@@ -251,10 +294,11 @@ class SettingsManager:
         self,
         scope: SCOPE,
         snapshot_settings: Settings,
-        modified_fields: Set[str],
-        modified_nested_fields: Dict[str, Set[str]],
+        modified_fields: set[str],
+        modified_nested_fields: dict[str, set[str]],
     ):
         """Write only the modified fields back to storage, merging at the key level to preserve concurrent changes."""
+
         def persist_fn(current):
             current_dict = json.loads(current) if current else {}
             snapshot_dict = asdict(snapshot_settings)
@@ -295,7 +339,9 @@ class SettingsManager:
         modified_nested_fields = self._clone_modified_nested_fields(self.modified_nested_fields)
 
         def write_task():
-            self._persist_scoped_settings(SCOPE.GLOBAL, snapshot_global, modified_fields, modified_nested_fields)
+            self._persist_scoped_settings(
+                SCOPE.GLOBAL, snapshot_global, modified_fields, modified_nested_fields
+            )
 
         self._enqueue_write(SCOPE.GLOBAL, write_task)
 
@@ -307,10 +353,14 @@ class SettingsManager:
             return
         snapshot_project = copy.deepcopy(self.project_settings)
         modified_fields = set(self.modified_project_fields)
-        modified_nested_fields = self._clone_modified_nested_fields(self.modified_project_nested_fields)
+        modified_nested_fields = self._clone_modified_nested_fields(
+            self.modified_project_nested_fields
+        )
 
         def write_task():
-            self._persist_scoped_settings(SCOPE.PROJECT, snapshot_project, modified_fields, modified_nested_fields)
+            self._persist_scoped_settings(
+                SCOPE.PROJECT, snapshot_project, modified_fields, modified_nested_fields
+            )
 
         self._enqueue_write(SCOPE.PROJECT, write_task)
 
@@ -319,7 +369,7 @@ class SettingsManager:
         if self._write_queue is not None:
             await self._write_queue
 
-    def drain_errors(self) -> List[SettingsError]:
+    def drain_errors(self) -> list[SettingsError]:
         """Return and clear all accumulated load and write errors."""
         drained = self.errors.copy()
         self.errors.clear()
@@ -351,7 +401,7 @@ class SettingsManager:
 
         self.settings = self._deep_merge_settings(self.global_settings, self.project_settings)
 
-    def apply_overrides(self, overrides: Dict[str, Any]):
+    def apply_overrides(self, overrides: dict[str, Any]):
         """Apply runtime overrides on top of the current merged settings without persisting."""
         override_settings = SettingsManager._settings_from_dict(overrides)
         self.settings = self._deep_merge_settings(self.settings, override_settings)
@@ -364,7 +414,7 @@ class SettingsManager:
         """Return a deep copy of the raw project settings (before global merge)."""
         return copy.deepcopy(self.project_settings)
 
-    def get_provider(self) -> Optional[str]:
+    def get_provider(self) -> str | None:
         """Return the default LLM provider, or None if unset."""
         return self.settings.provider
 
@@ -374,7 +424,7 @@ class SettingsManager:
         self._mark_modified("provider")
         self._save()
 
-    def get_theme(self) -> Optional[str]:
+    def get_theme(self) -> str | None:
         """Return the persisted UI theme name, or None if unset."""
         return self.settings.theme
 
@@ -450,7 +500,7 @@ class SettingsManager:
         self._mark_modified("show_tool_calls")
         self._save()
 
-    def get_model(self) -> Optional[str]:
+    def get_model(self) -> str | None:
         """Return the default model ID, or None if unset."""
         return self.settings.model
 
@@ -468,7 +518,7 @@ class SettingsManager:
         self._mark_modified("model")
         self._save()
 
-    def get_thinking_level(self) -> Optional[ThinkingLevel]:
+    def get_thinking_level(self) -> ThinkingLevel | None:
         """Return the default thinking level, or None if unset."""
         return self.settings.thinking_level
 
@@ -780,7 +830,7 @@ class SettingsManager:
     def get_extension_list(self) -> list[ExtensionEntry]:
         """Return extension entries from the merged settings view (project overrides global)."""
         ext = self.settings.extensions
-        return (ext.list if ext is not None and ext.list is not None else [])
+        return ext.list if ext is not None and ext.list is not None else []
 
     def get_extension_paths(self) -> list[str]:
         """Return extension paths from the merged entry list (convenience flat view)."""
@@ -891,10 +941,7 @@ class SettingsManager:
 
     def update_package_version(self, name: str, version: str | None, local: bool = False) -> None:
         """Update the stored version (and installed_path) for an existing package."""
-        if local:
-            pkgs = self.project_settings.packages
-        else:
-            pkgs = self.global_settings.packages
+        pkgs = self.project_settings.packages if local else self.global_settings.packages
         if not pkgs or not pkgs.list:
             return
         for entry in pkgs.list:
@@ -918,7 +965,9 @@ class SettingsManager:
     def set_double_escape_action(self, value: str) -> None:
         """Set the double-escape key action and persist to global settings."""
         if value not in ("fork", "tree", "none"):
-            raise ValueError(f"double_escape_action must be 'fork', 'tree', or 'none', got {value!r}")
+            raise ValueError(
+                f"double_escape_action must be 'fork', 'tree', or 'none', got {value!r}"
+            )
         self.global_settings.double_escape_action = value  # type: ignore[assignment]
         self._mark_modified("double_escape_action")
         self._save()
@@ -989,6 +1038,7 @@ class SettingsManager:
         is resolved once and cached (see ``tau.utils.secrets``).
         """
         from tau.utils.secrets import resolve_secret
+
         proxy = self.settings.http_proxy
         if not (proxy and proxy.url):
             return None
@@ -1022,6 +1072,7 @@ class SettingsManager:
         resolved once and cached (see ``tau.utils.secrets``).
         """
         from tau.utils.secrets import resolve_secrets
+
         proxy = self.settings.http_proxy
         if not (proxy and proxy.headers):
             return None

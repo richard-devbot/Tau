@@ -8,13 +8,15 @@ Priority (highest wins):
 
 Supported file formats: .yaml, .yml, .json
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
-from tau.themes.types import ThemeLoadError
 from tau.themes.loader import load_themes_from_dir
+from tau.themes.types import ThemeLoadError
 
 if TYPE_CHECKING:
     from tau.tui.theme import LayoutTheme
@@ -28,11 +30,11 @@ DEFAULT_THEME = "dark"
 class ThemeRegistry:
     def __init__(self) -> None:
         """Initialize an empty theme registry."""
-        self._registry: dict[str, Callable[[], "LayoutTheme"]] = {}
+        self._registry: dict[str, Callable[[], LayoutTheme]] = {}
         self._source: dict[str, str] = {}
         self._builtins_loaded = False
 
-    def _add(self, name: str, factory: "Callable[[], LayoutTheme]", source: str) -> None:
+    def _add(self, name: str, factory: Callable[[], LayoutTheme], source: str) -> None:
         """Register a theme factory."""
         key = name.lower()
         self._registry[key] = factory
@@ -70,17 +72,15 @@ class ThemeRegistry:
 
         return errors
 
-    def get(self, name: str) -> "LayoutTheme":
+    def get(self, name: str) -> LayoutTheme:
         """Retrieve and instantiate a theme by name (case-insensitive)."""
         self._ensure_builtins()
         loader = self._registry.get(name.lower())
         if loader is None:
-            raise ValueError(
-                f"Unknown theme {name!r}. Available: {', '.join(self._registry)}"
-            )
+            raise ValueError(f"Unknown theme {name!r}. Available: {', '.join(self._registry)}")
         return loader()
 
-    def get_default(self) -> "LayoutTheme":
+    def get_default(self) -> LayoutTheme:
         """Return a theme that is guaranteed to load.
 
         Tries the configured default, then any builtin, then falls back to a
@@ -110,7 +110,7 @@ class ThemeRegistry:
     def register(
         self,
         name: str,
-        theme_or_factory: "LayoutTheme | Callable[[], LayoutTheme]",
+        theme_or_factory: LayoutTheme | Callable[[], LayoutTheme],
     ) -> None:
         """Register a custom theme (instance or factory function)."""
         if callable(theme_or_factory):

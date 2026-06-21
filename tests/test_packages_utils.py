@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from tau.packages.utils import parse_source
 from tau.packages.types import SourceType
+from tau.packages.utils import parse_source
 
 
 class TestParseSource:

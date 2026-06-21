@@ -1,4 +1,5 @@
 """Git branch badge component."""
+
 from __future__ import annotations
 
 from .utils import read_branch, shorten_home
@@ -17,6 +18,7 @@ class GitBadge:
 
     def render(self, width: int) -> list[str]:  # noqa: ARG002
         from tau.tui.ansi import DIM, RESET
+
         return [DIM + self._text + RESET]
 
     def handle_input(self, event: object) -> bool:  # noqa: ARG002

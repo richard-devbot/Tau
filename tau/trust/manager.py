@@ -5,7 +5,7 @@ from pathlib import Path
 
 from tau.settings.paths import CONFIG_DIR_PATH
 from tau.trust.types import TrustOption
-from tau.trust.utils import normalize, find_nearest, has_project_trust_inputs, get_trust_options
+from tau.trust.utils import find_nearest, get_trust_options, has_project_trust_inputs, normalize
 
 
 class TrustStore:

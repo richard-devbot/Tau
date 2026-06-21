@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 _TIMEOUT = 5.0
 
 
@@ -30,10 +32,8 @@ def _is_newer(latest: str, current: str) -> bool:
     def _parse(v: str) -> tuple[int, ...]:
         parts = []
         for x in v.strip().split("."):
-            try:
+            with contextlib.suppress(ValueError):
                 parts.append(int(x))
-            except ValueError:
-                pass
         return tuple(parts)
 
     try:

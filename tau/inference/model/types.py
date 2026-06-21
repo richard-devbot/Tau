@@ -1,13 +1,14 @@
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
+
 from tau.inference.types import ThinkingLevel
 from tau.message.types import Usage, UsageCost
 
 
-class Modality(str, Enum):
+class Modality(StrEnum):
     """Content modality supported by a model's input or output."""
 
-    Text  = "text"
+    Text = "text"
     Image = "image"
     Audio = "audio"
     Video = "video"
@@ -75,5 +76,7 @@ class Model:
         usage.cost.output = (self.cost.output / 1_000_000) * usage.output_tokens
         usage.cost.cache_read = (self.cost.cache_read / 1_000_000) * usage.cache_read_tokens
         usage.cost.cache_write = (self.cost.cache_write / 1_000_000) * usage.cache_write_tokens
-        usage.cost.total = usage.cost.input + usage.cost.output + usage.cost.cache_read + usage.cost.cache_write
+        usage.cost.total = (
+            usage.cost.input + usage.cost.output + usage.cost.cache_read + usage.cost.cache_write
+        )
         return usage.cost

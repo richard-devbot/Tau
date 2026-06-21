@@ -1,25 +1,27 @@
 from __future__ import annotations
-from collections.abc import AsyncGenerator, AsyncIterator
+
+from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from dataclasses import fields
-from tau.inference.model.registry import ModelRegistry
-from tau.inference.api.registry import LazyAPI
-from tau.inference.api.text.registry import LLMAPIRegistry
-from tau.inference.provider.registry import TextProviderRegistry, ProviderRegistry
-from tau.inference.provider.types import APIProvider, OAuthProvider
+from typing import TYPE_CHECKING
+
 from tau.auth.manager import AuthManager
 from tau.auth.types import OAuthCredential
+from tau.inference.api.registry import LazyAPI
+from tau.inference.api.text.registry import LLMAPIRegistry
+from tau.inference.model.registry import ModelRegistry
+from tau.inference.provider.registry import ProviderRegistry, TextProviderRegistry
+from tau.inference.provider.types import OAuthProvider
 from tau.inference.types import LLMContext, LLMEvent, LLMOptions
 from tau.message.types import LLMMessage, SystemMessage
-from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from tau.tool.types import Tool
     from tau.inference.types import ThinkingLevel
 
 
 class TextLLM:
     """Wrapper around inference APIs with model/provider resolution and option merging."""
+
     _apis: LLMAPIRegistry | None = None
     _models: ModelRegistry | None = None
     _providers: TextProviderRegistry | None = None
@@ -55,10 +57,10 @@ class TextLLM:
         provider: str | None = None,
         options: LLMOptions | None = None,
         *,
-        models: Optional[ModelRegistry] = None,
-        providers: Optional[TextProviderRegistry] = None,
-        apis: Optional[LLMAPIRegistry] = None,
-        auth_manager: Optional[AuthManager] = None,
+        models: ModelRegistry | None = None,
+        providers: TextProviderRegistry | None = None,
+        apis: LLMAPIRegistry | None = None,
+        auth_manager: AuthManager | None = None,
     ) -> None:
         """Initialize an LLM by resolving model, provider, and API implementation.
 
@@ -78,7 +80,9 @@ class TextLLM:
         _models = models if models is not None else type(self)._builtin_models()
         _providers = providers if providers is not None else type(self)._builtin_providers()
         _apis = apis if apis is not None else type(self)._builtin_apis()
-        self._auth_manager = auth_manager if auth_manager is not None else type(self)._builtin_auth_manager()
+        self._auth_manager = (
+            auth_manager if auth_manager is not None else type(self)._builtin_auth_manager()
+        )
 
         # When provider is not pinned, try all registered variants of the model
         # in order, skipping OAuth providers whose credentials are missing.
@@ -98,9 +102,8 @@ class TextLLM:
             cand_provider = _providers.get(candidate.provider)
             if cand_provider is None:
                 continue
-            if isinstance(cand_provider, OAuthProvider):
-                if not isinstance(self._auth_manager.get(cand_provider.id), OAuthCredential):
-                    continue  # no credentials — try next variant
+            if isinstance(cand_provider, OAuthProvider) and not isinstance(self._auth_manager.get(cand_provider.id), OAuthCredential):
+                continue  # no credentials — try next variant
             model = candidate
             resolved_provider = cand_provider
             break
@@ -147,6 +150,7 @@ class TextLLM:
         # resolver memoizes, so a !command runs only the first time it's seen.
         if merged.headers:
             from tau.utils.secrets import resolve_secrets
+
             merged.headers = resolve_secrets(merged.headers)
 
         # Lazy adapter: exposes `.options` immediately but only imports the
@@ -157,9 +161,10 @@ class TextLLM:
     def list_available(cls) -> list:
         """Return all models whose provider has usable auth (stored credential or env var)."""
         import os
+
+        from tau.auth.types import APICredential, OAuthCredential
         from tau.inference.provider.types import OAuthProvider
         from tau.inference.types import AuthType
-        from tau.auth.types import OAuthCredential, APICredential
 
         cls._auth_manager.reload()  # pick up any credentials added since startup
         result = []
@@ -179,10 +184,9 @@ class TextLLM:
                         continue
                 else:
                     cred = cls._auth_manager.get(provider.id)
-                    if not isinstance(cred, APICredential):
+                    if not isinstance(cred, APICredential) and not os.environ.get(f"{provider.id.upper()}_API_KEY"):
                         # fall back to env var (e.g. ANTHROPIC_API_KEY)
-                        if not os.environ.get(f"{provider.id.upper()}_API_KEY"):
-                            continue
+                        continue
                 seen.add(key)
                 result.append(candidate)
         return result
@@ -216,9 +220,8 @@ class TextLLM:
             A list of LLMMessages with system message injected if needed.
         """
         messages = context.messages
-        if context.system_prompt:
-            if not messages or not isinstance(messages[0], SystemMessage):
-                messages = [SystemMessage.text(context.system_prompt)] + messages
+        if context.system_prompt and (not messages or not isinstance(messages[0], SystemMessage)):
+            messages = [SystemMessage.text(context.system_prompt)] + messages
         return messages
 
     async def stream(self, context: LLMContext) -> AsyncGenerator[LLMEvent, None]:
@@ -235,9 +238,10 @@ class TextLLM:
         Yields:
             LLMEvent objects (TextDeltaEvent, ToolCallEndEvent, EndEvent, ErrorEvent, etc.).
         """
-        from tau.inference.types import ErrorEvent, RetryEvent, StartEvent, StopReason
-        from tau.inference.utils import classify_error, ErrorKind
         import asyncio
+
+        from tau.inference.types import ErrorEvent, RetryEvent, StartEvent, StopReason
+        from tau.inference.utils import ErrorKind, classify_error
 
         api_key = await self._auth_manager.get_api_key(self.provider_id)
         if api_key:
@@ -299,16 +303,17 @@ class TextLLM:
                     yield ErrorEvent(reason=StopReason.Error, error=str(e), kind=classified.kind)
                     return
                 yield RetryEvent(attempt=attempt + 1, max_retries=max_retries, error=str(e))
-                await asyncio.sleep(base_delay_s * (2 ** attempt))
+                await asyncio.sleep(base_delay_s * (2**attempt))
                 attempt += 1
 
     async def invoke(
         self,
         context: LLMContext,
-        thinking_level: Optional["ThinkingLevel"] = None,
+        thinking_level: ThinkingLevel | None = None,
     ) -> list[LLMEvent]:
-        from tau.inference.types import ThinkingLevel, ErrorEvent, StopReason
-        from tau.inference.utils import classify_error, ErrorKind
+        from tau.inference.types import ErrorEvent, StopReason, ThinkingLevel
+        from tau.inference.utils import ErrorKind, classify_error
+
         api_key = await self._auth_manager.get_api_key(self.provider_id)
         if api_key:
             self.api.options.api_key = api_key
@@ -330,7 +335,9 @@ class TextLLM:
                 # OAuth access token rejected though not time-expired: force a
                 # refresh and retry once; if the refresh token is dead, ask the
                 # user to re-login (mirrors the recovery path in stream()).
-                if classified.kind == ErrorKind.AUTH and self._auth_manager.is_oauth(self.provider_id):
+                if classified.kind == ErrorKind.AUTH and self._auth_manager.is_oauth(
+                    self.provider_id
+                ):
                     refreshed = await self._auth_manager.force_refresh(
                         self.provider_id, stale_access=self.api.options.api_key
                     )
@@ -338,10 +345,12 @@ class TextLLM:
                         self.api.options.api_key = refreshed.access
                         return await self.api.invoke(api_context, model=self.model)
                     if not self._auth_manager.has(self.provider_id):
-                        return [ErrorEvent(
-                            reason=StopReason.Error,
-                            error="Authentication failed — your session has expired. Run /login to sign in again.",
-                        )]
+                        return [
+                            ErrorEvent(
+                                reason=StopReason.Error,
+                                error="Authentication failed — your session has expired. Run /login to sign in again.",
+                            )
+                        ]
                 return [ErrorEvent(reason=StopReason.Error, error=str(e), kind=classified.kind)]
         finally:
             self.api.options.thinking_level = original

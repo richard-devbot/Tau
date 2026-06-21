@@ -1,9 +1,9 @@
 """Shared utilities for PKCE + local-callback OAuth flows."""
+
 from __future__ import annotations
 
 import asyncio
 import urllib.parse
-from typing import Optional
 
 from tau.inference.provider.oauth.types import OAuthLoginCallbacks
 
@@ -26,7 +26,7 @@ OAUTH_ERROR_HTML = b"""<!DOCTYPE html><html><head><title>Auth failed</title></he
 </body></html>"""
 
 
-def parse_authorization_input(value: str) -> tuple[Optional[str], Optional[str]]:
+def parse_authorization_input(value: str) -> tuple[str | None, str | None]:
     """Parse (code, state) from a redirect URL, raw query string, or bare code."""
     value = value.strip()
     if not value:
@@ -50,7 +50,7 @@ def parse_authorization_input(value: str) -> tuple[Optional[str], Optional[str]]
 async def start_oauth_callback_server(
     callback_path: str,
     expected_state: str,
-    host: Optional[str],
+    host: str | None,
     port: int,
 ) -> tuple[asyncio.Server, asyncio.Future[str]]:
     """Start a minimal HTTP server that captures the OAuth authorization code."""
@@ -111,14 +111,14 @@ async def await_oauth_code(
     state: str,
     server: asyncio.Server,
     callbacks: OAuthLoginCallbacks,
-) -> tuple[Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None]:
     """Race browser callback vs manual paste; close the server either way.
 
     Returns (code, recv_state). recv_state falls back to state when the browser
     callback wins (the state was already validated by the server handler).
     """
-    code: Optional[str] = None
-    recv_state: Optional[str] = None
+    code: str | None = None
+    recv_state: str | None = None
     pending: set = set()
     try:
         if callbacks.on_manual_code_input:
@@ -134,10 +134,18 @@ async def await_oauth_code(
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
 
-            if browser_task in done and not browser_task.cancelled() and browser_task.exception() is None:
+            if (
+                browser_task in done
+                and not browser_task.cancelled()
+                and browser_task.exception() is None
+            ):
                 code = browser_task.result()
                 recv_state = state
-            elif manual_task in done and not manual_task.cancelled() and manual_task.exception() is None:
+            elif (
+                manual_task in done
+                and not manual_task.cancelled()
+                and manual_task.exception() is None
+            ):
                 raw = manual_task.result()
                 parsed_code, parsed_state = parse_authorization_input(raw)
                 if parsed_state and parsed_state != state:
@@ -148,7 +156,7 @@ async def await_oauth_code(
             try:
                 code = await asyncio.wait_for(asyncio.shield(code_future), timeout=300)
                 recv_state = state
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
     except Exception:
         for task in pending:

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from tau.settings.storage import InMemorySettingsStorage
-from tau.settings.types import LockResult, SCOPE
+from tau.settings.types import SCOPE, LockResult
 
 
 def _storage() -> InMemorySettingsStorage:

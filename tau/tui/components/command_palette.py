@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from tau.tui.ansi import RESET, BOLD, BRIGHT_BLACK, BRIGHT_WHITE
+from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, RESET
 from tau.tui.component import Component
 from tau.tui.fuzzy import fuzzy_filter
 from tau.tui.input import InputEvent, Key, KeyEvent
 
 if True:  # avoid circular at runtime
     from typing import TYPE_CHECKING
+
     if TYPE_CHECKING:
         from tau.commands.types import CommandInfo
 
@@ -20,8 +21,8 @@ class CommandPalette(Component):
     """
 
     def __init__(self) -> None:
-        self._all_commands:  list[CommandInfo] = []
-        self._commands:      list[CommandInfo] = []
+        self._all_commands: list[CommandInfo] = []
+        self._commands: list[CommandInfo] = []
         self._selected = 0
         self._query = ""
 
@@ -71,18 +72,21 @@ class CommandPalette(Component):
         if not self._commands:
             return []
 
-        count   = len(self._commands)
+        count = len(self._commands)
         visible = min(VISIBLE_ROWS, count)
 
         # Scroll so selected row is always in view
         start = max(0, min(self._selected - visible + 1, count - visible))
 
         # Label column width — longest "/name" in visible window, capped at 20
-        label_w = max(8, min(
-            max(len(f"/{c.name}") for c in self._commands[start:start + visible]),
-            20,
-        ))
-        desc_w = max(0, width - label_w - 4)   # 4 = "  " + " " + margin
+        label_w = max(
+            8,
+            min(
+                max(len(f"/{c.name}") for c in self._commands[start : start + visible]),
+                20,
+            ),
+        )
+        desc_w = max(0, width - label_w - 4)  # 4 = "  " + " " + margin
 
         lines: list[str] = []
 
@@ -91,15 +95,17 @@ class CommandPalette(Component):
             lines.append(BRIGHT_BLACK + f"  ↑ {start} more" + RESET)
 
         for i in range(start, start + visible):
-            cmd    = self._commands[i]
+            cmd = self._commands[i]
             is_sel = i == self._selected
 
             name_str = f"/{cmd.name}"
             label = name_str[:label_w].ljust(label_w)
-            desc  = (cmd.description[:desc_w] if desc_w > 0 else "")
+            desc = cmd.description[:desc_w] if desc_w > 0 else ""
 
             if is_sel:
-                row = "  " + BOLD + BRIGHT_WHITE + label + RESET + "  " + BRIGHT_BLACK + desc + RESET
+                row = (
+                    "  " + BOLD + BRIGHT_WHITE + label + RESET + "  " + BRIGHT_BLACK + desc + RESET
+                )
             else:
                 row = "  " + BRIGHT_BLACK + label + "  " + desc + RESET
 

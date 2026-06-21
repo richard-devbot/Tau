@@ -11,11 +11,13 @@ Transport mirrors opencode's lsp/client.ts:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .language import EXTENSION_TO_LANGUAGE
 
@@ -98,7 +100,7 @@ class LSPClient:
         root: str,
         initialization: dict[str, Any] | None = None,
         env: dict[str, str] | None = None,
-    ) -> "LSPClient":
+    ) -> LSPClient:
         import os
         merged_env = {**os.environ, **(env or {})}
         process = await asyncio.create_subprocess_exec(
@@ -195,10 +197,8 @@ class LSPClient:
             elif method == "window/workDoneProgress/cancel":
                 pass  # client-side cancel; we drive no UI progress
             for handler in self._notification_handlers.get(method, []):
-                try:
+                with contextlib.suppress(Exception):
                     handler(msg.get("params", {}))
-                except Exception:
-                    pass
             return
 
         # Server → client request (has both method and id)
@@ -295,13 +295,11 @@ class LSPClient:
         await self._send({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params})
         try:
             return await asyncio.wait_for(future, timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending.pop(req_id, None)
-            try:
+            with contextlib.suppress(Exception):
                 await self._send({"jsonrpc": "2.0", "method": "$/cancelRequest",
                                   "params": {"id": req_id}})
-            except Exception:
-                pass
             raise
 
     async def request_partial(self, method: str, params: dict, timeout: float = 10.0) -> list:
@@ -471,10 +469,8 @@ class LSPClient:
             })
 
         if wait_for_diagnostics:
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(event.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                pass
             self._diagnostics_events.pop(path, None)
 
     def _on_diagnostics(self, params: dict) -> None:
@@ -741,12 +737,10 @@ class LSPClient:
         """Send textDocument/didSave so servers that watch saves can react."""
         if path not in self._file_versions:
             return
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("textDocument/didSave", {
                 "textDocument": {"uri": Path(path).as_uri()},
             })
-        except Exception:
-            pass
 
     async def will_rename_files(self, renames: list[tuple[str, str]]) -> Any:
         """workspace/willRenameFiles — ask server for edits to apply before a file move.
@@ -775,10 +769,8 @@ class LSPClient:
             {"oldUri": Path(old).as_uri(), "newUri": Path(new).as_uri()}
             for old, new in renames
         ]
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("workspace/didRenameFiles", {"files": files})
-        except Exception:
-            pass
 
     async def will_save(self, path: str) -> None:
         """textDocument/willSave — fire-and-forget notification before saving."""
@@ -787,13 +779,11 @@ class LSPClient:
             return
         if path not in self._file_versions:
             return
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("textDocument/willSave", {
                 "textDocument": {"uri": Path(path).as_uri()},
                 "reason": 1,   # 1=Manual, 2=AfterDelay, 3=FocusOut
             })
-        except Exception:
-            pass
 
     async def will_save_wait_until(self, path: str) -> list:
         """textDocument/willSaveWaitUntil — get edits to apply before writing to disk.
@@ -823,12 +813,10 @@ class LSPClient:
         self._diagnostics_events.pop(path, None)
         self._pull_result_ids.pop(path, None)
         self._pull_diag_cache.pop(path, None)
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("textDocument/didClose", {
                 "textDocument": {"uri": Path(path).as_uri()},
             })
-        except Exception:
-            pass
 
     async def will_create_files(self, paths: list[str]) -> Any:
         """workspace/willCreateFiles — ask server for edits before files are created."""
@@ -847,10 +835,8 @@ class LSPClient:
         if not cap.get("didCreate"):
             return
         files = [{"uri": Path(p).as_uri()} for p in paths]
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("workspace/didCreateFiles", {"files": files})
-        except Exception:
-            pass
 
     async def will_delete_files(self, paths: list[str]) -> Any:
         """workspace/willDeleteFiles — ask server for edits before files are deleted."""
@@ -869,29 +855,23 @@ class LSPClient:
         if not cap.get("didDelete"):
             return
         files = [{"uri": Path(p).as_uri()} for p in paths]
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("workspace/didDeleteFiles", {"files": files})
-        except Exception:
-            pass
 
     async def notify_file_deleted(self, path: str) -> None:
         """workspace/didChangeWatchedFiles (Deleted=3) — file removed from disk."""
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("workspace/didChangeWatchedFiles", {
                 "changes": [{"uri": Path(path).as_uri(), "type": 3}]
             })
-        except Exception:
-            pass
 
     async def did_change_configuration(self, settings: dict | None = None) -> None:
         """workspace/didChangeConfiguration — notify server that configuration changed.
 
         Pass settings=None to trigger servers to re-fetch via workspace/configuration.
         """
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("workspace/didChangeConfiguration", {"settings": settings})
-        except Exception:
-            pass
 
     async def execute_command(self, command: str, arguments: list[Any] | None = None) -> Any:
         """Send workspace/executeCommand. The server may respond via workspace/applyEdit."""
@@ -1181,10 +1161,8 @@ class LSPClient:
 
     async def set_trace(self, value: str = "off") -> None:
         """$/setTrace — set server trace verbosity. value: 'off' | 'messages' | 'verbose'"""
-        try:
+        with contextlib.suppress(Exception):
             await self.notify("$/setTrace", {"value": value})
-        except Exception:
-            pass
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -1204,7 +1182,7 @@ class LSPClient:
             try:
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=2.0)
-            except (asyncio.TimeoutError, ProcessLookupError, Exception):
+            except (TimeoutError, ProcessLookupError, Exception):
                 try:
                     self._process.kill()
                     await self._process.wait()
@@ -1215,10 +1193,8 @@ class LSPClient:
         for task in (self._reader_task, self._stderr_task):
             if task:
                 task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
-                except (asyncio.CancelledError, Exception):
-                    pass
         self._pending.clear()
 
 

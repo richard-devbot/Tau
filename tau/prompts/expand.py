@@ -53,6 +53,10 @@ def expand(content: str, args_str: str) -> str:
 
     result = re.sub(r"\$\{([^}]+)\}", _brace, content)
     result = re.sub(r"\$(?:@|ARGUMENTS)\b", all_args, result)
-    result = re.sub(r"\$([1-9])\b", lambda m: args[int(m.group(1)) - 1] if int(m.group(1)) - 1 < len(args) else "", result)
+    result = re.sub(
+        r"\$([1-9])\b",
+        lambda m: args[int(m.group(1)) - 1] if int(m.group(1)) - 1 < len(args) else "",
+        result,
+    )
 
     return result

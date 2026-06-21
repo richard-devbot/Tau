@@ -2,22 +2,28 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tau.tool.types import (
-    Tool, ToolKind, ToolExecutionMode,
-    ToolInvocation, ToolResult,
-    ToolExecutionUpdateCallback, AbortSignal, ToolContext,
-)
 from tau.tool.render import call_line
+from tau.tool.types import (
+    AbortSignal,
+    Tool,
+    ToolContext,
+    ToolExecutionMode,
+    ToolExecutionUpdateCallback,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 
 def _render_grep_call(args: dict, _streaming: bool) -> list[str]:
     pattern = args.get("pattern", "")
-    path    = args.get("path", "")
+    path = args.get("path", "")
     return call_line("grep", pattern, path)
+
 
 _MAX_MATCHES = 500
 _PREVIEW_LINES = 5
@@ -25,21 +31,22 @@ _PREVIEW_LINES = 5
 
 def _render_grep_result(content: str, opts: Any) -> list[str]:
     from tau.tui.ansi import DIM, RESET
+
     metadata = opts.metadata or {}
-    match_count   = metadata.get("match_count", 0)
+    match_count = metadata.get("match_count", 0)
     files_searched = metadata.get("files_searched", 0)
-    truncated     = metadata.get("truncated", False)
+    truncated = metadata.get("truncated", False)
 
     if match_count == 0:
         return ["No matches found"]
 
-    file_word  = "file" if files_searched == 1 else "files"
+    file_word = "file" if files_searched == 1 else "files"
     match_word = "match" if match_count == 1 else "matches"
     summary = f"Found {match_count} {match_word} in {files_searched} {file_word}"
     if truncated:
         summary += f"  {DIM}(truncated){RESET}"
 
-    lines = [l for l in content.splitlines() if ":" in l]
+    lines = [line for line in content.splitlines() if ":" in line]
     result = [summary]
 
     show = lines if opts.expanded else lines[:_PREVIEW_LINES]
@@ -58,14 +65,21 @@ def _render_grep_result(content: str, opts: Any) -> list[str]:
 
 class GrepParams(BaseModel):
     """Parameters for the grep tool."""
+
     pattern: str = Field(description="Regular expression to search for.")
-    path: str = Field(default="", description="File or directory to search. Defaults to the agent's cwd.")
-    include: str = Field(default="", description="Glob pattern to filter files (e.g. '*.py'). Only used when path is a directory.")
+    path: str = Field(
+        default="", description="File or directory to search. Defaults to the agent's cwd."
+    )
+    include: str = Field(
+        default="",
+        description="Glob pattern to filter files (e.g. '*.py'). Only used when path is a directory.",
+    )
     case_sensitive: bool = Field(default=True, description="Whether the pattern is case-sensitive.")
 
 
 class GrepTool(Tool):
     """Tool for searching files by regex pattern."""
+
     def __init__(self) -> None:
         super().__init__(
             name="grep",
@@ -89,9 +103,9 @@ class GrepTool(Tool):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         """Execute the regex pattern search operation."""
         params = GrepParams.model_validate(invocation.params)
@@ -120,7 +134,9 @@ class GrepTool(Tool):
             if truncated:
                 break
             try:
-                for lineno, line in enumerate(file.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                for lineno, line in enumerate(
+                    file.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+                ):
                     if regex.search(line):
                         matches.append(f"{file}:{lineno}: {line}")
                         if len(matches) >= _MAX_MATCHES:
@@ -137,7 +153,9 @@ class GrepTool(Tool):
         }
 
         if not matches:
-            return ToolResult.ok(invocation.id, f"No matches for pattern: {params.pattern}", metadata=metadata)
+            return ToolResult.ok(
+                invocation.id, f"No matches for pattern: {params.pattern}", metadata=metadata
+            )
 
         result = "\n".join(matches)
         if truncated:

@@ -1,7 +1,7 @@
 """Tests for tau/prompts/expand.py — template argument expansion."""
 from __future__ import annotations
 
-from tau.prompts.expand import expand, _parse_args
+from tau.prompts.expand import _parse_args, expand
 
 
 class TestParseArgs:

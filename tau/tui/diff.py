@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import difflib
 import re
-from typing import Callable
+from collections.abc import Callable
 
 # Matches a standard unified diff line: prefix (+/-/ ) followed by optional
 # line number then content.
@@ -12,8 +12,8 @@ _UNIFIED_LINE = re.compile(r"^([+\- ])(\s*\d*)\s?(.*)$")
 def _is_diff(text: str) -> bool:
     """Heuristic: return True if text looks like a unified diff."""
     lines = text.splitlines()
-    has_marker = any(l.startswith(("---", "+++", "@@")) for l in lines[:20])
-    has_change = any(l.startswith(("+", "-")) and len(l) > 1 for l in lines[:20])
+    has_marker = any(ln.startswith(("---", "+++", "@@")) for ln in lines[:20])
+    has_change = any(ln.startswith(("+", "-")) and len(ln) > 1 for ln in lines[:20])
     return has_marker and has_change
 
 
@@ -91,10 +91,10 @@ def render_diff(
                 result.append(removed("-" + old_hi))
                 result.append(added("+" + new_hi))
             else:
-                for l in removed_lines:
-                    result.append(removed("-" + l))
-                for l in added_lines:
-                    result.append(added("+" + l))
+                for ln in removed_lines:
+                    result.append(removed("-" + ln))
+                for ln in added_lines:
+                    result.append(added("+" + ln))
             continue
 
         if line.startswith("+"):

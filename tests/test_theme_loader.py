@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from tau.themes.loader import (
-    _parse_hex,
     _make_color_fn,
+    _parse_hex,
     load_theme_from_dict,
     load_theme_from_file,
     load_themes_from_dir,

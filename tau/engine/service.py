@@ -1,35 +1,68 @@
 from __future__ import annotations
-from tau.message.types import ToolResultContent
+
 import asyncio
-from contextlib import aclosing
-from typing import TYPE_CHECKING, Optional, Callable, Coroutine, List, Any
+from collections.abc import Callable, Coroutine
+from contextlib import aclosing, suppress
 from pathlib import Path
-from tau.hooks.service import Hooks
+from typing import TYPE_CHECKING, Any
+
 from tau.engine.types import (
-    EmitEvent, TurnStartEvent, TurnEndEvent,
-    MessageStartEvent, MessageUpdateEvent, MessageEndEvent,
-    ToolExecutionStartEvent, ToolExecutionUpdateEvent, ToolExecutionEndEvent,
-    AgentStartEvent, AgentEndEvent, AgentErrorEvent,
+    AbortSignal,
+    AgentEndEvent,
+    AgentErrorEvent,
+    AgentEvent,
+    AgentStartEvent,
+    EmitEvent,
+    EngineOptions,
+    EngineState,
+    FollowupQueue,
+    MessageEndEvent,
+    MessageStartEvent,
+    MessageUpdateEvent,
+    SteeringQueue,
+    ToolExecutionEndEvent,
     ToolExecutionFailureEvent,
-    EngineState, EngineOptions, AgentEvent, FollowupQueue, SteeringQueue, AbortSignal,
+    ToolExecutionStartEvent,
+    ToolExecutionUpdateEvent,
+    TurnEndEvent,
+    TurnStartEvent,
 )
-from tau.hooks.engine import AgentEndReason, ToolResultEvent, ToolResultEventResult, MessageRollbackEvent
-from tau.hooks.inference import BeforeProviderRequestEvent, AfterProviderResponseEvent
+from tau.hooks.engine import (
+    AgentEndReason,
+    MessageRollbackEvent,
+    ToolResultEvent,
+    ToolResultEventResult,
+)
+from tau.hooks.inference import AfterProviderResponseEvent, BeforeProviderRequestEvent
+from tau.hooks.service import Hooks
 from tau.hooks.tui import QueueUpdateEvent
 from tau.inference.types import (
+    EndEvent,
+    ErrorEvent,
     LLMContext,
-    ErrorEvent, EndEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingDeltaEvent, ThinkingEndEvent, ToolCallEndEvent, StopReason
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ToolCallEndEvent,
+)
+from tau.message.types import (
+    AssistantMessage,
+    LLMMessage,
+    Role,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    Usage,
 )
 from tau.tool.types import ToolContext, ToolExecutionMode, ToolInvocation, ToolResult
-from tau.message.types import AssistantMessage, ToolCallContent, Role, Usage, LLMMessage, ToolMessage
 
 if TYPE_CHECKING:
-    from tau.inference.api.text.service import TextLLM as LLM
-    from tau.tool.types import Tool
     from tau.agent.types import AgentContext
+    from tau.inference.api.text.service import TextLLM as LLM
     from tau.settings.manager import SettingsManager
-
+    from tau.tool.types import Tool
 
 
 class Engine:
@@ -65,11 +98,11 @@ class Engine:
         self,
         cwd: Path,
         llm: LLM,
-        tools: List[Tool],
-        system_prompt: Optional[str] = None,
-        options: Optional[EngineOptions] = None,
-        hooks: Optional[Hooks] = None,
-        settings: Optional[SettingsManager] = None,
+        tools: list[Tool],
+        system_prompt: str | None = None,
+        options: EngineOptions | None = None,
+        hooks: Hooks | None = None,
+        settings: SettingsManager | None = None,
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -118,11 +151,13 @@ class Engine:
         """
         if self.state.steering_queue:
             await self.state.steering_queue.enqueue(message)
-            await self.hooks.emit(QueueUpdateEvent(
-                queue='steering',
-                message=message,
-                messages=self.state.steering_queue.snapshot(),
-            ))
+            await self.hooks.emit(
+                QueueUpdateEvent(
+                    queue="steering",
+                    message=message,
+                    messages=self.state.steering_queue.snapshot(),
+                )
+            )
 
     async def follow_up(self, message: LLMMessage) -> None:
         """Enqueue a follow-up message to be injected after the current stop-reason=Stop turn.
@@ -132,11 +167,13 @@ class Engine:
         """
         if self.state.follow_up_queue:
             await self.state.follow_up_queue.enqueue(message)
-            await self.hooks.emit(QueueUpdateEvent(
-                queue='followup',
-                message=message,
-                messages=self.state.follow_up_queue.snapshot(),
-            ))
+            await self.hooks.emit(
+                QueueUpdateEvent(
+                    queue="followup",
+                    message=message,
+                    messages=self.state.follow_up_queue.snapshot(),
+                )
+            )
 
     def clear_steering(self) -> None:
         """Discard all pending steering messages without consuming them."""
@@ -157,8 +194,12 @@ class Engine:
 
     def has_pending_messages(self) -> bool:
         """True if the steering or follow-up queue has messages waiting to be consumed."""
-        steering_has = self.state.steering_queue is not None and not self.state.steering_queue.is_empty()
-        followup_has = self.state.follow_up_queue is not None and not self.state.follow_up_queue.is_empty()
+        steering_has = (
+            self.state.steering_queue is not None and not self.state.steering_queue.is_empty()
+        )
+        followup_has = (
+            self.state.follow_up_queue is not None and not self.state.follow_up_queue.is_empty()
+        )
         return steering_has or followup_has
 
     def reset(self) -> None:
@@ -172,7 +213,7 @@ class Engine:
         self.state.is_streaming = False
         self.state.idle_event.set()
 
-    def set_llm(self, llm: "LLM") -> None:
+    def set_llm(self, llm: LLM) -> None:
         """Swap the active LLM. Only safe to call when the engine is idle.
 
         Args:
@@ -224,7 +265,7 @@ class Engine:
                 self.state.pending_tool_calls.discard(tool_result.id)
             case AgentErrorEvent(error=error):
                 self.state.error_message = error
-                
+
         await self.hooks.emit(event)
         if self.options.on_event is not None:
             await self.options.on_event(event)
@@ -241,7 +282,7 @@ class Engine:
         self,
         tool_call: ToolCallContent,
         emit: EmitEvent,
-        signal: Optional[AbortSignal],
+        signal: AbortSignal | None,
     ) -> ToolResultContent:
         """Validate, run before/after hooks, and execute a single tool call.
 
@@ -259,8 +300,10 @@ class Engine:
         tool = self._tools.get(tool_call.name)
         if tool is None:
             return ToolResultContent(
-                id=tool_call.id, is_error=True,
-                content=f"Tool '{tool_call.name}' not found.", metadata={},
+                id=tool_call.id,
+                is_error=True,
+                content=f"Tool '{tool_call.name}' not found.",
+                metadata={},
             )
 
         tool_call.kind = tool.kind
@@ -273,7 +316,9 @@ class Engine:
         if tool.prepare_arguments is not None:
             args = tool.prepare_arguments(args) or args
 
-        invocation = ToolInvocation(id=tool_call.id, params=args, name=tool_call.name, cwd=self.tool_context.cwd)
+        invocation = ToolInvocation(
+            id=tool_call.id, params=args, name=tool_call.name, cwd=self.tool_context.cwd
+        )
 
         # before hook — returning ToolResultContent cancels execution
         if self.options.before_tool_call is not None:
@@ -299,8 +344,10 @@ class Engine:
             if self.options.after_tool_call is not None:
                 raw = await self.options.after_tool_call(invocation, raw, signal) or raw
             tool_result = ToolResultContent(
-                id=tool_call.id, is_error=raw.is_error,
-                content=raw.content, metadata=raw.metadata,
+                id=tool_call.id,
+                is_error=raw.is_error,
+                content=raw.content,
+                metadata=raw.metadata,
                 terminate=raw.terminate,
                 terminate_message=raw.terminate_message,
                 tool_name=tool_call.name,
@@ -308,25 +355,32 @@ class Engine:
         except Exception as e:
             error = f"Tool '{tool_call.name}' execution failed:\n{e}"
             tool_result = ToolResultContent(
-                id=tool_call.id, is_error=True, content=error, metadata={},
+                id=tool_call.id,
+                is_error=True,
+                content=error,
+                metadata={},
                 tool_name=tool_call.name,
             )
-            await emit(ToolExecutionFailureEvent(
-                tool_name=tool_call.name,
-                tool_call_id=tool_call.id,
-                input=tool_call.args,
-                error=error,
-            ))
+            await emit(
+                ToolExecutionFailureEvent(
+                    tool_name=tool_call.name,
+                    tool_call_id=tool_call.id,
+                    input=tool_call.args,
+                    error=error,
+                )
+            )
 
         await emit(ToolExecutionEndEvent(tool_result=tool_result))
 
-        hook_results = await self.hooks.emit(ToolResultEvent(
-            tool_call_id=tool_call.id,
-            tool_name=tool_call.name,
-            input=tool_call.args,
-            content=tool_result.content,
-            is_error=tool_result.is_error,
-        ))
+        hook_results = await self.hooks.emit(
+            ToolResultEvent(
+                tool_call_id=tool_call.id,
+                tool_name=tool_call.name,
+                input=tool_call.args,
+                content=tool_result.content,
+                is_error=tool_result.is_error,
+            )
+        )
         for r in hook_results:
             if isinstance(r, ToolResultEventResult):
                 if r.content is not None:
@@ -345,7 +399,7 @@ class Engine:
         self,
         tool_calls: list[ToolCallContent],
         emit: EmitEvent,
-        signal: Optional[AbortSignal],
+        signal: AbortSignal | None,
     ) -> list[ToolResultContent]:
         """Execute tool calls one at a time, preserving invocation order.
 
@@ -370,7 +424,7 @@ class Engine:
         self,
         tool_calls: list[ToolCallContent],
         emit: EmitEvent,
-        signal: Optional[AbortSignal],
+        signal: AbortSignal | None,
     ) -> list[ToolResultContent]:
         """Execute all tool calls concurrently via asyncio.gather.
 
@@ -382,15 +436,13 @@ class Engine:
         Returns:
             List of ToolResultContent (order may differ from input).
         """
-        return list(await asyncio.gather(
-            *[self._execute(tc, emit, signal) for tc in tool_calls]
-        ))
+        return list(await asyncio.gather(*[self._execute(tc, emit, signal) for tc in tool_calls]))
 
     async def _batch_execute(
         self,
         tool_calls: list[ToolCallContent],
         emit: EmitEvent,
-        signal: Optional[AbortSignal],
+        signal: AbortSignal | None,
     ) -> list[ToolResultContent]:
         """Split tool calls by each tool's own execution_mode, run parallel group
         concurrently and sequential group one-at-a-time, then merge results."""
@@ -400,10 +452,14 @@ class Engine:
         for tc in tool_calls:
             tool = self._tools.get(tc.name)
             if tool is None:
-                results.append(ToolResultContent(
-                    id=tc.id, is_error=True,
-                    content=f"Tool '{tc.name}' not found.", metadata={},
-                ))
+                results.append(
+                    ToolResultContent(
+                        id=tc.id,
+                        is_error=True,
+                        content=f"Tool '{tc.name}' not found.",
+                        metadata={},
+                    )
+                )
                 continue
             match tool.execution_mode:
                 case ToolExecutionMode.Parallel:
@@ -420,7 +476,7 @@ class Engine:
         self,
         tool_calls: list[ToolCallContent],
         emit: EmitEvent,
-        signal: Optional[AbortSignal] = None,
+        signal: AbortSignal | None = None,
     ) -> list[ToolResultContent]:
         """Dispatch tool calls according to the configured execution mode."""
         match self.options.execution_mode:
@@ -459,10 +515,8 @@ class Engine:
                 if event_task not in done:
                     # Abort won the race — cancel the pending read and stop.
                     event_task.cancel()
-                    try:
+                    with suppress(asyncio.CancelledError, StopAsyncIteration):
                         await event_task
-                    except (asyncio.CancelledError, StopAsyncIteration):
-                        pass
                     return
                 try:
                     event = event_task.result()
@@ -472,10 +526,8 @@ class Engine:
         finally:
             if not signal_task.done():
                 signal_task.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await signal_task
-                except asyncio.CancelledError:
-                    pass
 
     async def _loop(self, messages: list[LLMMessage], emit: EmitEvent, signal: AbortSignal) -> None:
         """Core agentic loop: stream LLM → execute tools → inject steering/follow-ups → repeat until done.
@@ -511,18 +563,20 @@ class Engine:
                     await emit(TurnEndEvent(message=closing, tool_results=tool_results))
                     break
 
-                ctx=LLMContext(
+                ctx = LLMContext(
                     messages=ctx_messages,
                     tools=self.state.tools,
                     system_prompt=self.state.system_prompt,
                 )
 
                 await emit(MessageStartEvent(message=message))
-                await self.hooks.emit(BeforeProviderRequestEvent(
-                    model=self.llm.model,
-                    messages=ctx_messages,
-                    options=self.llm.api.options,
-                ))
+                await self.hooks.emit(
+                    BeforeProviderRequestEvent(
+                        model=self.llm.model,
+                        messages=ctx_messages,
+                        options=self.llm.api.options,
+                    )
+                )
 
                 async with aclosing(self.llm.stream(ctx)) as stream:
                     _streaming_text: Any = None
@@ -539,6 +593,7 @@ class Engine:
                             case TextDeltaEvent(text=text):
                                 if _streaming_text is None:
                                     from tau.message.types import TextContent
+
                                     _streaming_text = TextContent(content=text.content)
                                     message.contents.append(_streaming_text)
                                 else:
@@ -547,6 +602,7 @@ class Engine:
                             case ThinkingDeltaEvent(thinking=thinking):
                                 if _streaming_thinking is None:
                                     from tau.message.types import ThinkingContent
+
                                     _streaming_thinking = ThinkingContent(content=thinking.content)
                                     message.contents.append(_streaming_thinking)
                                 else:
@@ -581,10 +637,12 @@ class Engine:
                 if signal.is_set() and message.stop_reason == StopReason.Stop:
                     message.stop_reason = StopReason.Abort
 
-                await self.hooks.emit(AfterProviderResponseEvent(
-                    model=self.llm.model,
-                    response=message,
-                ))
+                await self.hooks.emit(
+                    AfterProviderResponseEvent(
+                        model=self.llm.model,
+                        response=message,
+                    )
+                )
 
                 match message.stop_reason:
                     case StopReason.Abort:
@@ -603,7 +661,9 @@ class Engine:
 
                     case StopReason.Error:
                         await emit(MessageEndEvent(message=message))
-                        err_msg = message.error or f"Turn failed with reason: {message.stop_reason.value}"
+                        err_msg = (
+                            message.error or f"Turn failed with reason: {message.stop_reason.value}"
+                        )
                         end_reason = AgentEndReason.Error
                         await emit(AgentErrorEvent(error=err_msg))
                         await emit(TurnEndEvent(message=None, tool_results=tool_results))
@@ -630,7 +690,7 @@ class Engine:
                                 if (r.terminate_message or r.content)
                             )
                             if text:
-                                message=AssistantMessage.from_text(text)
+                                message = AssistantMessage.from_text(text)
                                 await emit(MessageEndEvent(message=message))
                                 messages.append(message)
                             await emit(TurnEndEvent(message=message, tool_results=tool_results))
@@ -684,9 +744,8 @@ class Engine:
 
                 await emit(TurnEndEvent(message=message, tool_results=tool_results))
 
-                if self.options.should_stop_after_turn:
-                    if self.options.should_stop_after_turn(message, tool_results):
-                        break
+                if self.options.should_stop_after_turn and self.options.should_stop_after_turn(message, tool_results):
+                    break
 
                 tool_results.clear()
         except Exception as e:
@@ -695,7 +754,7 @@ class Engine:
 
         await emit(AgentEndEvent(messages=messages, reason=end_reason))
 
-    async def run(self, ctx: AgentContext, signal: Optional[AbortSignal] = None) -> None:
+    async def run(self, ctx: AgentContext, signal: AbortSignal | None = None) -> None:
         """Apply context and start a fresh loop. Uses the provided signal or creates one."""
         self._signal = signal if signal is not None else asyncio.Event()
         self.state.is_streaming = True
@@ -716,17 +775,22 @@ class Engine:
             RuntimeError: If the engine is currently streaming or has no messages.
         """
         if self.state.is_streaming:
-            raise RuntimeError("Agent is already processing. Wait for completion before continuing.")
+            raise RuntimeError(
+                "Agent is already processing. Wait for completion before continuing."
+            )
 
         if not self.state.messages:
             # Edge case: session was reset but follow-up messages were enqueued before any LLM turn.
             if self.state.follow_up_queue and not self.state.follow_up_queue.is_empty():
                 follow_up_messages = await self.state.follow_up_queue.dequeue()
                 from tau.agent.types import AgentContext
-                await self.run(AgentContext(
-                    system_prompt=self.state.system_prompt or '',
-                    messages=follow_up_messages,
-                ))
+
+                await self.run(
+                    AgentContext(
+                        system_prompt=self.state.system_prompt or "",
+                        messages=follow_up_messages,
+                    )
+                )
                 return
             raise RuntimeError("No messages to continue from")
 
@@ -736,19 +800,25 @@ class Engine:
                 if self.state.steering_queue and not self.state.steering_queue.is_empty():
                     steering_messages = await self.state.steering_queue.dequeue()
                     from tau.agent.types import AgentContext
-                    await self.run(AgentContext(
-                        system_prompt=self.state.system_prompt or '',
-                        messages=self.state.messages + steering_messages,
-                    ))
+
+                    await self.run(
+                        AgentContext(
+                            system_prompt=self.state.system_prompt or "",
+                            messages=self.state.messages + steering_messages,
+                        )
+                    )
                     return
 
                 if self.state.follow_up_queue and not self.state.follow_up_queue.is_empty():
                     follow_up_messages = await self.state.follow_up_queue.dequeue()
                     from tau.agent.types import AgentContext
-                    await self.run(AgentContext(
-                        system_prompt=self.state.system_prompt or '',
-                        messages=self.state.messages + follow_up_messages,
-                    ))
+
+                    await self.run(
+                        AgentContext(
+                            system_prompt=self.state.system_prompt or "",
+                            messages=self.state.messages + follow_up_messages,
+                        )
+                    )
                     return
 
                 raise RuntimeError("Cannot continue from message role: assistant")

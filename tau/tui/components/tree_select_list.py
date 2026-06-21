@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Generic, Literal, TypeVar
+from datetime import UTC
+from typing import Literal, TypeVar
 
 from tau.tui.ansi import BOLD, RESET, truncate, visible_width
 from tau.tui.fuzzy import fuzzy_filter
@@ -12,35 +14,43 @@ ColorFn = Callable[[str], str]
 
 FilterMode = Literal["default", "no-tools", "user-only", "labeled-only", "all"]
 
-_TOOL_ROLES = frozenset({
-    "tool", "terminal", "terminal_execution", "error", "skill", "template",
-})
+_TOOL_ROLES = frozenset(
+    {
+        "tool",
+        "terminal",
+        "terminal_execution",
+        "error",
+        "skill",
+        "template",
+    }
+)
 
 _SETTINGS_ROLES = frozenset({"label", "model", "thinking_level"})
 
 
 @dataclass
-class TreeRow(Generic[T]):
+class TreeRow[T]:
     """A single row in a TreeSelectList: tree connectors + a role-colored snippet."""
-    prefix:          str
-    role:            str
-    text:            str
-    on_active_path:  bool = False
-    is_current:      bool = False
-    selectable:      bool = True
-    value:           T | None = None
-    parent_value:    T | None = None   # actual parent entry ID (for visible-tree maps)
-    has_children:    bool = False      # has children in the full (unfiltered) tree
-    label:           str | None = None
+
+    prefix: str
+    role: str
+    text: str
+    on_active_path: bool = False
+    is_current: bool = False
+    selectable: bool = True
+    value: T | None = None
+    parent_value: T | None = None  # actual parent entry ID (for visible-tree maps)
+    has_children: bool = False  # has children in the full (unfiltered) tree
+    label: str | None = None
     label_timestamp: str | None = None
-    search_text:     str = field(default="")
+    search_text: str = field(default="")
 
     def __post_init__(self) -> None:
         if not self.search_text:
             self.search_text = f"{self.role} {self.text}"
 
 
-class TreeSelectList(Generic[T]):
+class TreeSelectList[T]:
     """
     Picker that renders full pre-built rows (tree connectors + role-colored
     content) on one line each.  Supports fuzzy search, filter modes, folding,
@@ -187,10 +197,10 @@ class TreeSelectList(Generic[T]):
 
     def label_edit_key(self, event: object) -> None:
         """Route a KeyEvent into the label editing sub-mode."""
-        key  = getattr(event, "key", "")
+        key = getattr(event, "key", "")
         char = getattr(event, "char", None)
         ctrl = getattr(event, "ctrl", False)
-        alt  = getattr(event, "alt", False)
+        alt = getattr(event, "alt", False)
         if key == "enter":
             self.commit_label_edit()
         elif key in ("escape",) or (key == "c" and ctrl):
@@ -223,8 +233,9 @@ class TreeSelectList(Generic[T]):
 
     def _set_label(self, value: T, label: str | None, timestamp: str | None = None) -> None:
         if label:
-            from datetime import datetime, timezone
-            ts = timestamp or datetime.now(tz=timezone.utc).isoformat()
+            from datetime import datetime
+
+            ts = timestamp or datetime.now(tz=UTC).isoformat()
             self._labels[value] = (label, ts)
         else:
             self._labels.pop(value, None)
@@ -298,7 +309,8 @@ class TreeSelectList(Generic[T]):
 
         if self._filter_mode == "default":
             rows = [
-                r for r in rows
+                r
+                for r in rows
                 if r.role not in _TOOL_ROLES
                 and r.role not in _SETTINGS_ROLES
                 and not r.role.startswith("info:")
@@ -310,10 +322,9 @@ class TreeSelectList(Generic[T]):
             rows = [r for r in rows if r.role == "user"]
         elif self._filter_mode == "labeled-only":
             rows = [
-                r for r in rows
-                if r.value is not None and (
-                    r.value in self._labels or r.label is not None
-                )
+                r
+                for r in rows
+                if r.value is not None and (r.value in self._labels or r.label is not None)
             ]
         # "all": keep everything
 
@@ -419,11 +430,16 @@ class TreeSelectList(Generic[T]):
 
     def _status_label(self) -> str:
         match self._filter_mode:
-            case "default":      return ""
-            case "no-tools":     return "  [no-tools]"
-            case "user-only":    return "  [user]"
-            case "labeled-only": return "  [labeled]"
-            case "all":          return "  [all]"
+            case "default":
+                return ""
+            case "no-tools":
+                return "  [no-tools]"
+            case "user-only":
+                return "  [user]"
+            case "labeled-only":
+                return "  [labeled]"
+            case "all":
+                return "  [all]"
         return ""
 
     @staticmethod
@@ -458,9 +474,10 @@ class TreeSelectList(Generic[T]):
     def _format_label_ts(ts: str) -> str:
         """Format a label ISO timestamp (HH:MM or M/D HH:MM or YY/M/D HH:MM)."""
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
+
             dt = datetime.fromisoformat(ts)
-            now = datetime.now(tz=timezone.utc)
+            now = datetime.now(tz=UTC)
             hh_mm = dt.strftime("%H:%M")
             if dt.date() == now.date():
                 return hh_mm
@@ -520,7 +537,7 @@ class TreeSelectList(Generic[T]):
             cursor = self._accent_color("› ") if is_sel else "  "
 
             # Fold marker: replace ─ in connector with ⊟ (foldable) or ⊞ (folded)
-            is_folded   = val in self._folded_nodes if val is not None else False
+            is_folded = val in self._folded_nodes if val is not None else False
             is_foldable = self._is_foldable(val) if val is not None else False
             has_connector = "├─" in row.prefix or "└─" in row.prefix
             raw_prefix = row.prefix
@@ -563,7 +580,9 @@ class TreeSelectList(Generic[T]):
             elif row.is_current:
                 content += self._dim_color("  (current)")
 
-            line = truncate(cursor + prefix + fold_root_marker + marker + label_str + content, width)
+            line = truncate(
+                cursor + prefix + fold_root_marker + marker + label_str + content, width
+            )
             if is_sel and self._selected_bg is not None:
                 fill = max(0, width - visible_width(line))
                 line = self._selected_bg(line + " " * fill)

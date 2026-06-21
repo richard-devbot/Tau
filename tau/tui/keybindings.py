@@ -10,30 +10,30 @@ KeyMap = dict[str, list[str]]
 
 _DEFAULTS: KeyMap = {
     # Selection / list navigation
-    "tui.select.up":              ["up", "ctrl+p"],
-    "tui.select.down":            ["down", "ctrl+n"],
-    "tui.select.page_up":         ["page_up"],
-    "tui.select.page_down":       ["page_down"],
-    "tui.select.top":             ["home"],
-    "tui.select.bottom":          ["end"],
-    "tui.select.confirm":         ["enter", "tab"],
-    "tui.select.dismiss":         ["escape"],
+    "tui.select.up": ["up", "ctrl+p"],
+    "tui.select.down": ["down", "ctrl+n"],
+    "tui.select.page_up": ["page_up"],
+    "tui.select.page_down": ["page_down"],
+    "tui.select.top": ["home"],
+    "tui.select.bottom": ["end"],
+    "tui.select.confirm": ["enter", "tab"],
+    "tui.select.dismiss": ["escape"],
     # Text input
-    "tui.input.submit":           ["enter"],
-    "tui.input.newline":          ["shift+enter"],
-    "tui.input.clear":            ["ctrl+u"],
-    "tui.input.word_back":        ["ctrl+w"],
+    "tui.input.submit": ["enter"],
+    "tui.input.newline": ["shift+enter"],
+    "tui.input.clear": ["ctrl+u"],
+    "tui.input.word_back": ["ctrl+w"],
     # Message queuing
-    "app.message.followup":       ["alt+enter"],   # queue as follow-up (waits for agent to finish)
-    "app.message.dequeue":        ["alt+up"],      # restore queued messages into editor
+    "app.message.followup": ["alt+enter"],  # queue as follow-up (waits for agent to finish)
+    "app.message.dequeue": ["alt+up"],  # restore queued messages into editor
     # App-level
-    "tui.app.quit":               ["ctrl+c", "ctrl+d"],
-    "tui.app.abort":              ["ctrl+c"],
+    "tui.app.quit": ["ctrl+c", "ctrl+d"],
+    "tui.app.abort": ["ctrl+c"],
     # Scroll (message list)
-    "tui.scroll.up":              ["page_up"],
-    "tui.scroll.down":            ["page_down"],
-    "tui.scroll.top":             ["home"],
-    "tui.scroll.bottom":          ["end"],
+    "tui.scroll.up": ["page_up"],
+    "tui.scroll.down": ["page_down"],
+    "tui.scroll.top": ["home"],
+    "tui.scroll.bottom": ["end"],
 }
 
 

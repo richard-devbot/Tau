@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Optional, Type, Union, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from tau.inference.types import AuthType, LLMOptions, Transport
+from tau.inference.types import AuthType, LLMOptions
 
 if TYPE_CHECKING:
     from tau.inference.api.text.base import BaseLLMAPI
-    from tau.inference.provider.oauth.types import OAuthCredential, OAuthLoginCallbacks, AbortSignal
+    from tau.inference.provider.oauth.types import AbortSignal, OAuthCredential, OAuthLoginCallbacks
 
-__all__ = ["AuthType", "APIProvider", "OAuthProvider", "ImageProvider", "AudioProvider", "VideoProvider"]
+__all__ = [
+    "AuthType",
+    "APIProvider",
+    "OAuthProvider",
+    "ImageProvider",
+    "AudioProvider",
+    "VideoProvider",
+]
 
 
 @dataclass
@@ -25,40 +32,46 @@ class OAuthProvider(ABC):
 
     @property
     @abstractmethod
-    def api(self) -> Type["BaseLLMAPI"]:
+    def api(self) -> type[BaseLLMAPI]:
         """Return the LLM API class for this provider."""
         ...
 
     @abstractmethod
-    async def login(self, callbacks: "OAuthLoginCallbacks") -> "OAuthCredential":
+    async def login(self, callbacks: OAuthLoginCallbacks) -> OAuthCredential:
         """Authenticate with the provider and return a credential."""
         ...
 
     @abstractmethod
-    async def refresh_token(self, credential: "OAuthCredential", signal: Optional["AbortSignal"] = None) -> "OAuthCredential":
+    async def refresh_token(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> OAuthCredential:
         """Refresh an expired credential."""
         ...
 
     @abstractmethod
-    async def logout(self, credential: "OAuthCredential") -> None:
+    async def logout(self, credential: OAuthCredential) -> None:
         """Revoke the credential and clean up."""
         ...
 
-    def get_api_key(self, credential: "OAuthCredential") -> str:
+    def get_api_key(self, credential: OAuthCredential) -> str:
         """Return the access token as the Bearer key for API calls."""
         return credential.access
 
     @abstractmethod
-    async def validate(self, credential: "OAuthCredential", signal: Optional["AbortSignal"] = None) -> bool:
+    async def validate(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> bool:
         """Check if the credential is valid (not necessarily fresh)."""
         ...
 
-    def is_expired(self, credential: "OAuthCredential") -> bool:
+    def is_expired(self, credential: OAuthCredential) -> bool:
         """Return True if the token expires within the next 30 seconds."""
         # 30-second buffer prevents using a token that expires mid-request
         return int(time.time() * 1000) + 30_000 >= credential.expires
 
-    async def ensure_fresh(self, credential: "OAuthCredential", signal: Optional["AbortSignal"] = None) -> "OAuthCredential":
+    async def ensure_fresh(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> OAuthCredential:
         """Return a valid credential, transparently refreshing if expired."""
         if self.is_expired(credential):
             return await self.refresh_token(credential=credential, signal=signal)
@@ -71,15 +84,15 @@ class APIProvider:
 
     id: str
     name: str
-    api: Union[str, Type["BaseLLMAPI"]]
+    api: str | type[BaseLLMAPI]
     options: LLMOptions
     auth_type: AuthType = AuthType.ApiKey
 
-    def get_api_key(self) -> Optional[str]:
+    def get_api_key(self) -> str | None:
         """Return the configured API key, or None if not set."""
         return self.options.api_key
 
-    def get_base_url(self) -> Optional[str]:
+    def get_base_url(self) -> str | None:
         """Return the configured base URL override, or None to use the default."""
         return self.options.base_url
 
@@ -100,7 +113,7 @@ class AudioProvider:
 
     name: str
     api: str
-    base_url: Optional[str] = None
+    base_url: str | None = None
     auth_type: AuthType = AuthType.ApiKey
 
 
@@ -110,5 +123,5 @@ class VideoProvider:
 
     name: str
     api: str
-    base_url: Optional[str] = None
+    base_url: str | None = None
     auth_type: AuthType = AuthType.ApiKey

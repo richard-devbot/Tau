@@ -1,30 +1,47 @@
 from __future__ import annotations
-from typing import Any, Callable, List
+
+import builtins
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+from tau.inference.types import ThinkingLevel
+from tau.message.types import (
+    AgentMessage,
+    AssistantMessage,
+    CustomMessage,
+)
 from tau.session.types import (
-    SessionFileEntry, SessionHeader,
-    SessionEntry, LabelEntry, LeafEntry,
-    SessionOptions, SessionType, MessageEntry,
-    ThinkingLevelChangeEntry, SessionInfoEntry,
-    ModelChangeEntry, CustomInfoEntry,
-    CustomMessageEntry, CompactionEntry, BranchSummaryEntry,
-    SessionContext, SessionInfo,
-    SessionTreeNode, MessageMeta,
+    BranchSummaryEntry,
+    CompactionEntry,
+    CustomInfoEntry,
+    CustomMessageEntry,
+    LabelEntry,
+    LeafEntry,
+    MessageEntry,
+    MessageMeta,
+    ModelChangeEntry,
+    SessionContext,
+    SessionEntry,
+    SessionFileEntry,
+    SessionHeader,
+    SessionInfo,
+    SessionInfoEntry,
+    SessionOptions,
+    SessionTreeNode,
+    ThinkingLevelChangeEntry,
 )
 from tau.session.utils import (
-    create_session_id, generate_timestamp, generate_id, read_session_file,
-    is_valid_session_file, find_most_recent_session, is_message_with_contents,
-    get_last_activity_time, get_session_modified_date, build_session_info,
-    list_sessions_from_dir, get_default_session_dir,
+    create_session_id,
+    find_most_recent_session,
+    generate_id,
+    generate_timestamp,
+    get_default_session_dir,
+    list_sessions_from_dir,
+    read_session_file,
 )
 from tau.settings.paths import get_sessions_dir
-from tau.message.types import (
-    AgentMessage, AssistantMessage, CustomMessage,
-    ImageContent, TextContent, LLMMessage, Role,
-)
-from tau.inference.types import ThinkingLevel
 
 
 class SessionManager:
@@ -39,8 +56,7 @@ class SessionManager:
         self.cwd = Path(cwd).resolve()
         self.persist = persist
         self.session_dir = (
-            Path(session_dir).resolve() if session_dir
-            else get_default_session_dir(self.cwd)
+            Path(session_dir).resolve() if session_dir else get_default_session_dir(self.cwd)
         )
         self.session_file = session_file
         self.by_id: dict[str, SessionEntry] = {}
@@ -112,7 +128,9 @@ class SessionManager:
 
         if self.persist:
             file_timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S-%f")
-            self.session_file = (self.session_dir / f"{file_timestamp}_{session_id}.jsonl").resolve()
+            self.session_file = (
+                self.session_dir / f"{file_timestamp}_{session_id}.jsonl"
+            ).resolve()
 
         return self.session_file
 
@@ -201,9 +219,10 @@ class SessionManager:
             self._rewrite_file()
         return True
 
-    def find_last_assistant_message(self) -> "AssistantMessage | None":
+    def find_last_assistant_message(self) -> AssistantMessage | None:
         """Return the most recent AssistantMessage in the active branch, or None."""
         from tau.message.types import AssistantMessage
+
         for entry in reversed(self.get_branch()):
             if isinstance(entry, MessageEntry) and isinstance(entry.message, AssistantMessage):
                 return entry.message
@@ -407,17 +426,23 @@ class SessionManager:
                     messages.append(CustomMessage.from_session(entry=entry))
                 case BranchSummaryEntry():
                     from tau.message.types import BranchSummaryMessage
-                    messages.append(BranchSummaryMessage(
-                        summary=entry.summary,
-                        from_id=entry.from_id,
-                        timestamp=entry.timestamp,
-                    ))
+
+                    messages.append(
+                        BranchSummaryMessage(
+                            summary=entry.summary,
+                            from_id=entry.from_id,
+                            timestamp=entry.timestamp,
+                        )
+                    )
                 case CompactionEntry():
-                    messages.insert(0, CompactionSummaryMessage(
-                        summary=entry.summary,
-                        tokens_before=entry.tokens_before,
-                        timestamp=entry.timestamp,
-                    ))
+                    messages.insert(
+                        0,
+                        CompactionSummaryMessage(
+                            summary=entry.summary,
+                            tokens_before=entry.tokens_before,
+                            timestamp=entry.timestamp,
+                        ),
+                    )
 
         return SessionContext(
             messages=messages,
@@ -520,7 +545,7 @@ class SessionManager:
         parent_id = last_entry.id if last_entry else None
         used_ids = set(path_entry_ids)
 
-        for (target_id, label, label_timestamp) in labels_to_write:
+        for target_id, label, label_timestamp in labels_to_write:
             label_entry = LabelEntry(
                 id=generate_id(used_ids),
                 parent_id=parent_id,
@@ -606,7 +631,9 @@ class SessionManager:
         if not isinstance(source_entries[0], SessionHeader):
             raise ValueError(f"Cannot fork: source session has no header: {source}")
 
-        session_dir = Path(session_dir).resolve() if session_dir else get_default_session_dir(target_cwd)
+        session_dir = (
+            Path(session_dir).resolve() if session_dir else get_default_session_dir(target_cwd)
+        )
         session_dir.mkdir(parents=True, exist_ok=True)
 
         new_session_id = create_session_id()
@@ -642,7 +669,7 @@ class SessionManager:
         return sessions
 
     @staticmethod
-    def list_all(on_progress: Callable[[int, int], None] | None = None) -> List[SessionInfo]:
+    def list_all(on_progress: Callable[[int, int], None] | None = None) -> builtins.list[SessionInfo]:
         sessions_dir = get_sessions_dir()
         if not sessions_dir.exists():
             return []

@@ -1,25 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import fields
-from typing import Optional
 
 from tau.auth.manager import AuthManager
-from tau.inference.api.registry import LazyAPI
 from tau.inference.api.audio.registry import AudioAPIRegistry
+from tau.inference.api.registry import LazyAPI
 from tau.inference.model.registry import ModelRegistry
 from tau.inference.provider.registry import AudioProviderRegistry, ProviderRegistry
-from tau.inference.types import AudioOptions, STTContext, SynthesizedAudio, TTSContext, TranscribedAudio
+from tau.inference.types import (
+    AudioOptions,
+    STTContext,
+    SynthesizedAudio,
+    TranscribedAudio,
+    TTSContext,
+)
 
 
 class AudioLLM:
     """Service for audio synthesis and transcription using audio APIs."""
+
     # Class-level registries — None until first use (lazy) or explicitly set by
     # RuntimeContext.create(), whichever comes first. This avoids importing all
     # audio provider SDKs (gemini, elevenlabs, …) at module import time.
-    _models: Optional[ModelRegistry] = None
-    _providers: Optional[AudioProviderRegistry] = None
-    _apis: Optional[AudioAPIRegistry] = None
-    _auth_manager: Optional[AuthManager] = None
+    _models: ModelRegistry | None = None
+    _providers: AudioProviderRegistry | None = None
+    _apis: AudioAPIRegistry | None = None
+    _auth_manager: AuthManager | None = None
 
     @classmethod
     def _ensure_defaults(cls) -> None:
@@ -28,18 +34,20 @@ class AudioLLM:
             cls._models = ModelRegistry.from_audio_builtins()
             cls._providers = AudioProviderRegistry.from_builtins()
             cls._apis = AudioAPIRegistry.from_builtins()
-            cls._auth_manager = AuthManager.create(ProviderRegistry(audio=AudioProviderRegistry.from_builtins()))
+            cls._auth_manager = AuthManager.create(
+                ProviderRegistry(audio=AudioProviderRegistry.from_builtins())
+            )
 
     def __init__(
         self,
         model_id: str,
-        provider: Optional[str] = None,
-        options: Optional[AudioOptions] = None,
+        provider: str | None = None,
+        options: AudioOptions | None = None,
         *,
-        models: Optional[ModelRegistry] = None,
-        providers: Optional[AudioProviderRegistry] = None,
-        apis: Optional[AudioAPIRegistry] = None,
-        auth_manager: Optional[AuthManager] = None,
+        models: ModelRegistry | None = None,
+        providers: AudioProviderRegistry | None = None,
+        apis: AudioAPIRegistry | None = None,
+        auth_manager: AuthManager | None = None,
     ) -> None:
         type(self)._ensure_defaults()
         # Capture to locals — Pyright narrows local variables after assert,
@@ -48,7 +56,12 @@ class AudioLLM:
         _providers = providers or type(self)._providers
         _apis = apis or type(self)._apis
         _auth_manager = auth_manager or type(self)._auth_manager
-        assert _models is not None and _providers is not None and _apis is not None and _auth_manager is not None
+        assert (
+            _models is not None
+            and _providers is not None
+            and _apis is not None
+            and _auth_manager is not None
+        )
 
         model = _models.get(model_id, provider)
         if model is None:
@@ -70,7 +83,7 @@ class AudioLLM:
         # until the first synthesize()/transcribe() call.
         self.api = LazyAPI(_apis, api_name, self._merge_options(base_opts, options))
 
-    def _merge_options(self, base: AudioOptions, override: Optional[AudioOptions]) -> AudioOptions:
+    def _merge_options(self, base: AudioOptions, override: AudioOptions | None) -> AudioOptions:
         """Merge base options with override options."""
         if override is None:
             return base
@@ -89,8 +102,10 @@ class AudioLLM:
             self.api.options.api_key = api_key
         if self.model.tts_format:
             from tau.inference.types import AudioFormat
+
             fmt = AudioFormat(self.model.tts_format)
             from dataclasses import replace
+
             context = replace(context, response_format=fmt)
         return await self.api.synthesize(self.model, context)
 

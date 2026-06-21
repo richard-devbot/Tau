@@ -8,6 +8,7 @@ Two-step auth:
 The Copilot token encodes the API base URL in its `proxy-ep` claim, which is
 parsed to build the correct endpoint for chat completions.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,13 +20,18 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Optional
+from dataclasses import dataclass
 
 import certifi
 
-from dataclasses import dataclass
+from tau.inference.provider.oauth.types import (
+    AbortSignal,
+    OAuthAuthInfo,
+    OAuthCredential,
+    OAuthLoginCallbacks,
+    OAuthPrompt,
+)
 from tau.inference.provider.types import OAuthProvider
-from tau.inference.provider.oauth.types import OAuthAuthInfo, OAuthCredential, OAuthLoginCallbacks, OAuthPrompt, AbortSignal
 
 __all__ = ["GitHubCopilotOAuthProvider", "get_copilot_base_url"]
 
@@ -53,7 +59,7 @@ _POLICY_MODEL_IDS = [
 ]
 
 
-def normalize_domain(input_str: str) -> Optional[str]:
+def normalize_domain(input_str: str) -> str | None:
     """Parse and normalize a GitHub domain/URL, returning the hostname or None."""
     trimmed = input_str.strip()
     if not trimmed:
@@ -76,7 +82,9 @@ def _get_urls(domain: str) -> dict[str, str]:
     }
 
 
-def get_copilot_base_url(token: Optional[str] = None, enterprise_domain: Optional[str] = None) -> str:
+def get_copilot_base_url(
+    token: str | None = None, enterprise_domain: str | None = None
+) -> str:
     """Derive the Copilot API base URL from a token's proxy-ep claim or enterprise domain."""
     if token:
         match = re.search(r"proxy-ep=([^;]+)", token)
@@ -89,7 +97,9 @@ def get_copilot_base_url(token: Optional[str] = None, enterprise_domain: Optiona
     return "https://api.individual.githubcopilot.com"
 
 
-def _fetch_json(url: str, *, method: str = "GET", headers: dict, body: Optional[bytes] = None) -> dict:
+def _fetch_json(
+    url: str, *, method: str = "GET", headers: dict, body: bytes | None = None
+) -> dict:
     """Send an HTTP request and return the parsed JSON response; raise RuntimeError on HTTP errors."""
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
@@ -119,11 +129,13 @@ def _start_device_flow(domain: str) -> dict:
 def _poll_access_token_once(domain: str, device_code: str) -> dict:
     """Poll GitHub for a device flow access token (may return authorization_pending or error)."""
     urls = _get_urls(domain)
-    body = urllib.parse.urlencode({
-        "client_id": CLIENT_ID,
-        "device_code": device_code,
-        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-    }).encode()
+    body = urllib.parse.urlencode(
+        {
+            "client_id": CLIENT_ID,
+            "device_code": device_code,
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        }
+    ).encode()
     return _fetch_json(
         urls["access_token"],
         method="POST",
@@ -141,12 +153,15 @@ def _fetch_copilot_token(github_token: str, domain: str) -> dict:
     urls = _get_urls(domain)
     return _fetch_json(
         urls["copilot_token"],
-        headers={"Accept": "application/json", "Authorization": f"Bearer {github_token}", **COPILOT_HEADERS},
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {github_token}",
+            **COPILOT_HEADERS,
+        },
     )
 
 
-
-def _enable_model(copilot_token: str, model_id: str, enterprise_domain: Optional[str]) -> bool:
+def _enable_model(copilot_token: str, model_id: str, enterprise_domain: str | None) -> bool:
     """Enable a model for Copilot use by accepting its policy (best-effort, no-op on failure)."""
     base_url = get_copilot_base_url(copilot_token, enterprise_domain)
     url = f"{base_url}/models/{model_id}/policy"
@@ -199,7 +214,11 @@ async def _poll_for_github_token(
         if error == "slow_down":
             slow_down_count += 1
             raw_interval = data.get("interval")
-            interval_ms = raw_interval * 1000 if isinstance(raw_interval, (int, float)) and raw_interval > 0 else max(1000, interval_ms + 5000)
+            interval_ms = (
+                raw_interval * 1000
+                if isinstance(raw_interval, (int, float)) and raw_interval > 0
+                else max(1000, interval_ms + 5000)
+            )
             multiplier = _SLOW_DOWN_POLL_INTERVAL_MULTIPLIER
             continue
         if error:
@@ -216,14 +235,16 @@ async def _poll_for_github_token(
 
 
 async def login_github_copilot(callbacks: OAuthLoginCallbacks) -> OAuthCredential:
-    domain_input = await callbacks.on_prompt(OAuthPrompt(
-        message="GitHub Enterprise URL/domain (leave blank for github.com):",
-        placeholder="company.ghe.com",
-        allow_empty=True,
-    ))
+    domain_input = await callbacks.on_prompt(
+        OAuthPrompt(
+            message="GitHub Enterprise URL/domain (leave blank for github.com):",
+            placeholder="company.ghe.com",
+            allow_empty=True,
+        )
+    )
 
     trimmed = domain_input.strip()
-    enterprise_domain: Optional[str] = None
+    enterprise_domain: str | None = None
     if trimmed:
         enterprise_domain = normalize_domain(trimmed)
         if not enterprise_domain:
@@ -241,10 +262,12 @@ async def login_github_copilot(callbacks: OAuthLoginCallbacks) -> OAuthCredentia
     if not all(isinstance(v, str) for v in (device_code, user_code, verification_uri)):
         raise ValueError("Invalid device code response")
 
-    callbacks.on_auth(OAuthAuthInfo(
-        url=str(verification_uri),
-        instructions=f"Enter code: {user_code}",
-    ))
+    callbacks.on_auth(
+        OAuthAuthInfo(
+            url=str(verification_uri),
+            instructions=f"Enter code: {user_code}",
+        )
+    )
 
     if callbacks.on_progress:
         callbacks.on_progress("Waiting for GitHub authorization...")
@@ -271,15 +294,21 @@ async def login_github_copilot(callbacks: OAuthLoginCallbacks) -> OAuthCredentia
     if callbacks.on_progress:
         callbacks.on_progress("Enabling models...")
 
-    await asyncio.gather(*[
-        asyncio.to_thread(_enable_model, token, model_id, enterprise_domain)
-        for model_id in _POLICY_MODEL_IDS
-    ])
+    await asyncio.gather(
+        *[
+            asyncio.to_thread(_enable_model, token, model_id, enterprise_domain)
+            for model_id in _POLICY_MODEL_IDS
+        ]
+    )
 
     return credential
 
 
-async def refresh_github_copilot_token(credential: OAuthCredential, enterprise_domain: Optional[str] = None, signal: Optional[AbortSignal] = None) -> OAuthCredential:
+async def refresh_github_copilot_token(
+    credential: OAuthCredential,
+    enterprise_domain: str | None = None,
+    signal: AbortSignal | None = None,
+) -> OAuthCredential:
     """Refresh a Copilot token using the stored GitHub refresh token."""
     domain = enterprise_domain or "github.com"
     copilot_data = await asyncio.to_thread(_fetch_copilot_token, credential.refresh, domain)
@@ -297,6 +326,7 @@ async def refresh_github_copilot_token(credential: OAuthCredential, enterprise_d
 @dataclass
 class GitHubCopilotOAuthProvider(OAuthProvider):
     """OAuthProvider implementation for GitHub Copilot accounts."""
+
     id: str = "github-copilot"
     name: str = "GitHub Copilot"
     uses_callback_server: bool = False
@@ -305,7 +335,9 @@ class GitHubCopilotOAuthProvider(OAuthProvider):
         """Initiate the device code login flow through GitHub's authorization server."""
         return await login_github_copilot(callbacks)
 
-    async def refresh_token(self, credential: OAuthCredential, signal: Optional[AbortSignal] = None) -> OAuthCredential:
+    async def refresh_token(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> OAuthCredential:
         """Obtain a new access token using the stored refresh token."""
         return await refresh_github_copilot_token(credential, signal=signal)
 
@@ -314,7 +346,9 @@ class GitHubCopilotOAuthProvider(OAuthProvider):
         # GitHub does not expose a token revocation endpoint for device flow tokens
         pass
 
-    async def validate(self, credential: OAuthCredential, signal: Optional[AbortSignal] = None) -> bool:
+    async def validate(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> bool:
         """Return True if the credential is valid, refreshing if expired."""
         if self.is_expired(credential):
             try:
@@ -322,12 +356,11 @@ class GitHubCopilotOAuthProvider(OAuthProvider):
                 return True
             except Exception:
                 return False
-        if signal and signal.is_set():
-            return False
-        return True
+        return not (signal and signal.is_set())
 
     @property
     def api(self):
         """Return the API class that handles requests with this provider's tokens."""
         from tau.inference.api.text.github_copilot_chat import GitHubCopilotChatAPI
+
         return GitHubCopilotChatAPI

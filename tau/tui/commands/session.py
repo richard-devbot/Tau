@@ -19,6 +19,7 @@ def open_resume_selector(ctx: CommandContext) -> None:
 
     def commit(path: object) -> None:
         from pathlib import Path
+
         asyncio.ensure_future(_apply_resume(ctx, Path(str(path))))
 
     ctx.layout.open_resume_selector(
@@ -32,6 +33,7 @@ def open_resume_selector(ctx: CommandContext) -> None:
 
 async def _apply_resume(ctx: CommandContext, path: object) -> None:
     from pathlib import Path
+
     p = Path(str(path))
     try:
         await ctx.runtime.resume_session(p)
@@ -43,12 +45,12 @@ async def _apply_resume(ctx: CommandContext, path: object) -> None:
 def _message_snippet(message: object) -> tuple[str, str]:
     """Return (role_label, text_snippet) for any AgentMessage variant."""
     from tau.message.types import (
-        TerminalExecutionMessage,
         BranchSummaryMessage,
         CompactionSummaryMessage,
         CustomMessage,
         SkillInvocationMessage,
         TemplateInvocationMessage,
+        TerminalExecutionMessage,
         TextContent,
         ThinkingContent,
         ToolCallContent,
@@ -93,10 +95,12 @@ def _message_snippet(message: object) -> tuple[str, str]:
 def _message_selectable(message: object) -> bool:
     """False for an assistant turn with unanswered tool calls (would create a dangling tool_call)."""
     from tau.message.types import AssistantMessage
+
     return not (isinstance(message, AssistantMessage) and message.tool_calls())
 
 
 def open_tree_selector(ctx: CommandContext) -> None:
+    from tau.message.types import TextContent
     from tau.session.types import (
         BranchSummaryEntry,
         CompactionEntry,
@@ -107,7 +111,6 @@ def open_tree_selector(ctx: CommandContext) -> None:
         ModelChangeEntry,
         ThinkingLevelChangeEntry,
     )
-    from tau.message.types import TextContent
     from tau.tui.components.tree_select_list import TreeRow
 
     sm = ctx.runtime.session_manager
@@ -185,7 +188,7 @@ def open_tree_selector(ctx: CommandContext) -> None:
         chars: list[str] = []
         for ci in range(display_indent * 3):
             level = ci // 3
-            pos   = ci % 3
+            pos = ci % 3
             gutter_show = next((s for lv, s in gutters if lv == level), None)
             if gutter_show is not None:
                 chars.append("│" if pos == 0 and gutter_show else " ")
@@ -225,20 +228,24 @@ def open_tree_selector(ctx: CommandContext) -> None:
                 role, text = role_text
                 show_connector = is_branching and display_indent > 0
                 prefix = _build_prefix(gutters, show_connector, is_last, display_indent)
-                selectable = not isinstance(entry, MessageEntry) or _message_selectable(entry.message)
+                selectable = not isinstance(entry, MessageEntry) or _message_selectable(
+                    entry.message
+                )
                 if not selectable:
                     disabled_ids.add(entry.id)
-                rows.append(TreeRow(
-                    prefix=prefix,
-                    role=role,
-                    text=text[:80].replace("\n", " ").replace("\t", " "),
-                    on_active_path=entry.id in active_ids,
-                    is_current=entry.id == current_leaf,
-                    selectable=selectable,
-                    value=entry.id,
-                    parent_value=getattr(entry, "parent_id", None),
-                    has_children=len(node.children) > 0,
-                ))
+                rows.append(
+                    TreeRow(
+                        prefix=prefix,
+                        role=role,
+                        text=text[:80].replace("\n", " ").replace("\t", " "),
+                        on_active_path=entry.id in active_ids,
+                        is_current=entry.id == current_leaf,
+                        selectable=selectable,
+                        value=entry.id,
+                        parent_value=getattr(entry, "parent_id", None),
+                        has_children=len(node.children) > 0,
+                    )
+                )
 
             # Sort children so the branch containing the active leaf comes first
             children = node.children
@@ -250,9 +257,7 @@ def open_tree_selector(ctx: CommandContext) -> None:
             #   - current level is branching AND not at root → +1 (just-branched grouping)
             #   - linear single-child chain → stay flat (no change)
             multiple_children = len(children) > 1
-            if multiple_children:
-                child_indent = display_indent + 1
-            elif is_branching and display_indent > 0:
+            if multiple_children or is_branching and display_indent > 0:
                 child_indent = display_indent + 1
             else:
                 child_indent = display_indent
@@ -273,16 +278,21 @@ def open_tree_selector(ctx: CommandContext) -> None:
 
     def commit(entry_id: str) -> None:
         if entry_id in disabled_ids:
-            ctx.notify("Can't branch from a pending tool call — pick the tool result or a later message instead.")
+            ctx.notify(
+                "Can't branch from a pending tool call — pick the tool result or a later message instead."
+            )
             return
         asyncio.ensure_future(_apply_tree_branch(ctx, entry_id))
 
-    ctx.layout.open_branch_tree_selector(rows, commit, lambda: ctx.notify("Branch navigation cancelled."))
+    ctx.layout.open_branch_tree_selector(
+        rows, commit, lambda: ctx.notify("Branch navigation cancelled.")
+    )
 
 
 def _extract_user_message_text(message: object) -> str | None:
     """Return the text content of a UserMessage, or None if not a plain user message."""
-    from tau.message.types import UserMessage, TextContent
+    from tau.message.types import TextContent, UserMessage
+
     if not isinstance(message, UserMessage):
         return None
     contents = getattr(message, "contents", None)
@@ -294,6 +304,7 @@ def _extract_user_message_text(message: object) -> str | None:
 
 async def _apply_tree_branch(ctx: CommandContext, entry_id: str) -> None:
     from tau.session.types import MessageEntry
+
     sm = ctx.runtime.session_manager
     settings = ctx.runtime.settings_manager
 
@@ -321,9 +332,16 @@ async def _apply_tree_branch(ctx: CommandContext, entry_id: str) -> None:
     summarize = False
     if summary_enabled and not skip_prompt:
         from tau.tui.components.select_list import SelectItem
+
         summary_items: list[SelectItem[str]] = [
-            SelectItem(label="No summary",  description="Switch branch without summarizing", value="none"),
-            SelectItem(label="Summarize",   description="Generate a summary of the abandoned branch", value="yes"),
+            SelectItem(
+                label="No summary", description="Switch branch without summarizing", value="none"
+            ),
+            SelectItem(
+                label="Summarize",
+                description="Generate a summary of the abandoned branch",
+                value="yes",
+            ),
         ]
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[str | None] = loop.create_future()
@@ -387,9 +405,9 @@ async def _apply_clone(ctx: CommandContext) -> None:
 
 
 def cmd_session(ctx: CommandContext) -> None:
-    from tau.tui.ansi import BOLD, DIM, RESET
-    from tau.session.types import MessageEntry as SessionMessageEntry
     from tau.message.types import AssistantMessage, ToolMessage, UserMessage
+    from tau.session.types import MessageEntry as SessionMessageEntry
+    from tau.tui.ansi import BOLD, DIM, RESET
 
     sm = ctx.runtime.session_manager
     if sm is None:

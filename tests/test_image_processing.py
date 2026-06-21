@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import io
+
 import pytest
 
 from tau.utils.image_processing import (
     ProcessedImage,
-    process_image,
     _resize_to_fit,
+    process_image,
 )
 
 try:

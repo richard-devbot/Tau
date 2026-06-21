@@ -2,23 +2,22 @@
 from __future__ import annotations
 
 import json
-import pytest
 
 from tau.inference.api.text.utils import (
-    parse_tool_args,
-    openai_messages_to_chat,
-    anthropic_messages_to_list,
     anthropic_apply_message_cache,
+    anthropic_messages_to_list,
+    openai_messages_to_chat,
+    parse_tool_args,
 )
 from tau.message.types import (
-    SystemMessage,
-    UserMessage,
     AssistantMessage,
-    ToolMessage,
+    SystemMessage,
     TextContent,
     ThinkingContent,
     ToolCallContent,
+    ToolMessage,
     ToolResultContent,
+    UserMessage,
 )
 
 

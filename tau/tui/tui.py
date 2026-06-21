@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from tau.tui.component import Component, Container, Focusable
 from tau.tui.input import BgColorEvent, InputEvent, KeyEvent
@@ -11,7 +11,6 @@ from tau.tui.overlay import OverlayEntry, OverlayHandle, OverlayOptions
 from tau.tui.renderer import Renderer
 from tau.tui.terminal import Terminal
 from tau.tui.utils import project_name
-
 
 # Minimum milliseconds between rendered frames (~60 fps)
 _MIN_RENDER_INTERVAL = 1 / 60
@@ -357,7 +356,7 @@ class TUI(Container):
             result = await asyncio.wait_for(asyncio.shield(self._bg_color_future), timeout=0.5)
             self.background_color = result
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         finally:
             self._bg_color_future = None
@@ -442,7 +441,8 @@ class TUI(Container):
             _w, _h = self._terminal.width, self._terminal.height
             if not self._focused_overlay.is_visible(_w, _h):
                 _capturing = [
-                    e for e in self._overlays
+                    e
+                    for e in self._overlays
                     if not e.options.non_capturing and e.is_visible(_w, _h)
                 ]
                 if _capturing:
@@ -535,6 +535,8 @@ class TUI(Container):
 # Module-level helper — keeps the import of InputParser out of the class body
 # ---------------------------------------------------------------------------
 
+
 def _make_parser():
     from tau.tui.input import InputParser
+
     return InputParser()

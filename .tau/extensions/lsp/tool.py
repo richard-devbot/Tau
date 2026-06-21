@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
-
-from tau.tool.types import (
-    Tool, ToolKind, ToolExecutionMode,
-    ToolInvocation, ToolResult,
-    ToolExecutionUpdateCallback, AbortSignal, ToolContext,
-)
-from tau.tool.render import call_line
+from typing import Any
 
 from pydantic import BaseModel, Field
 
+from tau.tool.render import call_line
+from tau.tool.types import (
+    AbortSignal,
+    Tool,
+    ToolContext,
+    ToolExecutionMode,
+    ToolExecutionUpdateCallback,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
+
 from .core import LSP
-from .types import Operation, NEEDS_NAME, NEEDS_RANGE
-from .helper import normalize as _normalize, add_snippets as _add_snippets
+from .helper import add_snippets as _add_snippets
+from .helper import normalize as _normalize
+from .types import NEEDS_NAME, NEEDS_RANGE, Operation
 
 # Operations that apply edits to disk — skip normalization, they return structured summaries
 _EDIT_OPS = frozenset({"rename", "codeAction", "formatting"})
@@ -89,7 +95,7 @@ def _hover_text(hover: Any) -> str:
 
 
 def _render_lsp_result(content: str, opts: Any) -> list[str]:
-    from tau.tui.ansi import DIM, RED, YELLOW, RESET
+    from tau.tui.ansi import DIM, RED, RESET, YELLOW
 
     if opts.is_error:
         # One list element per line — an embedded newline in a single element
@@ -118,7 +124,7 @@ def _render_lsp_result(content: str, opts: Any) -> list[str]:
             if not opts.expanded or len(locs) == 1:
                 return [summary]
             out = [summary]
-            out.extend(_fmt_loc(l) for l in locs)
+            out.extend(_fmt_loc(loc) for loc in locs)
             out.append(f"{DIM}(ctrl+o to collapse){RESET}")
             return out
 
@@ -130,7 +136,7 @@ def _render_lsp_result(content: str, opts: Any) -> list[str]:
                 hint = [] if not refs else [f"{DIM}···  (ctrl+o to expand){RESET}"]
                 return [summary] + hint
             out = [summary]
-            out.extend(_fmt_loc(l) for l in refs)
+            out.extend(_fmt_loc(ref) for ref in refs)
             out.append(f"{DIM}(ctrl+o to collapse){RESET}")
             return out
 
@@ -170,7 +176,7 @@ def _render_lsp_result(content: str, opts: Any) -> list[str]:
         case "hover":
             hover = data[0] if isinstance(data, list) and data else data
             text = _hover_text(hover)
-            lines = [l for l in text.strip().splitlines() if l.strip()]
+            lines = [ln for ln in text.strip().splitlines() if ln.strip()]
             if not lines:
                 return ["No hover info"]
             first = lines[0][:80] + ("…" if len(lines[0]) > 80 else "")
@@ -531,7 +537,7 @@ _DESCRIPTION = (
 )
 
 
-def _empty_result_message(params: "LSPParams") -> str:
+def _empty_result_message(params: LSPParams) -> str:
     """Operation-aware guidance for an empty result, so the model can self-correct.
 
     Empty often means the request was well-formed but pointed at the wrong place
@@ -608,18 +614,19 @@ class LSPTool(Tool):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         params = LSPParams.model_validate(invocation.params)
 
         if params.operation in NEEDS_NAME and not params.new_name:
             return ToolResult.error(invocation.id, f"'{params.operation}' requires new_name.")
-        if params.operation in NEEDS_RANGE:
-            if params.end_line < params.line or (
+        if params.operation in NEEDS_RANGE and (
+            params.end_line < params.line or (
                 params.end_line == params.line and params.end_character < params.character
-            ):
+            )
+        ):
                 return ToolResult.error(invocation.id, "end_line/end_character must be >= line/character.")
 
         # Normalize to an absolute path anchored at the runtime cwd. The model

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tau.commands.registry import CommandRegistry
@@ -11,12 +12,13 @@ if TYPE_CHECKING:
 @dataclass
 class CommandInfo:
     """Metadata for a registered command."""
+
     name: str
     description: str
-    call: Callable[['CommandRegistry', list[str]], Awaitable[None] | None]
+    call: Callable[[CommandRegistry, list[str]], Awaitable[None] | None]
     aliases: list[str] = field(default_factory=list)
     argument_hint: str | None = None
-    get_argument_completions: Callable[[str], list['AutocompleteItem']] | None = None
+    get_argument_completions: Callable[[str], list[AutocompleteItem]] | None = None
     required_arg_names: list[str] = field(default_factory=list)
     """Names of the leading positional args that must be present, in order.
 
@@ -28,6 +30,7 @@ class CommandInfo:
 @dataclass
 class ParsedCommand:
     """Result of parsing a command string into name, args, and raw input."""
+
     name: str
     args: list[str]
     raw: str

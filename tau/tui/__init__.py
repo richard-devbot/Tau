@@ -6,27 +6,27 @@
 #
 #   Themes:        from tau.themes.registry import theme_registry
 
+from tau.tui.components.box import Box
+from tau.tui.components.select_list import SelectItem, SelectList
+from tau.tui.keybindings import (
+    KeybindingsManager,
+    KeyMap,
+    configure_keybindings,
+    get_keybindings,
+)
 from tau.tui.theme import (
     ColorFn,
+    InputTheme,
     LayoutTheme,
-    SpinnerTheme,
     MarkdownTheme,
     MessageTheme,
-    InputTheme,
     SelectListTheme,
+    SpinnerTheme,
     color,
     rgb,
     rgb_bold,
     rgb_italic,
 )
-from tau.tui.keybindings import (
-    KeyMap,
-    KeybindingsManager,
-    get_keybindings,
-    configure_keybindings,
-)
-from tau.tui.components.select_list import SelectList, SelectItem
-from tau.tui.components.box import Box
 
 __all__ = [
     # Theme types

@@ -11,6 +11,7 @@ def open_model_selector(ctx: CommandContext) -> None:
 
     try:
         from tau.inference.api.text.service import TextLLM
+
         models = TextLLM.list_available()
     except Exception as exc:
         ctx.notify(f"Failed to load models: {exc}")
@@ -20,7 +21,11 @@ def open_model_selector(ctx: CommandContext) -> None:
         ctx.notify("No models available. Use /login to add providers.")
         return
 
-    llm = getattr(getattr(ctx.runtime.agent, "_engine", None), "llm", None) if ctx.runtime.agent else None
+    llm = (
+        getattr(getattr(ctx.runtime.agent, "_engine", None), "llm", None)
+        if ctx.runtime.agent
+        else None
+    )
     model = getattr(llm, "model", None) if llm is not None else None
     current_key = f"{model.provider}/{model.id}" if model is not None else ""
 
@@ -28,7 +33,9 @@ def open_model_selector(ctx: CommandContext) -> None:
         model_id, provider = value
         asyncio.ensure_future(_apply_model(ctx, model_id, provider))
 
-    ctx.layout.open_model_selector(models, current_key, commit, lambda: ctx.notify("Model selection cancelled."))
+    ctx.layout.open_model_selector(
+        models, current_key, commit, lambda: ctx.notify("Model selection cancelled.")
+    )
 
 
 async def _apply_model(ctx: CommandContext, model_id: str, provider: str) -> None:
@@ -63,7 +70,9 @@ def open_effort_selector(ctx: CommandContext) -> None:
     def commit(level_val: str) -> None:
         asyncio.ensure_future(_apply_effort(ctx, level_val))
 
-    ctx.layout.open_effort_selector(levels, current, commit, lambda: ctx.notify("Effort selection cancelled."))
+    ctx.layout.open_effort_selector(
+        levels, current, commit, lambda: ctx.notify("Effort selection cancelled.")
+    )
 
 
 def get_palette_overrides(agent: object) -> dict[str, str]:
@@ -111,7 +120,9 @@ async def _apply_effort(ctx: CommandContext, level_val: str) -> None:
     if settings is not None:
         settings.set_thinking_level(level)
 
-    await ctx.runtime.hooks.emit(ThinkingLevelSelectEvent(level=level, previous_level=previous_level))
+    await ctx.runtime.hooks.emit(
+        ThinkingLevelSelectEvent(level=level, previous_level=previous_level)
+    )
 
     ctx.notify(f"Effort set to {level_val}")
     if ctx.on_palette_refresh is not None:

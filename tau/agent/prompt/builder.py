@@ -8,10 +8,10 @@ from pathlib import Path
 
 from tau.agent.prompt.types import PromptOptions
 from tau.settings.paths import (
-    get_system_prompt_path,
     get_append_system_prompt_path,
     get_docs_dir,
     get_readme_path,
+    get_system_prompt_path,
 )
 
 
@@ -31,6 +31,7 @@ def load_project_context_file(cwd: Path) -> tuple[str, Path] | None:
             except OSError:
                 pass
     return None
+
 
 _DEFAULT_IDENTITY = """\
 You are a coding agent. You help users understand, write, and modify code and files.
@@ -239,6 +240,7 @@ class PromptBuilder:
 
     def _skills_section(self) -> str:
         from tau.skills.registry import skill_registry
+
         block = skill_registry.format_for_system_prompt(self._opts.skills)
         return f"\n\n{block}" if block else ""
 

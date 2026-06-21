@@ -7,7 +7,7 @@ import json
 import sys
 from io import StringIO
 
-from tau.rpc.mode import _write, _serialize_event, RpcExtensionUIContext
+from tau.rpc.mode import RpcExtensionUIContext, _serialize_event, _write
 
 
 def capture_write(fn, *args, **kwargs):
@@ -19,7 +19,7 @@ def capture_write(fn, *args, **kwargs):
     finally:
         sys.stdout = old
     output = buf.getvalue()
-    lines = [l for l in output.splitlines() if l]
+    lines = [ln for ln in output.splitlines() if ln]
     return result, lines
 
 
@@ -152,7 +152,7 @@ class TestRpcDialogMethod:
             task = asyncio.ensure_future(_dialog_task())
             await asyncio.sleep(0)
             # resolve the first pending future
-            for key, fut in list(ctx._pending.items()):
+            for _, fut in list(ctx._pending.items()):
                 if not fut.done():
                     fut.set_result("a")
                     break
@@ -175,7 +175,7 @@ class TestRpcDialogMethod:
 
             task = asyncio.ensure_future(_confirm_task())
             await asyncio.sleep(0)
-            for key, fut in list(ctx._pending.items()):
+            for _, fut in list(ctx._pending.items()):
                 if not fut.done():
                     fut.set_result({"confirmed": True})
                     break
@@ -198,7 +198,7 @@ class TestRpcDialogMethod:
 
             task = asyncio.ensure_future(_confirm_task())
             await asyncio.sleep(0)
-            for key, fut in list(ctx._pending.items()):
+            for _, fut in list(ctx._pending.items()):
                 if not fut.done():
                     fut.set_result({"cancelled": True})
                     break

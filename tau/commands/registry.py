@@ -20,6 +20,7 @@ class CommandRegistry:
         self.runtime = runtime
         self._commands: dict[str, CommandInfo] = {}
         from tau.builtins.commands import get_builtin_commands
+
         for cmd in get_builtin_commands():
             self.register(cmd)
 
@@ -58,7 +59,7 @@ class CommandRegistry:
         if cmd is None:
             return False
 
-        missing = cmd.required_arg_names[len(parsed.args):]
+        missing = cmd.required_arg_names[len(parsed.args) :]
         if missing:
             if self.runtime is not None:
                 plural = "s" if len(missing) > 1 else ""

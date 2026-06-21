@@ -4,14 +4,14 @@ from __future__ import annotations
 import pytest
 
 from tau.tui.capabilities import (
-    TerminalCapabilities,
     CellDimensions,
+    TerminalCapabilities,
     detect_capabilities,
-    get_cell_dimensions,
-    set_cell_dimensions,
-    reset_capabilities_cache,
     get_capabilities,
+    get_cell_dimensions,
     is_image_line,
+    reset_capabilities_cache,
+    set_cell_dimensions,
 )
 
 

@@ -3,30 +3,38 @@ from __future__ import annotations
 import difflib
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tau.tool.types import (
-    Tool, ToolKind,
-    ToolInvocation, ToolResult,
-    ToolExecutionUpdateCallback, AbortSignal, ToolContext,
-)
 from tau.tool.render import call_line
+from tau.tool.types import (
+    AbortSignal,
+    Tool,
+    ToolContext,
+    ToolExecutionUpdateCallback,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 
 def _render_edit_call(args: dict, _streaming: bool) -> list[str]:
     return call_line("edit", args.get("path", ""))
+
 
 _CONTEXT_LINES = 2
 
 
 class EditParams(BaseModel):
     """Parameters for the edit tool."""
+
     path: str = Field(description="Absolute path to the file to edit.")
     old_string: str = Field(description="Exact string to find and replace.")
     new_string: str = Field(description="Replacement string.")
-    replace_all: bool = Field(default=False, description="Replace all occurrences; default replaces only the first.")
+    replace_all: bool = Field(
+        default=False, description="Replace all occurrences; default replaces only the first."
+    )
 
 
 def _parse_hunks(diff: str) -> list[list[tuple[str, int, int, str]]]:
@@ -60,11 +68,12 @@ def _parse_hunks(diff: str) -> list[list[tuple[str, int, int, str]]]:
 
 
 def _render_edit_result(content: str, opts: Any) -> list[str]:
-    from tau.tui.ansi import GREEN, RED, DIM, RESET
+    from tau.tui.ansi import DIM, GREEN, RED, RESET
+
     metadata = opts.metadata or {}
-    added   = metadata.get("lines_added", 0)
+    added = metadata.get("lines_added", 0)
     removed = metadata.get("lines_removed", 0)
-    diff    = metadata.get("diff", "")
+    diff = metadata.get("diff", "")
 
     parts = []
     if added:
@@ -102,7 +111,11 @@ def _render_edit_result(content: str, opts: Any) -> list[str]:
                     has_gaps = True
 
             changed = {i for i, (c, *_) in enumerate(hunk) if c != " "}
-            show = {j for ci in changed for j in range(max(0, ci - _CONTEXT_LINES), min(len(hunk), ci + _CONTEXT_LINES + 1))}
+            show = {
+                j
+                for ci in changed
+                for j in range(max(0, ci - _CONTEXT_LINES), min(len(hunk), ci + _CONTEXT_LINES + 1))
+            }
 
             prev_i: int | None = None
             for i, (char, ol, nl, text) in enumerate(hunk):
@@ -132,6 +145,7 @@ def _render_edit_result(content: str, opts: Any) -> list[str]:
 
 class EditTool(Tool):
     """Tool for replacing exact strings in files."""
+
     def __init__(self) -> None:
         super().__init__(
             name="edit",
@@ -153,9 +167,9 @@ class EditTool(Tool):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         params = EditParams.model_validate(invocation.params)
         path = Path(params.path)
@@ -193,15 +207,19 @@ class EditTool(Tool):
         replacements = count if params.replace_all else 1
 
         original_lines = original.splitlines(keepends=True)
-        updated_lines  = updated.splitlines(keepends=True)
-        diff_lines = list(difflib.unified_diff(
-            original_lines, updated_lines,
-            fromfile=f"a/{path.name}", tofile=f"b/{path.name}",
-            n=99999,
-        ))
+        updated_lines = updated.splitlines(keepends=True)
+        diff_lines = list(
+            difflib.unified_diff(
+                original_lines,
+                updated_lines,
+                fromfile=f"a/{path.name}",
+                tofile=f"b/{path.name}",
+                n=99999,
+            )
+        )
         diff = "".join(diff_lines)
-        lines_added   = sum(1 for l in diff_lines if l.startswith("+") and not l.startswith("+++"))
-        lines_removed = sum(1 for l in diff_lines if l.startswith("-") and not l.startswith("---"))
+        lines_added = sum(1 for line in diff_lines if line.startswith("+") and not line.startswith("+++"))
+        lines_removed = sum(1 for line in diff_lines if line.startswith("-") and not line.startswith("---"))
 
         metadata = {
             "file_path": str(path),
@@ -212,4 +230,8 @@ class EditTool(Tool):
             "replace_all": params.replace_all,
             "total_lines": len(updated_lines),
         }
-        return ToolResult.ok(invocation.id, f"Replaced {replacements} occurrence(s) in {params.path}", metadata=metadata)
+        return ToolResult.ok(
+            invocation.id,
+            f"Replaced {replacements} occurrence(s) in {params.path}",
+            metadata=metadata,
+        )

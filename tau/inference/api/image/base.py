@@ -8,6 +8,7 @@ from tau.inference.types import GeneratedImage, ImageContext, ImageOptions
 
 class BaseImageAPI(ABC):
     """Abstract base class for image generation API implementations."""
+
     def __init__(self, options: ImageOptions) -> None:
         self.options = options
 

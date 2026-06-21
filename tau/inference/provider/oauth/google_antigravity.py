@@ -4,6 +4,7 @@ Google Antigravity OAuth flow — standard authorization code + local callback s
 The access token is used as a Bearer token for calls to cloudcode-pa.googleapis.com,
 giving access to Claude and Gemini models via Google's Antigravity IDE quota.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,22 +15,34 @@ import ssl
 import time
 import urllib.error
 import urllib.parse
-from pathlib import Path
 import urllib.request
-from typing import Optional
+from dataclasses import dataclass
+from pathlib import Path
 
 import certifi
 
-from dataclasses import dataclass
+from tau.inference.provider.oauth.types import (
+    AbortSignal,
+    OAuthAuthInfo,
+    OAuthCredential,
+    OAuthLoginCallbacks,
+    OAuthPrompt,
+)
+from tau.inference.provider.oauth.utils import (
+    await_oauth_code,
+    parse_authorization_input,
+    start_oauth_callback_server,
+)
 from tau.inference.provider.types import OAuthProvider
-from tau.inference.provider.oauth.types import OAuthAuthInfo, OAuthCredential, OAuthLoginCallbacks, OAuthPrompt, AbortSignal
-from tau.inference.provider.oauth.utils import parse_authorization_input, start_oauth_callback_server, await_oauth_code
 
 __all__ = ["GoogleAntigravityOAuthProvider"]
 
-_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())                                                       
+_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
-CLIENT_ID = os.getenv("GOOGLE_ANTIGRAVITY_CLIENT_ID", "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com")
+CLIENT_ID = os.getenv(
+    "GOOGLE_ANTIGRAVITY_CLIENT_ID",
+    "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com",
+)
 CLIENT_SECRET = os.getenv("GOOGLE_ANTIGRAVITY_CLIENT_SECRET", "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")
 AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -38,13 +51,15 @@ CALLBACK_HOST = None  # binds to all interfaces (IPv4 + IPv6)
 CALLBACK_PORT = 51121
 CALLBACK_PATH = "/oauth-callback"
 REDIRECT_URI = f"http://localhost:{CALLBACK_PORT}{CALLBACK_PATH}"
-SCOPES = " ".join([
-    "https://www.googleapis.com/auth/cloud-platform",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/cclog",
-    "https://www.googleapis.com/auth/experimentsandconfigs",
-])
+SCOPES = " ".join(
+    [
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/cclog",
+        "https://www.googleapis.com/auth/experimentsandconfigs",
+    ]
+)
 
 
 def _build_authorization_url(state: str) -> str:
@@ -80,23 +95,29 @@ def _post_form(url: str, body: dict) -> dict:
 
 def _exchange_code(code: str, state: str) -> dict:
     """Exchange an authorization code for tokens."""
-    return _post_form(TOKEN_URL, {
-        "grant_type": "authorization_code",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "code": code,
-        "redirect_uri": REDIRECT_URI,
-    })
+    return _post_form(
+        TOKEN_URL,
+        {
+            "grant_type": "authorization_code",
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": REDIRECT_URI,
+        },
+    )
 
 
 def _refresh_token_sync(refresh_token: str) -> dict:
     """Exchange a refresh token for a new access token via Google's token endpoint."""
-    return _post_form(TOKEN_URL, {
-        "grant_type": "refresh_token",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "refresh_token": refresh_token,
-    })
+    return _post_form(
+        TOKEN_URL,
+        {
+            "grant_type": "refresh_token",
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "refresh_token": refresh_token,
+        },
+    )
 
 
 def _validate_token_sync(access_token: str) -> bool:
@@ -127,7 +148,6 @@ def _parse_token_response(data: dict) -> tuple[str, str, int]:
         refresh = ""
     expires_ms = int(time.time() * 1000) + int(expires_in) * 1000 - 5 * 60 * 1000
     return access, refresh, expires_ms
-
 
 
 _ANTIGRAVITY_AUTH_FILE = Path.home() / ".config" / "operator" / "antigravity_auth.json"
@@ -165,14 +185,18 @@ async def login_antigravity(callbacks: OAuthLoginCallbacks) -> OAuthCredential:
     state = secrets.token_urlsafe(32)
     url = _build_authorization_url(state)
 
-    server, code_future = await start_oauth_callback_server(CALLBACK_PATH, state, CALLBACK_HOST, CALLBACK_PORT)
-    callbacks.on_auth(OAuthAuthInfo(
-        url=url,
-        instructions=(
-            "Complete Google login in your browser. "
-            "If the browser is on another machine, paste the final redirect URL here."
-        ),
-    ))
+    server, code_future = await start_oauth_callback_server(
+        CALLBACK_PATH, state, CALLBACK_HOST, CALLBACK_PORT
+    )
+    callbacks.on_auth(
+        OAuthAuthInfo(
+            url=url,
+            instructions=(
+                "Complete Google login in your browser. "
+                "If the browser is on another machine, paste the final redirect URL here."
+            ),
+        )
+    )
 
     # Race the browser callback against optional manual paste. The manual
     # task MUST be cancelable (see _read_line_cancelable) — cancelling it
@@ -182,10 +206,12 @@ async def login_antigravity(callbacks: OAuthLoginCallbacks) -> OAuthCredential:
     code, recv_state = await await_oauth_code(code_future, state, server, callbacks)
 
     if not code:
-        raw = await callbacks.on_prompt(OAuthPrompt(
-            message="Paste the authorization code or full redirect URL:",
-            placeholder=REDIRECT_URI,
-        ))
+        raw = await callbacks.on_prompt(
+            OAuthPrompt(
+                message="Paste the authorization code or full redirect URL:",
+                placeholder=REDIRECT_URI,
+            )
+        )
         parsed_code, parsed_state = parse_authorization_input(raw)
         if parsed_state and parsed_state != state:
             raise ValueError("OAuth state mismatch")
@@ -206,7 +232,9 @@ async def login_antigravity(callbacks: OAuthLoginCallbacks) -> OAuthCredential:
     return OAuthCredential(access=access, refresh=refresh, expires=expires_ms)
 
 
-async def refresh_antigravity_token(credential: OAuthCredential, signal: Optional[AbortSignal] = None) -> OAuthCredential:
+async def refresh_antigravity_token(
+    credential: OAuthCredential, signal: AbortSignal | None = None
+) -> OAuthCredential:
     """Exchange a refresh token for a new OAuthCredential; transparent to the streaming loop."""
     data = await asyncio.to_thread(_refresh_token_sync, credential.refresh)
     access, new_refresh, expires_ms = _parse_token_response(data)
@@ -226,7 +254,9 @@ class GoogleAntigravityOAuthProvider(OAuthProvider):
         """Initiate the OAuth login flow through the Google authorization server."""
         return await login_antigravity(callbacks)
 
-    async def refresh_token(self, credential: OAuthCredential, signal: Optional[AbortSignal] = None) -> OAuthCredential:
+    async def refresh_token(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> OAuthCredential:
         """Obtain a new access token using the stored refresh token."""
         return await refresh_antigravity_token(credential, signal=signal)
 
@@ -248,9 +278,12 @@ class GoogleAntigravityOAuthProvider(OAuthProvider):
     def api(self):
         """Return the API class that handles requests with this provider's tokens."""
         from tau.inference.api.text.google_antigravity import GoogleAntigravityAPI
+
         return GoogleAntigravityAPI
 
-    async def validate(self, credential: OAuthCredential, signal: Optional[AbortSignal] = None) -> bool:
+    async def validate(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> bool:
         """Return True if the credential is unexpired and accepted by the API."""
         if self.is_expired(credential):
             return False

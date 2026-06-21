@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tau.agent.types import AgentPhase, AgentContext, AgentConfig, ContextUsage
+from tau.agent.types import AgentConfig, AgentContext, AgentPhase, ContextUsage
 
 
 class TestAgentPhase:
@@ -36,7 +36,7 @@ class TestAgentContext:
         assert ctx.tools[0] is t
 
     def test_messages_stored(self):
-        from tau.message.types import UserMessage, TextContent
+        from tau.message.types import TextContent, UserMessage
         msg = UserMessage(contents=[TextContent(type="text", content="hi")])
         ctx = AgentContext(system_prompt="sp", messages=[msg])
         assert len(ctx.messages) == 1

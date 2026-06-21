@@ -2,27 +2,26 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from tau.agent.prompt.builder import build_prompt
+from tau.agent.prompt.types import PromptOptions
 from tau.agent.service import Agent
 from tau.agent.types import AgentConfig
 from tau.builtins.tools import TOOLS
 from tau.engine.service import Engine, EngineOptions
-from tau.extensions.api import _RuntimeRef, LoadExtensionsResult
+from tau.extensions.api import _RuntimeRef
 from tau.extensions.events import EventBus
 from tau.extensions.loader import ExtensionLoader
 from tau.extensions.runtime import ExtensionRuntime
 from tau.hooks.service import Hooks
 from tau.inference.api.text.service import TextLLM as LLM
-from tau.agent.prompt.builder import build_prompt
-from tau.agent.prompt.types import PromptOptions
 from tau.session.manager import SessionManager
 from tau.settings.manager import SettingsManager
 from tau.settings.paths import get_config_dir, get_extensions_dir
-from tau.tool.types import Tool
 from tau.tool.registry import ToolRegistry
+from tau.tool.types import Tool
 
 
 def _is_project_package(settings_manager: SettingsManager, name: str) -> bool:
@@ -33,7 +32,8 @@ def _is_project_package(settings_manager: SettingsManager, name: str) -> bool:
 
 class RuntimeConfig(BaseModel):
     """Immutable configuration snapshot passed to RuntimeContext.create()."""
-    model_config = {'arbitrary_types_allowed': True}
+
+    model_config = {"arbitrary_types_allowed": True}
 
     cwd: Path
     config_dir: Path | None = None
@@ -102,23 +102,21 @@ class RuntimeContext:
         config_dir = (config.config_dir or get_config_dir()).resolve()
 
         # Determine project trust status (needed for context file loading)
-        project_trusted: bool
-        if config.project_trusted is not None:
-            project_trusted = config.project_trusted
-        else:
-            # Will be determined below based on trust settings
-            project_trusted = False
+        project_trusted: bool = config.project_trusted if config.project_trusted is not None else False
 
         # ── Settings ──────────────────────────────────────────────────────────
         if settings_manager is None:
             from tau.trust.manager import has_project_trust_inputs, trust_store
+
             if not has_project_trust_inputs(cwd):
                 project_trusted = True
             elif config.project_trusted is not None:
                 project_trusted = config.project_trusted
             else:
                 # Load global settings first to read project_trust policy
-                _global_sm = SettingsManager.create(cwd, config_dir=config_dir, project_trusted=False)
+                _global_sm = SettingsManager.create(
+                    cwd, config_dir=config_dir, project_trusted=False
+                )
                 policy = _global_sm.get_project_trust()
                 if policy == "always":
                     project_trusted = True
@@ -127,7 +125,9 @@ class RuntimeContext:
                 else:
                     stored = trust_store.get(cwd)
                     project_trusted = stored if stored is not None else False
-            settings_manager = SettingsManager.create(cwd, config_dir=config_dir, project_trusted=project_trusted)
+            settings_manager = SettingsManager.create(
+                cwd, config_dir=config_dir, project_trusted=project_trusted
+            )
 
         # ── LLM ───────────────────────────────────────────────────────────────
         _DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -138,14 +138,19 @@ class RuntimeContext:
             provider = config.provider or settings_manager.get_provider()
         llm = LLM(model_id=model_id, provider=provider)
         from datetime import timedelta
-        llm.api.options.timeout = timedelta(milliseconds=settings_manager.get_http_idle_timeout_ms())
+
+        llm.api.options.timeout = timedelta(
+            milliseconds=settings_manager.get_http_idle_timeout_ms()
+        )
         if settings_manager.is_retry_enabled():
             llm.api.options.max_retries = settings_manager.get_retry_max_retries()
             llm.api.options.retry_base_delay_ms = settings_manager.get_retry_base_delay_ms()
         else:
             llm.api.options.max_retries = 0
         if llm.model.thinking:
-            llm.api.options.thinking_level = settings_manager.get_thinking_level() or llm.model.thinking_level
+            llm.api.options.thinking_level = (
+                settings_manager.get_thinking_level() or llm.model.thinking_level
+            )
 
         # ── Session manager ───────────────────────────────────────────────────
         if config.resume and not config.session_file and config.persist_session:
@@ -165,8 +170,9 @@ class RuntimeContext:
         base_tools: list[Tool] = list(TOOLS) + list(config.tools)
 
         if ext_runtime is None:
-            from tau.settings.paths import get_builtins_dir
             from tau.hooks.runtime import RuntimeStartEvent
+            from tau.settings.paths import get_builtins_dir
+
             builtins_ext_dir = get_builtins_dir() / "extensions"
             runtime_ref = _RuntimeRef()
 
@@ -181,8 +187,7 @@ class RuntimeContext:
                 entries = settings_manager.get_extension_list()
                 disabled_stems = {Path(e.path).stem for e in entries if not e.enabled}
                 entry_configs = {
-                    Path(e.path).stem: (e.settings or {})
-                    for e in entries if e.enabled
+                    Path(e.path).stem: (e.settings or {}) for e in entries if e.enabled
                 }
                 extra_entries = [e for e in entries if e.enabled]
                 extra_sources: dict[str, str] = {}
@@ -191,6 +196,7 @@ class RuntimeContext:
                 from tau.packages.manager import PackageManager
                 from tau.settings.paths import get_packages_venv
                 from tau.settings.types import ExtensionEntry as _ExtEntry
+
                 pkg_entries = settings_manager.get_all_packages()
                 if pkg_entries:
                     for _scope_local in (False, True):
@@ -262,18 +268,21 @@ class RuntimeContext:
 
         # ── Skills ────────────────────────────────────────────────────────────
         from tau.skills.registry import skill_registry
+
         skill_registry.load_external(cwd=cwd)
         skills = skill_registry.list()
 
         # ── System prompt ─────────────────────────────────────────────────────
-        system_prompt = config.system_prompt or build_prompt(PromptOptions(
-            cwd=cwd,
-            tools=all_tools,
-            extra_appends=extra_appends,
-            skills=skills,
-            disable_context_files=config.disable_context_files,
-            project_trusted=project_trusted,
-        ))
+        system_prompt = config.system_prompt or build_prompt(
+            PromptOptions(
+                cwd=cwd,
+                tools=all_tools,
+                extra_appends=extra_appends,
+                skills=skills,
+                disable_context_files=config.disable_context_files,
+                project_trusted=project_trusted,
+            )
+        )
 
         # ── Agent config ──────────────────────────────────────────────────────
         agent_config = AgentConfig(

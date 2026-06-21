@@ -1,25 +1,39 @@
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
-
 
 # ── Key event ─────────────────────────────────────────────────────────────────
 
 # Modifier name aliases → canonical name. Matching is order- and alias-independent,
 # so "ctrl+shift+p", "shift+ctrl+p", and "control+shift+p" are all equivalent.
 _MOD_ALIASES = {
-    "ctrl": "ctrl", "control": "ctrl",
-    "alt": "alt", "opt": "alt", "option": "alt",
+    "ctrl": "ctrl",
+    "control": "ctrl",
+    "alt": "alt",
+    "opt": "alt",
+    "option": "alt",
     "shift": "shift",
-    "super": "meta", "cmd": "meta", "command": "meta", "win": "meta", "meta": "meta",
+    "super": "meta",
+    "cmd": "meta",
+    "command": "meta",
+    "win": "meta",
+    "meta": "meta",
 }
 
 # Base-key name aliases → canonical name.
 _KEY_ALIASES = {
-    "esc": "escape", "return": "enter", "del": "delete",
-    "spacebar": "space", " ": "space",
-    "pgup": "pageup", "pgdn": "pagedown", "pagedown": "pagedown", "pageup": "pageup",
-    "page_up": "pageup", "page_down": "pagedown",   # parser emits the underscore form
+    "esc": "escape",
+    "return": "enter",
+    "del": "delete",
+    "spacebar": "space",
+    " ": "space",
+    "pgup": "pageup",
+    "pgdn": "pagedown",
+    "pagedown": "pagedown",
+    "pageup": "pageup",
+    "page_up": "pageup",
+    "page_down": "pagedown",  # parser emits the underscore form
 }
 
 
@@ -43,15 +57,16 @@ def _normalize_keyid(key_id: str) -> tuple[frozenset[str], str]:
 @dataclass
 class KeyEvent:
     """A single parsed keyboard event."""
-    key: str                 # canonical name: "a", "enter", "up", "f1", etc.
+
+    key: str  # canonical name: "a", "enter", "up", "f1", etc.
     char: str | None = None  # printable character if the key produces one
     ctrl: bool = False
     alt: bool = False
     shift: bool = False
-    meta: bool = False       # super / cmd / win (Kitty keyboard protocol)
-    released: bool = False   # True on key-up (Kitty keyboard protocol only)
-    repeat: bool = False     # True on auto-repeat (Kitty keyboard protocol only)
-    raw: str = ""       # original bytes received from stdin
+    meta: bool = False  # super / cmd / win (Kitty keyboard protocol)
+    released: bool = False  # True on key-up (Kitty keyboard protocol only)
+    repeat: bool = False  # True on auto-repeat (Kitty keyboard protocol only)
+    raw: str = ""  # original bytes received from stdin
 
     def __str__(self) -> str:
         parts = []
@@ -68,10 +83,14 @@ class KeyEvent:
 
     def _signature(self) -> tuple[frozenset[str], str]:
         mods = {
-            name for name, on in (
-                ("ctrl", self.ctrl), ("alt", self.alt),
-                ("shift", self.shift), ("meta", self.meta),
-            ) if on
+            name
+            for name, on in (
+                ("ctrl", self.ctrl),
+                ("alt", self.alt),
+                ("shift", self.shift),
+                ("meta", self.meta),
+            )
+            if on
         }
         base = _KEY_ALIASES.get(self.key.lower(), self.key.lower())
         return frozenset(mods), base
@@ -87,7 +106,7 @@ class KeyEvent:
         return any(_normalize_keyid(k) == sig for k in keys)
 
 
-def matches_key(event: "KeyEvent", *keys: str) -> bool:
+def matches_key(event: KeyEvent, *keys: str) -> bool:
     """Module-level convenience mirroring :meth:`KeyEvent.matches`."""
     return isinstance(event, KeyEvent) and event.matches(*keys)
 
@@ -104,13 +123,35 @@ class Key:
 
     Identifiers are plain strings, so they interoperate with literal combos.
     """
+
     # Special keys
-    ESCAPE = "escape"; ENTER = "enter"; TAB = "tab"; SPACE = "space"
-    BACKSPACE = "backspace"; DELETE = "delete"; INSERT = "insert"
-    HOME = "home"; END = "end"; PAGE_UP = "pageup"; PAGE_DOWN = "pagedown"
-    UP = "up"; DOWN = "down"; LEFT = "left"; RIGHT = "right"
-    F1 = "f1"; F2 = "f2"; F3 = "f3"; F4 = "f4"; F5 = "f5"; F6 = "f6"
-    F7 = "f7"; F8 = "f8"; F9 = "f9"; F10 = "f10"; F11 = "f11"; F12 = "f12"
+    ESCAPE = "escape"
+    ENTER = "enter"
+    TAB = "tab"
+    SPACE = "space"
+    BACKSPACE = "backspace"
+    DELETE = "delete"
+    INSERT = "insert"
+    HOME = "home"
+    END = "end"
+    PAGE_UP = "pageup"
+    PAGE_DOWN = "pagedown"
+    UP = "up"
+    DOWN = "down"
+    LEFT = "left"
+    RIGHT = "right"
+    F1 = "f1"
+    F2 = "f2"
+    F3 = "f3"
+    F4 = "f4"
+    F5 = "f5"
+    F6 = "f6"
+    F7 = "f7"
+    F8 = "f8"
+    F9 = "f9"
+    F10 = "f10"
+    F11 = "f11"
+    F12 = "f12"
 
     @staticmethod
     def ctrl(key: str) -> str:
@@ -148,6 +189,7 @@ class Key:
 @dataclass
 class PasteEvent:
     """Bracketed paste — text pasted into the terminal."""
+
     text: str
     raw: str = ""
 
@@ -155,6 +197,7 @@ class PasteEvent:
 @dataclass
 class MouseEvent:
     """Mouse button press or release."""
+
     x: int
     y: int
     button: int
@@ -169,6 +212,7 @@ class BgColorEvent:
     Emitted when the terminal replies to an ``\\x1b]11;?\\x1b\\\\`` query.
     Each channel is normalised to 0–255.
     """
+
     r: int
     g: int
     b: int
@@ -192,7 +236,7 @@ _CSI_SIMPLE: dict[str, str] = {
     "D": "left",
     "H": "home",
     "F": "end",
-    "Z": "tab",     # shift+tab (also sets shift below)
+    "Z": "tab",  # shift+tab (also sets shift below)
     "P": "f1",
     "Q": "f2",
     "R": "f3",
@@ -201,14 +245,14 @@ _CSI_SIMPLE: dict[str, str] = {
 
 # CSI tilde number → key name
 _CSI_TILDE: dict[int, str] = {
-    1:  "home",
-    2:  "insert",
-    3:  "delete",
-    4:  "end",
-    5:  "page_up",
-    6:  "page_down",
-    7:  "home",
-    8:  "end",
+    1: "home",
+    2: "insert",
+    3: "delete",
+    4: "end",
+    5: "page_up",
+    6: "page_down",
+    7: "home",
+    8: "end",
     11: "f1",
     12: "f2",
     13: "f3",
@@ -241,13 +285,34 @@ _SS3: dict[str, str] = {
 # Kitty keypad / functional keys (Unicode private-use codes) → standard equivalents.
 # int → an ASCII codepoint that continues normal char dispatch; str → a key name.
 _KITTY_KP_EQUIV: dict[int, int | str] = {
-    57399: 48, 57400: 49, 57401: 50, 57402: 51, 57403: 52,   # KP 0-4
-    57404: 53, 57405: 54, 57406: 55, 57407: 56, 57408: 57,   # KP 5-9
-    57409: 46, 57410: 47, 57411: 42, 57412: 45, 57413: 43,   # . / * - +
-    57414: 13, 57415: 61, 57416: 44,                          # KP Enter, =, ,
-    57417: "left", 57418: "right", 57419: "up", 57420: "down",
-    57421: "page_up", 57422: "page_down", 57423: "home", 57424: "end",
-    57425: "insert", 57426: "delete",
+    57399: 48,
+    57400: 49,
+    57401: 50,
+    57402: 51,
+    57403: 52,  # KP 0-4
+    57404: 53,
+    57405: 54,
+    57406: 55,
+    57407: 56,
+    57408: 57,  # KP 5-9
+    57409: 46,
+    57410: 47,
+    57411: 42,
+    57412: 45,
+    57413: 43,  # . / * - +
+    57414: 13,
+    57415: 61,
+    57416: 44,  # KP Enter, =, ,
+    57417: "left",
+    57418: "right",
+    57419: "up",
+    57420: "down",
+    57421: "page_up",
+    57422: "page_down",
+    57423: "home",
+    57424: "end",
+    57425: "insert",
+    57426: "delete",
 }
 
 
@@ -261,42 +326,43 @@ def _decode_modifier(mod: int) -> tuple[bool, bool, bool, bool]:
 
 # Control characters → key names
 _CTRL_CHARS: dict[str, tuple[str, bool]] = {
-    "\x00": ("space", True),    # ctrl+space / ctrl+@
-    "\x01": ("a",     True),
-    "\x02": ("b",     True),
-    "\x03": ("c",     True),
-    "\x04": ("d",     True),
-    "\x05": ("e",     True),
-    "\x06": ("f",     True),
-    "\x07": ("g",     True),
+    "\x00": ("space", True),  # ctrl+space / ctrl+@
+    "\x01": ("a", True),
+    "\x02": ("b", True),
+    "\x03": ("c", True),
+    "\x04": ("d", True),
+    "\x05": ("e", True),
+    "\x06": ("f", True),
+    "\x07": ("g", True),
     "\x08": ("backspace", False),  # ctrl+h / backspace on some terminals
-    "\x09": ("tab",   False),
+    "\x09": ("tab", False),
     "\x0a": ("enter", False),
-    "\x0b": ("k",     True),
-    "\x0c": ("l",     True),
+    "\x0b": ("k", True),
+    "\x0c": ("l", True),
     "\x0d": ("enter", False),
-    "\x0e": ("n",     True),
-    "\x0f": ("o",     True),
-    "\x10": ("p",     True),
-    "\x11": ("q",     True),
-    "\x12": ("r",     True),
-    "\x13": ("s",     True),
-    "\x14": ("t",     True),
-    "\x15": ("u",     True),
-    "\x16": ("v",     True),
-    "\x17": ("w",     True),
-    "\x18": ("x",     True),
-    "\x19": ("y",     True),
-    "\x1a": ("z",     True),
-    "\x1c": ("\\",    True),
-    "\x1d": ("]",     True),
-    "\x1e": ("6",     True),
-    "\x1f": ("-",     True),
+    "\x0e": ("n", True),
+    "\x0f": ("o", True),
+    "\x10": ("p", True),
+    "\x11": ("q", True),
+    "\x12": ("r", True),
+    "\x13": ("s", True),
+    "\x14": ("t", True),
+    "\x15": ("u", True),
+    "\x16": ("v", True),
+    "\x17": ("w", True),
+    "\x18": ("x", True),
+    "\x19": ("y", True),
+    "\x1a": ("z", True),
+    "\x1c": ("\\", True),
+    "\x1d": ("]", True),
+    "\x1e": ("6", True),
+    "\x1f": ("-", True),
     "\x7f": ("backspace", False),
 }
 
 
 # ── Sequence completeness ─────────────────────────────────────────────────────
+
 
 def _is_complete(buf: str) -> bool | None:
     """
@@ -358,6 +424,7 @@ def _is_complete(buf: str) -> bool | None:
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
+
 
 class InputParser:
     """
@@ -456,7 +523,7 @@ class InputParser:
             if body.startswith("11;rgb:"):
                 try:
                     parts = body[7:].split("/")
-                    r = int(parts[0], 16) >> 8   # 16-bit → 8-bit
+                    r = int(parts[0], 16) >> 8  # 16-bit → 8-bit
                     g = int(parts[1], 16) >> 8
                     b = int(parts[2], 16) >> 8
                     return BgColorEvent(r=r, g=g, b=b)
@@ -489,7 +556,7 @@ class InputParser:
             y = max(1, ord(raw[5]) - 32)
             button = b & 0x03
             if b & 0x40:
-                button += 64   # scroll wheel
+                button += 64  # scroll wheel
             return MouseEvent(x=x, y=y, button=button, pressed=True, raw=raw)
 
         # ── Kitty protocol: ESC [ <cp> ; <mods> u ────────────────────────────
@@ -519,7 +586,9 @@ class InputParser:
             shift, alt, ctrl, meta = _decode_modifier(mod)
             name = _CSI_SIMPLE.get(final)
             if name:
-                return KeyEvent(key=name, char=None, shift=shift, alt=alt, ctrl=ctrl, meta=meta, raw=raw)
+                return KeyEvent(
+                    key=name, char=None, shift=shift, alt=alt, ctrl=ctrl, meta=meta, raw=raw
+                )
 
         # ESC [ <n> ~ — tilde sequences
         if final == "~" and len(parts) == 1:
@@ -540,7 +609,9 @@ class InputParser:
             name = _CSI_TILDE.get(n)
             if name:
                 shift, alt, ctrl, meta = _decode_modifier(mod)
-                return KeyEvent(key=name, char=None, shift=shift, alt=alt, ctrl=ctrl, meta=meta, raw=raw)
+                return KeyEvent(
+                    key=name, char=None, shift=shift, alt=alt, ctrl=ctrl, meta=meta, raw=raw
+                )
 
         return None
 
@@ -562,14 +633,14 @@ class InputParser:
         if len(parts) >= 2 and parts[1]:
             # The event type is appended to the modifier field after a colon.
             mod_field = parts[1].split(":")
-            try:
+            with contextlib.suppress(ValueError, IndexError):
                 shift, alt, ctrl, meta = _decode_modifier(int(mod_field[0]))
-            except (ValueError, IndexError):
-                pass
-            event_str = mod_field[1] if len(mod_field) >= 2 else (parts[2] if len(parts) >= 3 else "")
+            event_str = (
+                mod_field[1] if len(mod_field) >= 2 else (parts[2] if len(parts) >= 3 else "")
+            )
             if event_str:
                 try:
-                    et = int(event_str)     # 1 = press, 2 = repeat, 3 = release
+                    et = int(event_str)  # 1 = press, 2 = repeat, 3 = release
                     released = et == 3
                     repeat = et == 2
                 except ValueError:
@@ -578,8 +649,17 @@ class InputParser:
         # Normalize keypad / functional keys to their standard equivalents.
         kp = _KITTY_KP_EQUIV.get(codepoint)
         if isinstance(kp, str):
-            return KeyEvent(key=kp, char=None, shift=shift, alt=alt, ctrl=ctrl,
-                            meta=meta, released=released, repeat=repeat, raw=raw)
+            return KeyEvent(
+                key=kp,
+                char=None,
+                shift=shift,
+                alt=alt,
+                ctrl=ctrl,
+                meta=meta,
+                released=released,
+                repeat=repeat,
+                raw=raw,
+            )
         if isinstance(kp, int):
             codepoint = kp
 
@@ -591,10 +671,10 @@ class InputParser:
 
         # Special codepoints
         _kitty_special: dict[int, str] = {
-            27:   "escape",
-            13:   "enter",
-            9:    "tab",
-            127:  "backspace",
+            27: "escape",
+            13: "enter",
+            9: "tab",
+            127: "backspace",
             57358: "caps_lock",
             57359: "scroll_lock",
             57360: "num_lock",
@@ -606,23 +686,62 @@ class InputParser:
         }
         # Arrow / navigation codepoints (Kitty uses Unicode private area)
         _kitty_nav: dict[int, str] = {
-            57352: "up",    57353: "down",  57354: "right", 57355: "left",
-            57356: "end",   57357: "home",  57358: "page_up", 57359: "page_down",
-            57399: "kp0",   57400: "kp1",   57401: "kp2",   57402: "kp3",
+            57352: "up",
+            57353: "down",
+            57354: "right",
+            57355: "left",
+            57356: "end",
+            57357: "home",
+            57358: "page_up",
+            57359: "page_down",
+            57399: "kp0",
+            57400: "kp1",
+            57401: "kp2",
+            57402: "kp3",
         }
 
         if codepoint in _kitty_special:
             key = _kitty_special[codepoint]
-            return KeyEvent(key=key, char=None, shift=shift, alt=alt, ctrl=ctrl, meta=meta, released=released, repeat=repeat, raw=raw)
+            return KeyEvent(
+                key=key,
+                char=None,
+                shift=shift,
+                alt=alt,
+                ctrl=ctrl,
+                meta=meta,
+                released=released,
+                repeat=repeat,
+                raw=raw,
+            )
 
         if codepoint in _kitty_nav:
             key = _kitty_nav[codepoint]
-            return KeyEvent(key=key, char=None, shift=shift, alt=alt, ctrl=ctrl, meta=meta, released=released, repeat=repeat, raw=raw)
+            return KeyEvent(
+                key=key,
+                char=None,
+                shift=shift,
+                alt=alt,
+                ctrl=ctrl,
+                meta=meta,
+                released=released,
+                repeat=repeat,
+                raw=raw,
+            )
 
         # Regular character
         key = ch.lower()
         char = ch if ch.isprintable() else None
-        return KeyEvent(key=key, char=char, shift=shift, alt=alt, ctrl=ctrl, meta=meta, released=released, repeat=repeat, raw=raw)
+        return KeyEvent(
+            key=key,
+            char=char,
+            shift=shift,
+            alt=alt,
+            ctrl=ctrl,
+            meta=meta,
+            released=released,
+            repeat=repeat,
+            raw=raw,
+        )
 
     def _parse_mouse(self, raw: str, params: str, final: str) -> MouseEvent | None:
         # SGR mouse: ESC [ < button ; col ; row M/m

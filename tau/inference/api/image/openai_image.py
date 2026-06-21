@@ -87,8 +87,10 @@ class OpenAIImageAPI(BaseImageAPI):
 
             except asyncio.CancelledError:
                 return GeneratedImage(
-                    model_id=model.id, provider=model.provider,
-                    output=[], stop_reason=ImageStopReason.Abort,
+                    model_id=model.id,
+                    provider=model.provider,
+                    output=[],
+                    stop_reason=ImageStopReason.Abort,
                     error="Cancelled",
                 )
             except Exception as exc:
@@ -97,7 +99,9 @@ class OpenAIImageAPI(BaseImageAPI):
                     continue
 
         return GeneratedImage(
-            model_id=model.id, provider=model.provider,
-            output=[], stop_reason=ImageStopReason.Error,
+            model_id=model.id,
+            provider=model.provider,
+            output=[],
+            stop_reason=ImageStopReason.Error,
             error=str(last_error or "Failed after retries"),
         )

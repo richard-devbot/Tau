@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import base64
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from tau.tui.component import Component
 
@@ -30,7 +30,9 @@ def _get_image_dimensions(data: bytes, mime_type: str) -> ImageDimensions | None
     """Try to get image dimensions using Pillow."""
     try:
         import io
+
         from PIL import Image as PILImage
+
         img = PILImage.open(io.BytesIO(data))
         return ImageDimensions(width_px=img.width, height_px=img.height)
     except Exception:
@@ -70,7 +72,7 @@ def _encode_kitty(b64: str, cols: int, rows: int, image_id: int | None) -> str:
     offset = 0
     first = True
     while offset < len(b64):
-        chunk = b64[offset:offset + CHUNK]
+        chunk = b64[offset : offset + CHUNK]
         is_last = offset + CHUNK >= len(b64)
         if first:
             chunks.append(f"\x1b_G{param_str},m=1;{chunk}\x1b\\")
@@ -84,7 +86,7 @@ def _encode_kitty(b64: str, cols: int, rows: int, image_id: int | None) -> str:
 
 
 def _encode_iterm2(b64: str, cols: int, filename: str | None) -> str:
-    parts = [f"inline=1", f"width={cols}", "height=auto", "preserveAspectRatio=1"]
+    parts = ["inline=1", f"width={cols}", "height=auto", "preserveAspectRatio=1"]
     if filename:
         name_b64 = base64.b64encode(filename.encode()).decode()
         parts.append(f"name={name_b64}")
@@ -119,7 +121,9 @@ class Image(Component):
         self._mime = mime_type
         self._fallback_color = fallback_color or (lambda s: s)
         self._opts = options or ImageOptions()
-        self._dims = dimensions or _get_image_dimensions(self._raw, mime_type) or ImageDimensions(800, 600)
+        self._dims = (
+            dimensions or _get_image_dimensions(self._raw, mime_type) or ImageDimensions(800, 600)
+        )
         self._image_id: int | None = self._opts.image_id
         self._cache: list[str] | None = None
         self._cache_width: int = 0
@@ -155,6 +159,7 @@ class Image(Component):
             if self._mime != "image/png":
                 try:
                     from tau.utils.image_processing import convert_to_png
+
                     b64 = base64.b64encode(convert_to_png(self._raw)).decode()
                 except Exception:
                     pass

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses as dc
 from dataclasses import fields
-from typing import Any, Dict, Generic, Optional, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -15,7 +15,7 @@ class ExtensionSettingsError(Exception):
     pass
 
 
-class ExtensionSettings(Generic[T]):
+class ExtensionSettings[T]:
     """
     Typed wrapper for extension-specific settings.
 
@@ -40,7 +40,7 @@ class ExtensionSettings(Generic[T]):
             retry_enabled = config.get_nested("retry.enabled", True)
     """
 
-    def __init__(self, schema: type[T], raw_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, schema: type[T], raw_config: dict[str, Any] | None = None):
         """
         Initialize with a dataclass schema and raw configuration dict.
 
@@ -75,10 +75,7 @@ class ExtensionSettings(Generic[T]):
                     value = None
             else:
                 # If field expects a nested dataclass, recursively deserialize
-                if (
-                    dc.is_dataclass(field.type)
-                    and isinstance(value, dict)
-                ):
+                if dc.is_dataclass(field.type) and isinstance(value, dict):
                     nested_settings = ExtensionSettings(field.type, value)  # type: ignore[arg-type]
                     value = nested_settings._instance
 
@@ -114,7 +111,7 @@ class ExtensionSettings(Generic[T]):
 
         return obj if obj is not None else default
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the typed instance back to a dict (useful for serialization)."""
         return self._to_dict_recursive(self._instance)
 

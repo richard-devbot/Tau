@@ -14,6 +14,7 @@ async def cmd_compact(reg: CommandRegistry, args: list[str]) -> None:
     sm = reg.runtime.settings_manager
     if sm is not None and not sm.is_compaction_enabled():
         from tau.extensions.context import ExtensionContext
+
         ctx = ExtensionContext.from_runtime(reg.runtime)
         if ctx.ui is not None:
             ctx.ui.notify("Compaction is disabled. Enable it in /settings → Compaction.")
@@ -23,6 +24,7 @@ async def cmd_compact(reg: CommandRegistry, args: list[str]) -> None:
     did_compact = await reg.runtime.agent.compact(custom_instructions=custom_instructions)
     if not did_compact:
         from tau.extensions.context import ExtensionContext
+
         ctx = ExtensionContext.from_runtime(reg.runtime)
         if ctx.ui is not None:
             ctx.ui.notify("Nothing to compact — conversation is too short to summarize.")

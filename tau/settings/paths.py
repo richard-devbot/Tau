@@ -16,6 +16,7 @@ Project paths: .tau/
   - settings.json: project-specific overrides
   - extensions/: project-local extensions
 """
+
 from pathlib import Path
 
 APP_NAME = "Tau"
@@ -26,6 +27,7 @@ CONFIG_DIR_PATH = Path.home() / CONFIG_DIR_NAME
 
 
 # ── Centralized app name helper ────────────────────────────────────────────────
+
 
 def get_app_name() -> str:
     """Return the application name."""
@@ -41,6 +43,7 @@ def get_app_version() -> str:
     """Return the installed package version, falling back to '0.1.0'."""
     try:
         from importlib.metadata import version
+
         return version(get_package_name())
     except Exception:
         return "0.1.0"
@@ -53,6 +56,7 @@ def get_config_dir(cwd: Path | None = None) -> Path:
 
 
 # ── User-facing files ────────────────────────────────────────────────────────
+
 
 def get_settings_path(cwd: Path | None = None) -> Path:
     return get_config_dir(cwd) / "settings.json"
@@ -72,13 +76,14 @@ def get_append_system_prompt_path(cwd: Path | None = None) -> Path:
 
 # ── Runtime dirs (all flat under .tau/) ───────────────────────────────────────
 
+
 def get_sessions_dir() -> Path:
     return CONFIG_DIR_PATH / "sessions"
 
 
 def get_logs_dir(cwd: Path | None = None) -> Path:
     "Path to a per-run logs directory, named by the run/session id."
-    return get_config_dir(cwd) / "logs" 
+    return get_config_dir(cwd) / "logs"
 
 
 def get_themes_dir(cwd: Path | None = None) -> Path:
@@ -128,6 +133,7 @@ def get_docs_dir() -> Path:
     """
     try:
         from importlib.resources import files
+
         docs_ref = files("tau").joinpath("docs")
         return Path(str(docs_ref))
     except (TypeError, ModuleNotFoundError, AttributeError):
@@ -142,9 +148,9 @@ def get_readme_path() -> Path:
     """
     try:
         from importlib.resources import files
+
         readme_ref = files("tau").joinpath("README.md")
         return Path(str(readme_ref))
     except (TypeError, ModuleNotFoundError, AttributeError):
         package_root = Path(__file__).parent.parent.parent
         return package_root / "README.md"
-

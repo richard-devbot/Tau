@@ -7,13 +7,14 @@ from tau.inference.types import (
     AudioOptions,
     STTContext,
     SynthesizedAudio,
-    TTSContext,
     TranscribedAudio,
+    TTSContext,
 )
 
 
 class BaseAudioAPI(ABC):
     """Abstract base class for audio API implementations."""
+
     def __init__(self, options: AudioOptions) -> None:
         self.options = options
 
@@ -26,4 +27,3 @@ class BaseAudioAPI(ABC):
     async def transcribe(self, model: Model, context: STTContext) -> TranscribedAudio:
         """Convert speech to text."""
         raise NotImplementedError
-

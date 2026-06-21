@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 
-class SourceType(str, Enum):
+class SourceType(StrEnum):
     PYPI = "pypi"
     GIT = "git"
     LOCAL = "local"
@@ -16,5 +15,5 @@ class ParsedSource:
     source: SourceType
     raw: str
     name: str
-    version: Optional[str] = None
-    install_spec: Optional[str] = None  # argument passed to pip install
+    version: str | None = None
+    install_spec: str | None = None  # argument passed to pip install

@@ -1,9 +1,9 @@
 """Tests for tau/settings/manager.py — in-memory settings manager."""
 from __future__ import annotations
 
-from tau.settings.manager import SettingsManager
+from tau.engine.types import FollowupMode, SteeringMode
 from tau.inference.types import ThinkingLevel, Transport
-from tau.engine.types import SteeringMode, FollowupMode
+from tau.settings.manager import SettingsManager
 
 
 def _manager(data: dict | None = None) -> SettingsManager:

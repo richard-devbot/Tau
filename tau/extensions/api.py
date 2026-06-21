@@ -1,23 +1,22 @@
 from __future__ import annotations
 
-import inspect
+import contextlib
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from tau.extensions.events import EventBus
-from tau.extensions.settings import ExtensionSettings, ExtensionSettingsError
 
 if TYPE_CHECKING:
-    from tau.commands.types import CommandInfo
-    from tau.hooks.service import Hooks
     from tau.inference.api.text.service import TextLLM
     from tau.settings.manager import SettingsManager
     from tau.tool.types import Tool
 
 
 # ── Shared runtime reference ───────────────────────────────────────────────────
+
 
 class _RuntimeRef:
     """Mutable holder filled by Runtime.__init__() after context creation.
@@ -29,6 +28,7 @@ class _RuntimeRef:
     extension can publish a service object via ``tau.provide(name, obj)`` and
     another can resolve it via ``tau.get_service(name)``.
     """
+
     __slots__ = ("runtime", "services")
 
     def __init__(self) -> None:
@@ -38,9 +38,11 @@ class _RuntimeRef:
 
 # ── Per-extension state ────────────────────────────────────────────────────────
 
+
 @dataclass
 class ExtensionError:
     """Records a non-fatal error that occurred while loading or dispatching an extension."""
+
     extension_path: str
     event: str
     error: str
@@ -50,16 +52,18 @@ class ExtensionError:
 @dataclass
 class ExtensionSettingsRegistration:
     """Settings items an extension wants to expose in the /settings panel."""
+
     title: str
     items: list[Any]  # list[SettingItem] — imported lazily to avoid circular deps
     on_change: Callable[[str, str], None]
-    summary: str = ""       # value shown on the parent row (e.g. "on"/"off"); "" → "→"
-    summary_key: str = ""   # full key whose change should refresh ``summary``
+    summary: str = ""  # value shown on the parent row (e.g. "on"/"off"); "" → "→"
+    summary_key: str = ""  # full key whose change should refresh ``summary``
 
 
 @dataclass
 class Extension:
     """All state accumulated for a single loaded extension module."""
+
     path: str
     config: dict = field(default_factory=dict)
     source: str = "unknown"  # "builtin" | "project" | "global" | "package" | "explicit" | "unknown"
@@ -69,22 +73,27 @@ class Extension:
     shortcuts: list[ShortcutRegistration] = field(default_factory=list)
     prompt_appends: list[str] = field(default_factory=list)
     message_renderers: dict[str, Callable] = field(default_factory=dict)
-    autocomplete_providers: list[Any] = field(default_factory=list)  # list[AutocompleteRegistration]
+    autocomplete_providers: list[Any] = field(
+        default_factory=list
+    )  # list[AutocompleteRegistration]
     settings_registrations: list[ExtensionSettingsRegistration] = field(default_factory=list)
 
 
 @dataclass
 class LoadExtensionsResult:
     """Aggregated outcome of loading a batch of extension files."""
+
     extensions: list[Extension] = field(default_factory=list)
     errors: list[ExtensionError] = field(default_factory=list)
 
 
 # ── Deferred registration types ───────────────────────────────────────────────
 
+
 @dataclass
 class ShortcutRegistration:
     """A keyboard shortcut registered by an extension."""
+
     key: str
     description: str | None
     handler: Callable[[Any], Awaitable[None] | None]
@@ -93,6 +102,7 @@ class ShortcutRegistration:
 @dataclass
 class FlagRegistration:
     """A CLI/env flag declared by an extension."""
+
     name: str
     type: Literal["bool", "str", "int"]
     default: bool | str | int | None
@@ -102,9 +112,11 @@ class FlagRegistration:
 
 # ── Exec result ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class ExecResult:
     """Result from tau.exec()."""
+
     stdout: str
     stderr: str
     code: int | None
@@ -112,25 +124,27 @@ class ExecResult:
 
 # ── Provider helpers ──────────────────────────────────────────────────────────
 
+
 def _resolve_api_key(value: str) -> str:
     """Resolve an api_key value: literal, $ENV_VAR, or !shell-command."""
     from tau.utils.secrets import resolve_secret
+
     return resolve_secret(value)
 
 
 def _parse_modalities(values: list[str]) -> list:
     """Convert a list of modality strings to Modality enum values, ignoring unknowns."""
     from tau.inference.model.types import Modality
+
     result = []
     for v in values:
-        try:
+        with contextlib.suppress(ValueError):
             result.append(Modality(v.lower()))
-        except ValueError:
-            pass
     return result
 
 
 # ── ExtensionAPI ──────────────────────────────────────────────────────────────
+
 
 class ExtensionAPI:
     """
@@ -335,6 +349,7 @@ class ExtensionAPI:
 
         def _call(registry: Any, args: list[str]) -> Awaitable[None] | None:
             from tau.extensions.context import ExtensionContext
+
             runtime = runtime_ref.runtime if runtime_ref is not None else None
             if runtime is None:
                 return None
@@ -419,6 +434,7 @@ class ExtensionAPI:
         if len(trigger) != 1:
             raise ValueError(f"trigger must be a single character, got {trigger!r}")
         from tau.tui.autocomplete import AutocompleteRegistration
+
         reg = AutocompleteRegistration(
             trigger=trigger,
             get_items=get_items,
@@ -469,9 +485,9 @@ class ExtensionAPI:
             })
         """
         from tau.inference.api.text.service import TextLLM
+        from tau.inference.model.types import Cost, Model
         from tau.inference.provider.types import APIProvider
         from tau.inference.types import LLMOptions
-        from tau.inference.model.types import Model, Cost, Modality
 
         name = config.get("name") or provider_id
         api = config.get("api", "openai_completions")
@@ -490,27 +506,29 @@ class ExtensionAPI:
         )
         TextLLM._builtin_providers().register(provider)
 
-        from tau.inference.model.types import Model, Cost, Modality
+
         models = TextLLM._builtin_models()
         for m in config.get("models", []):
             model_id = m.get("id")
             if not model_id:
                 continue
-            models.register(Model(
-                id=model_id,
-                name=m.get("name", model_id),
-                provider=m.get("provider", provider_id),
-                context_window=m.get("context_window", 0),
-                max_input_tokens=m.get("max_input_tokens"),
-                max_output_tokens=m.get("max_output_tokens", m.get("max_tokens", 16384)),
-                cost=Cost(
-                    input=m.get("input_price", 0.0),
-                    output=m.get("output_price", 0.0),
-                ),
-                input=_parse_modalities(m.get("input", ["text"])),
-                output=_parse_modalities(m.get("output", ["text"])),
-                thinking=m.get("thinking", False),
-            ))
+            models.register(
+                Model(
+                    id=model_id,
+                    name=m.get("name", model_id),
+                    provider=m.get("provider", provider_id),
+                    context_window=m.get("context_window", 0),
+                    max_input_tokens=m.get("max_input_tokens"),
+                    max_output_tokens=m.get("max_output_tokens", m.get("max_tokens", 16384)),
+                    cost=Cost(
+                        input=m.get("input_price", 0.0),
+                        output=m.get("output_price", 0.0),
+                    ),
+                    input=_parse_modalities(m.get("input", ["text"])),
+                    output=_parse_modalities(m.get("output", ["text"])),
+                    thinking=m.get("thinking", False),
+                )
+            )
 
     def unregister_provider(self, provider_id: str) -> None:
         """Remove a previously registered provider and all its models.
@@ -523,6 +541,7 @@ class ExtensionAPI:
             tau.unregister_provider("my-llm")
         """
         from tau.inference.api.text.service import TextLLM
+
         TextLLM._builtin_providers().unregister(provider_id)
         TextLLM._builtin_models().unregister_by_provider(provider_id)
 
@@ -537,6 +556,7 @@ class ExtensionAPI:
         After registration the theme appears in the ``/theme`` picker.
         """
         from tau.themes.registry import theme_registry
+
         theme_registry.register(name, theme_or_factory)
 
     # ── Settings UI ───────────────────────────────────────────────────────────
@@ -598,7 +618,11 @@ class ExtensionAPI:
             tau.register_flag("verbose", type="bool", env="TAU_VERBOSE", default=False)
         """
         self._flags[name] = FlagRegistration(
-            name=name, type=type, default=default, description=description, env=env,
+            name=name,
+            type=type,
+            default=default,
+            description=description,
+            env=env,
         )
 
     def get_flag(self, name: str) -> bool | str | int | None:
@@ -726,7 +750,9 @@ class ExtensionAPI:
         registry = getattr(ctx, "tool_registry", None)
         if registry is None:
             return []
-        return [{"name": t.name, "description": getattr(t, "description", "")} for t in registry.list()]
+        return [
+            {"name": t.name, "description": getattr(t, "description", "")} for t in registry.list()
+        ]
 
     def set_active_tools(self, tool_names: list[str]) -> None:
         """Restrict the agent to only the named tools (or re-enable all if the list is empty)."""
@@ -768,6 +794,7 @@ class ExtensionAPI:
     def set_thinking_level(self, level: str) -> None:
         """Set the thinking level.  Accepts any ThinkingLevel string value."""
         import asyncio
+
         runtime = self._runtime_ref.runtime if self._runtime_ref is not None else None
         if runtime is None:
             return
@@ -778,12 +805,14 @@ class ExtensionAPI:
         if engine is None:
             return
         from tau.inference.types import ThinkingLevel
+
         try:
             tl = ThinkingLevel(level)
         except ValueError:
             return
         engine.thinking_level = tl
         from tau.hooks.types import ThinkingLevelSelectEvent
+
         hooks = getattr(runtime, "hooks", None)
         if hooks is not None:
             asyncio.ensure_future(hooks.emit(ThinkingLevelSelectEvent(level=tl)))
@@ -810,6 +839,7 @@ class ExtensionAPI:
         reload re-runs ``register`` without disposing prior resources automatically.
         """
         import asyncio
+
         runtime = self._runtime_ref.runtime if self._runtime_ref is not None else None
         if runtime is None:
             return
@@ -838,8 +868,10 @@ class ExtensionAPI:
 
         resolved_cwd = str(cwd) if cwd else str(self._cwd)
         proc = await _asyncio.create_subprocess_exec(
-            cmd, *(args or []),
-            stdout=PIPE, stderr=PIPE,
+            cmd,
+            *(args or []),
+            stdout=PIPE,
+            stderr=PIPE,
             cwd=resolved_cwd,
         )
         stdout_bytes, stderr_bytes = await proc.communicate()
@@ -883,17 +915,23 @@ class ExtensionAPI:
         Supported names: ``read``, ``write``, ``edit``, ``terminal``, ``glob``, ``grep``, ``ls``.
         """
         from tau.builtins.tools import (
-            create_read_tool, create_write_tool, create_edit_tool,
-            create_terminal_tool, create_glob_tool, create_grep_tool, create_ls_tool,
+            create_edit_tool,
+            create_glob_tool,
+            create_grep_tool,
+            create_ls_tool,
+            create_read_tool,
+            create_terminal_tool,
+            create_write_tool,
         )
+
         _factories = {
-            "read":     create_read_tool,
-            "write":    create_write_tool,
-            "edit":     create_edit_tool,
+            "read": create_read_tool,
+            "write": create_write_tool,
+            "edit": create_edit_tool,
             "terminal": create_terminal_tool,
-            "glob":     create_glob_tool,
-            "grep":     create_grep_tool,
-            "ls":       create_ls_tool,
+            "glob": create_glob_tool,
+            "grep": create_grep_tool,
+            "ls": create_ls_tool,
         }
         factory = _factories.get(name)
         return factory() if factory is not None else None

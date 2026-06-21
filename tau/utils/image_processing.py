@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 
+from PIL import Image, ImageOps
+
 # Provider limits — 4.5 MB gives headroom below Anthropic's 5 MB hard limit
 _DEFAULT_MAX_WIDTH = 2000
 _DEFAULT_MAX_HEIGHT = 2000
@@ -24,7 +26,10 @@ class ProcessedImage:
 
     @property
     def was_resized(self) -> bool:
-        return (self.display_width, self.display_height) != (self.original_width, self.original_height)
+        return (self.display_width, self.display_height) != (
+            self.original_width,
+            self.original_height,
+        )
 
     def dimension_note(self) -> str | None:
         """Coordinate-mapping hint for the LLM when the image was scaled down."""
@@ -59,8 +64,6 @@ def process_image(
 
     Returns a ProcessedImage with the processed bytes and dimension metadata.
     """
-    from PIL import Image, ImageOps
-
     img = Image.open(io.BytesIO(data))
 
     # 1. EXIF orientation — one call handles all 8 rotations
@@ -89,15 +92,14 @@ def process_image(
 
 def convert_to_png(data: bytes) -> bytes:
     """Convert any supported image format to PNG bytes (for Kitty protocol)."""
-    from PIL import Image, ImageOps
     img = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
     return _encode_png(img)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _resize_to_fit(img: "Image.Image", max_w: int, max_h: int) -> "Image.Image":
-    from PIL import Image
+
+def _resize_to_fit(img: Image.Image, max_w: int, max_h: int) -> Image.Image:
     w, h = img.size
     if w <= max_w and h <= max_h:
         return img
@@ -105,14 +107,14 @@ def _resize_to_fit(img: "Image.Image", max_w: int, max_h: int) -> "Image.Image":
     return img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
 
 
-def _as_rgb(img: "Image.Image") -> "Image.Image":
+def _as_rgb(img: Image.Image) -> Image.Image:
     if img.mode not in ("RGB", "L"):
         return img.convert("RGB")
     return img
 
 
-def _encode_png(img: "Image.Image") -> bytes:
-    from PIL import Image
+def _encode_png(img: Image.Image) -> bytes:
+
     if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
         img = img.convert("RGBA")
     buf = io.BytesIO()
@@ -120,14 +122,14 @@ def _encode_png(img: "Image.Image") -> bytes:
     return buf.getvalue()
 
 
-def _encode_jpeg(img: "Image.Image", quality: int) -> bytes:
+def _encode_jpeg(img: Image.Image, quality: int) -> bytes:
     buf = io.BytesIO()
     _as_rgb(img).save(buf, format="JPEG", quality=quality)
     return buf.getvalue()
 
 
 def _encode_best(
-    img: "Image.Image",
+    img: Image.Image,
     max_bytes: int,
     jpeg_quality: int,
     force_png: bool,
@@ -136,8 +138,6 @@ def _encode_best(
     Try PNG and JPEG at each candidate size and pick whichever is smaller
     and fits within max_bytes.  Mirrors tryEncodings strategy.
     """
-    from PIL import Image
-
     qualities = list(dict.fromkeys([jpeg_quality] + _JPEG_QUALITY_STEPS))
 
     current = img

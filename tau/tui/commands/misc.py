@@ -7,8 +7,8 @@ from tau.tui.commands.context import CommandContext
 
 
 def cmd_copy(ctx: CommandContext) -> None:
-    from tau.session.types import MessageEntry as SessionMessageEntry
     from tau.message.types import AssistantMessage
+    from tau.session.types import MessageEntry as SessionMessageEntry
 
     sm = ctx.runtime.session_manager
     if sm is None:
@@ -38,7 +38,11 @@ def copy_to_clipboard(text: str) -> None:
     if sys.platform == "darwin":
         subprocess.run(["pbcopy"], input=text.encode(), check=True)
     else:
-        for cmd in [["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]]:
+        for cmd in [
+            ["wl-copy"],
+            ["xclip", "-selection", "clipboard"],
+            ["xsel", "--clipboard", "--input"],
+        ]:
             try:
                 subprocess.run(cmd, input=text.encode(), check=True, capture_output=True)
                 return
@@ -79,4 +83,6 @@ def show_help(ctx: CommandContext) -> None:
         ext_lines = f"\n\nExtension shortcuts:\n{rows}"
 
     tmpl_section = f"\n\nPrompt templates:\n{tmpl_lines}" if tmpl_lines else ""
-    ctx.notify(f"Commands:\n{cmd_lines}{tmpl_section}\n\nKeyboard shortcuts:\n{shortcuts}{ext_lines}")
+    ctx.notify(
+        f"Commands:\n{cmd_lines}{tmpl_section}\n\nKeyboard shortcuts:\n{shortcuts}{ext_lines}"
+    )

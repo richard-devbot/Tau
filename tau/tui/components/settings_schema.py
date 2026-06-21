@@ -34,11 +34,13 @@ Keys support dot-notation directly too (``"exa.api_key"``). Unknown types and
 malformed fields are skipped with a logged warning rather than rendering a
 misleading control.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from tau.extensions.api import ExtensionSettingsRegistration
 from tau.tui.components.settings_modal import SettingItem
@@ -102,8 +104,8 @@ def build_manifest_panel(
     value when — and only when — a field's value actually changes. Returns
     ``None`` if the schema yields no usable items.
     """
-    field_defs: dict[str, dict] = {}   # full key -> field def (for coerce/validate)
-    currents: dict[str, Any] = {}      # full key -> current config value (for diff)
+    field_defs: dict[str, dict] = {}  # full key -> field def (for coerce/validate)
+    currents: dict[str, Any] = {}  # full key -> current config value (for diff)
 
     def build_items(fields: list, prefix: str) -> list[SettingItem]:
         items: list[SettingItem] = []
@@ -124,16 +126,22 @@ def build_manifest_panel(
             if ftype == "group" or "fields" in f:
                 children = build_items(f.get("fields") or [], full)
                 if children:
-                    items.append(SettingItem(
-                        id=full, label=label, description=description,
-                        current_value="→",
-                        submenu_title=f.get("title") or label,
-                        submenu_settings=children,
-                    ))
+                    items.append(
+                        SettingItem(
+                            id=full,
+                            label=label,
+                            description=description,
+                            current_value="→",
+                            submenu_title=f.get("title") or label,
+                            submenu_settings=children,
+                        )
+                    )
                 continue
 
             if ftype not in _LEAF_TYPES:
-                _log.warning("settings_schema: unknown field type %r for %r — skipping", ftype, full)
+                _log.warning(
+                    "settings_schema: unknown field type %r for %r — skipping", ftype, full
+                )
                 continue
             if ftype in ("enum", "select") and not f.get("values"):
                 _log.warning("settings_schema: enum field %r has no values — skipping", full)
@@ -144,26 +152,38 @@ def build_manifest_panel(
 
             if ftype in ("enum", "select"):
                 currents[full] = current
-                items.append(SettingItem(
-                    id=full, label=label, description=description,
-                    current_value=str(current),
-                    values=[str(v) for v in f.get("values", [])],
-                ))
+                items.append(
+                    SettingItem(
+                        id=full,
+                        label=label,
+                        description=description,
+                        current_value=str(current),
+                        values=[str(v) for v in f.get("values", [])],
+                    )
+                )
             elif ftype == "bool":
                 stored = current is True or str(current).lower() in ("true", "on")
                 currents[full] = stored  # config-space bool, matches _coerce output
-                items.append(SettingItem(
-                    id=full, label=label, description=description,
-                    current_value="on" if stored else "off",
-                    values=["off", "on"],
-                ))
+                items.append(
+                    SettingItem(
+                        id=full,
+                        label=label,
+                        description=description,
+                        current_value="on" if stored else "off",
+                        values=["off", "on"],
+                    )
+                )
             else:  # string, secret, int, text
                 currents[full] = current
-                items.append(SettingItem(
-                    id=full, label=label, description=description,
-                    current_value=str(current if current is not None else ""),
-                    text_input=True,
-                ))
+                items.append(
+                    SettingItem(
+                        id=full,
+                        label=label,
+                        description=description,
+                        current_value=str(current if current is not None else ""),
+                        text_input=True,
+                    )
+                )
         return items
 
     items = build_items(schema.get("fields") or [], "")

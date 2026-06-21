@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from tau.commands.types import CommandInfo
-from tau.builtins.commands.session import cmd_new, cmd_fork
-from tau.builtins.commands.reload import cmd_reload
-from tau.builtins.commands.compact import cmd_compact
 from tau.builtins.commands.clear import cmd_clear
+from tau.builtins.commands.compact import cmd_compact
+from tau.builtins.commands.reload import cmd_reload
+from tau.builtins.commands.session import cmd_fork, cmd_new
+from tau.commands.types import CommandInfo
 
 
 def get_builtin_commands() -> list[CommandInfo]:

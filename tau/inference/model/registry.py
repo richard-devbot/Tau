@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from tau.inference.model.types import Model
 
 
@@ -57,6 +58,7 @@ class ModelRegistry:
     def from_text_builtins(cls) -> ModelRegistry:
         """Construct a registry pre-populated with all builtin text/LLM models."""
         from tau.builtins.models.text import models
+
         instance = cls()
         for model in models:
             instance.register(model)
@@ -66,6 +68,7 @@ class ModelRegistry:
     def from_image_builtins(cls) -> ModelRegistry:
         """Construct a registry pre-populated with all builtin image models."""
         from tau.builtins.models.image import models
+
         instance = cls()
         for model in models:
             instance.register(model)
@@ -75,6 +78,7 @@ class ModelRegistry:
     def from_audio_builtins(cls) -> ModelRegistry:
         """Construct a registry pre-populated with all builtin audio models."""
         from tau.builtins.models.audio import models
+
         instance = cls()
         for model in models:
             instance.register(model)
@@ -84,6 +88,7 @@ class ModelRegistry:
     def from_video_builtins(cls) -> ModelRegistry:
         """Construct a registry pre-populated with all builtin video models."""
         from tau.builtins.models.video import models
+
         instance = cls()
         for model in models:
             instance.register(model)
@@ -92,10 +97,11 @@ class ModelRegistry:
     @classmethod
     def from_all_builtins(cls) -> ModelRegistry:
         """Construct a registry pre-populated with all builtin models across all modalities."""
-        from tau.builtins.models.text import models as text
-        from tau.builtins.models.image import models as image
         from tau.builtins.models.audio import models as audio
+        from tau.builtins.models.image import models as image
+        from tau.builtins.models.text import models as text
         from tau.builtins.models.video import models as video
+
         instance = cls()
         for model in text + image + audio + video:
             instance.register(model)

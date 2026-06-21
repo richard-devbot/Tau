@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from tau.tui.input import InputEvent, KeyEvent
 
@@ -68,6 +68,7 @@ class TextPrompt:
 
     def render(self, width: int) -> list[str]:  # noqa: ARG002
         from tau.tui.ansi import BOLD, DIM, RESET
+
         display = ("*" * len(self._value)) if self._secret else self._value
         return [
             f"  {BOLD}{self._label}{RESET}  {DIM}(Enter to confirm · Esc to cancel){RESET}",

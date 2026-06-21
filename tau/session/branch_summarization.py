@@ -4,6 +4,7 @@ Branch summarization for tree navigation.
 When navigating to a different point in the session tree, this generates
 a summary of the branch being left so context isn't lost.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 # Types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class BranchSummaryResult:
     summary: str | None = None
@@ -31,6 +33,7 @@ class BranchSummaryResult:
 @dataclass
 class BranchSummaryDetails:
     """Stored in BranchSummaryEntry.details for cumulative file tracking."""
+
     read_files: list[str] = field(default_factory=list)
     modified_files: list[str] = field(default_factory=list)
 
@@ -58,6 +61,7 @@ class CollectEntriesResult:
 # ---------------------------------------------------------------------------
 # Entry collection
 # ---------------------------------------------------------------------------
+
 
 def collect_entries_for_branch_summary(
     session: SessionManager,
@@ -94,16 +98,19 @@ def collect_entries_for_branch_summary(
 # Entry → message conversion
 # ---------------------------------------------------------------------------
 
+
 def _get_message_from_entry(entry: Any) -> Any | None:
+    from tau.message.types import BranchSummaryMessage, CompactionSummaryMessage, CustomMessage
     from tau.session.types import (
-        MessageEntry, CustomMessageEntry, BranchSummaryEntry, CompactionEntry,
-        ThinkingLevelChangeEntry, ModelChangeEntry, CustomInfoEntry,
-        LabelEntry, LeafEntry, SessionInfoEntry,
+        BranchSummaryEntry,
+        CompactionEntry,
+        CustomMessageEntry,
+        MessageEntry,
     )
-    from tau.message.types import CustomMessage, BranchSummaryMessage, CompactionSummaryMessage
 
     if isinstance(entry, MessageEntry):
         from tau.message.types import ToolMessage
+
         if isinstance(entry.message, ToolMessage):
             return None
         return entry.message
@@ -147,6 +154,7 @@ def _extract_file_ops_from_message(message: Any, file_ops: FileOperations) -> No
 # Preparation
 # ---------------------------------------------------------------------------
 
+
 def prepare_branch_entries(entries: list[Any], token_budget: int = 0) -> BranchPreparation:
     """
     Walk entries from newest to oldest, adding messages until the token budget is hit.
@@ -180,8 +188,8 @@ def prepare_branch_entries(entries: list[Any], token_budget: int = 0) -> BranchP
 
         if token_budget > 0 and total_tokens + tokens > token_budget:
             from tau.session.types import CompactionEntry
-            if isinstance(entry, (CompactionEntry, BranchSummaryEntry)):
-                if total_tokens < token_budget * 0.9:
+
+            if isinstance(entry, (CompactionEntry, BranchSummaryEntry)) and total_tokens < token_budget * 0.9:
                     messages.insert(0, message)
                     total_tokens += tokens
             break
@@ -195,6 +203,7 @@ def prepare_branch_entries(entries: list[Any], token_budget: int = 0) -> BranchP
 # ---------------------------------------------------------------------------
 # File list formatting
 # ---------------------------------------------------------------------------
+
 
 def _compute_file_lists(file_ops: FileOperations) -> tuple[list[str], list[str]]:
     modified = file_ops.edited | file_ops.written
@@ -258,6 +267,7 @@ Keep each section concise. Preserve exact file paths, function names, and error 
 # Summary generation
 # ---------------------------------------------------------------------------
 
+
 async def generate_branch_summary(
     entries: list[Any],
     llm: TextLLM,
@@ -267,9 +277,9 @@ async def generate_branch_summary(
     replace_instructions: bool = False,
 ) -> BranchSummaryResult:
     """Generate a summary of abandoned branch entries."""
-    from tau.session.compaction import serialize_conversation, SUMMARIZATION_SYSTEM_PROMPT
+    from tau.inference.types import LLMContext, TextDeltaEvent, TextEndEvent
     from tau.message.types import UserMessage
-    from tau.inference.types import TextEndEvent, TextDeltaEvent, LLMContext
+    from tau.session.compaction import SUMMARIZATION_SYSTEM_PROMPT, serialize_conversation
 
     token_budget = context_window - reserve_tokens
     prep = prepare_branch_entries(entries, token_budget)

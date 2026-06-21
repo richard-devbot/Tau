@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
-from tau.tui.ansi import RESET, BOLD, BRIGHT_BLACK, BRIGHT_WHITE, GREEN, DIM
+from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, DIM, GREEN, RESET
 
 
 class ListModal:
@@ -31,11 +31,11 @@ class ListModal:
         subtitle: str = "",
         on_preview: Callable[[str], None] | None = None,
     ) -> None:
-        self._items    = list(items)
-        self._current  = current
-        self._title    = title
+        self._items = list(items)
+        self._current = current
+        self._title = title
         self._subtitle = subtitle
-        self._preview  = on_preview
+        self._preview = on_preview
         self._selected = 0
 
         # Start cursor on the current item
@@ -81,9 +81,9 @@ class ListModal:
             lines.append(f"  {BRIGHT_BLACK}(no items){RESET}")
         else:
             for i, item in enumerate(self._items):
-                is_sel     = i == self._selected
+                is_sel = i == self._selected
                 is_current = item == self._current
-                check      = f" {GREEN}✓{RESET}" if is_current else ""
+                check = f" {GREEN}✓{RESET}" if is_current else ""
                 if is_sel:
                     lines.append(f"  {BRIGHT_WHITE}{BOLD}→ {item}{RESET}{check}")
                 else:

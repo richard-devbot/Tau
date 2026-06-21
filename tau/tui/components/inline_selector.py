@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
 
 @dataclass
-class InlineSelector(Generic[T]):
+class InlineSelector[T]:
     """
     Generic wrapper for an inline SelectList modal.
 
@@ -22,8 +23,8 @@ class InlineSelector(Generic[T]):
     for live preview before commit).
     """
 
-    kind: str                          # "model" | "theme" | "effort" | "resume" | "tree"
-    selector: Any                      # SelectList[T] — kept as Any to avoid circular import
+    kind: str  # "model" | "theme" | "effort" | "resume" | "tree"
+    selector: Any  # SelectList[T] — kept as Any to avoid circular import
     on_commit: Callable[[T], None]
     on_cancel: Callable[[], None]
     searchable: bool = False
@@ -66,6 +67,7 @@ class InlineSelector(Generic[T]):
         # Tree selector renders its own search line internally; skip for other searchable selectors
         if self.searchable and self.search and self.kind != "tree":
             from tau.tui.ansi import DIM, RESET
+
             lines.append(f"  {DIM}Search:{RESET} {self.search}█")
         lines.extend(self.selector.render(width))
         return lines

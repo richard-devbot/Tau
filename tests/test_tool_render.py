@@ -1,8 +1,8 @@
 """Tests for tau/tool/render.py and tau/tool/types.py — tool display utilities."""
 from __future__ import annotations
 
-from tau.tool.render import display_name, call_line
-from tau.tool.types import ToolResult, ToolKind
+from tau.tool.render import call_line, display_name
+from tau.tool.types import ToolKind, ToolResult
 from tau.tui.ansi import strip_ansi
 
 

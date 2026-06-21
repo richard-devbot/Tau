@@ -2,24 +2,30 @@
 from __future__ import annotations
 
 import json
-import time
 
-from tau.session.compaction import (
-    CompactionSettings,
-    estimate_tokens,
-    estimate_context_tokens,
-    should_compact,
-    serialize_conversation,
-    TOOL_RESULT_MAX_CHARS,
-)
-from tau.message.types import (
-    UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ThinkingContent, ToolCallContent, ToolResultContent,
-    CompactionSummaryMessage, BranchSummaryMessage,
-    TerminalExecutionMessage, CustomMessage,
-)
 from tau.inference.types import StopReason
-from tau.message.types import Usage
+from tau.message.types import (
+    AssistantMessage,
+    BranchSummaryMessage,
+    CompactionSummaryMessage,
+    CustomMessage,
+    TerminalExecutionMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    Usage,
+    UserMessage,
+)
+from tau.session.compaction import (
+    TOOL_RESULT_MAX_CHARS,
+    CompactionSettings,
+    estimate_context_tokens,
+    estimate_tokens,
+    serialize_conversation,
+    should_compact,
+)
 
 
 class TestEstimateTokens:

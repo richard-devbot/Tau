@@ -23,4 +23,3 @@ class BaseVideoAPI(ABC):
     async def generate(self, model: Model, context: VideoContext) -> GeneratedVideo:
         """Generate a video from text or image prompts."""
         raise NotImplementedError
-

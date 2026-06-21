@@ -5,12 +5,13 @@ Mirrors the reference implementation (rpc-types.ts).
 All values are plain dicts in practice — these are provided as
 documentation and for type-checker hints only.
 """
+
 from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
-
 # ── Commands (stdin) ──────────────────────────────────────────────────────────
+
 
 class PromptCommand(TypedDict, total=False):
     type: Literal["prompt"]
@@ -18,28 +19,34 @@ class PromptCommand(TypedDict, total=False):
     message: str
     streamingBehavior: Literal["steer", "followUp"]
 
+
 class SteerCommand(TypedDict, total=False):
     type: Literal["steer"]
     id: str
     message: str
+
 
 class FollowUpCommand(TypedDict, total=False):
     type: Literal["follow_up"]
     id: str
     message: str
 
+
 class AbortCommand(TypedDict, total=False):
     type: Literal["abort"]
     id: str
+
 
 class NewSessionCommand(TypedDict, total=False):
     type: Literal["new_session"]
     id: str
     parentSession: str
 
+
 class GetStateCommand(TypedDict, total=False):
     type: Literal["get_state"]
     id: str
+
 
 class SetModelCommand(TypedDict, total=False):
     type: Literal["set_model"]
@@ -47,51 +54,62 @@ class SetModelCommand(TypedDict, total=False):
     modelId: str
     provider: str
 
+
 class CycleModelCommand(TypedDict, total=False):
     type: Literal["cycle_model"]
     id: str
 
+
 class GetAvailableModelsCommand(TypedDict, total=False):
     type: Literal["get_available_models"]
     id: str
+
 
 class SetThinkingLevelCommand(TypedDict, total=False):
     type: Literal["set_thinking_level"]
     id: str
     level: str
 
+
 class CycleThinkingLevelCommand(TypedDict, total=False):
     type: Literal["cycle_thinking_level"]
     id: str
+
 
 class SetSteeringModeCommand(TypedDict, total=False):
     type: Literal["set_steering_mode"]
     id: str
     mode: Literal["all", "one-at-a-time"]
 
+
 class SetFollowUpModeCommand(TypedDict, total=False):
     type: Literal["set_follow_up_mode"]
     id: str
     mode: Literal["all", "one-at-a-time"]
+
 
 class CompactCommand(TypedDict, total=False):
     type: Literal["compact"]
     id: str
     customInstructions: str
 
+
 class SetAutoCompactionCommand(TypedDict, total=False):
     type: Literal["set_auto_compaction"]
     id: str
     enabled: bool
+
 
 class SetAutoRetryCommand(TypedDict, total=False):
     type: Literal["set_auto_retry"]
     id: str
     enabled: bool
 
+
 class AbortRetryCommand(TypedDict, total=False):
     type: Literal["abort_retry"]
     id: str
+
 
 class TerminalCommand(TypedDict, total=False):
     type: Literal["terminal"]
@@ -99,23 +117,28 @@ class TerminalCommand(TypedDict, total=False):
     command: str
     excludeFromContext: bool
 
+
 class AbortTerminalCommand(TypedDict, total=False):
     type: Literal["abort_terminal"]
     id: str
 
+
 class GetSessionStatsCommand(TypedDict, total=False):
     type: Literal["get_session_stats"]
     id: str
+
 
 class ExportHtmlCommand(TypedDict, total=False):
     type: Literal["export_html"]
     id: str
     outputPath: str
 
+
 class SwitchSessionCommand(TypedDict, total=False):
     type: Literal["switch_session"]
     id: str
     sessionPath: str
+
 
 class ForkCommand(TypedDict, total=False):
     type: Literal["fork"]
@@ -123,30 +146,37 @@ class ForkCommand(TypedDict, total=False):
     entryId: str
     position: Literal["before", "at"]
 
+
 class CloneCommand(TypedDict, total=False):
     type: Literal["clone"]
     id: str
+
 
 class GetForkMessagesCommand(TypedDict, total=False):
     type: Literal["get_fork_messages"]
     id: str
 
+
 class GetLastAssistantTextCommand(TypedDict, total=False):
     type: Literal["get_last_assistant_text"]
     id: str
+
 
 class SetSessionNameCommand(TypedDict, total=False):
     type: Literal["set_session_name"]
     id: str
     name: str
 
+
 class GetMessagesCommand(TypedDict, total=False):
     type: Literal["get_messages"]
     id: str
 
+
 class GetCommandsCommand(TypedDict, total=False):
     type: Literal["get_commands"]
     id: str
+
 
 class ExtensionUIResponseCommand(TypedDict, total=False):
     type: Literal["extension_ui_response"]
@@ -157,6 +187,7 @@ class ExtensionUIResponseCommand(TypedDict, total=False):
 
 
 # ── Responses (stdout) ────────────────────────────────────────────────────────
+
 
 class RpcResponse(TypedDict, total=False):
     type: Literal["response"]
@@ -169,6 +200,7 @@ class RpcResponse(TypedDict, total=False):
 
 # ── Extension UI requests (stdout) ────────────────────────────────────────────
 
+
 class SelectUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
     id: str
@@ -176,6 +208,7 @@ class SelectUIRequest(TypedDict, total=False):
     title: str
     options: list[str]
     timeout: int
+
 
 class ConfirmUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
@@ -185,6 +218,7 @@ class ConfirmUIRequest(TypedDict, total=False):
     message: str
     timeout: int
 
+
 class InputUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
     id: str
@@ -193,12 +227,14 @@ class InputUIRequest(TypedDict, total=False):
     placeholder: str
     timeout: int
 
+
 class EditorUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
     id: str
     method: Literal["editor"]
     title: str
     prefill: str
+
 
 class NotifyUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
@@ -207,12 +243,14 @@ class NotifyUIRequest(TypedDict, total=False):
     message: str
     notifyType: Literal["info", "warning", "error"]
 
+
 class SetStatusUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
     id: str
     method: Literal["setStatus"]
     statusKey: str
     statusText: str | None
+
 
 class SetWidgetUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
@@ -222,11 +260,13 @@ class SetWidgetUIRequest(TypedDict, total=False):
     widgetLines: list[str] | None
     widgetPlacement: Literal["aboveEditor", "belowEditor"]
 
+
 class SetTitleUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
     id: str
     method: Literal["setTitle"]
     title: str
+
 
 class SetEditorTextUIRequest(TypedDict, total=False):
     type: Literal["extension_ui_request"]
@@ -236,6 +276,7 @@ class SetEditorTextUIRequest(TypedDict, total=False):
 
 
 # ── Session state ─────────────────────────────────────────────────────────────
+
 
 class RpcSessionState(TypedDict, total=False):
     model: dict[str, Any] | None

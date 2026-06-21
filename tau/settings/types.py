@@ -1,12 +1,14 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, Literal, Any
-from tau.engine.types import SteeringMode, FollowupMode
-from tau.inference.types import Transport, ThinkingLevel
+from enum import StrEnum
+from typing import Any, Literal
+
+from tau.engine.types import FollowupMode, SteeringMode
+from tau.inference.types import ThinkingLevel, Transport
 
 
-class SCOPE(str, Enum):
+class SCOPE(StrEnum):
     GLOBAL = "global"
     PROJECT = "project"
 
@@ -25,149 +27,169 @@ class SettingsError:
 
 @dataclass
 class ProviderRetrySettings:
-    timeout_ms: Optional[int] = None
-    max_retries: Optional[int] = None
-    max_retry_delay_ms: Optional[int] = None
+    timeout_ms: int | None = None
+    max_retries: int | None = None
+    max_retry_delay_ms: int | None = None
 
 
 @dataclass
 class RetrySettings:
-    enabled: Optional[bool] = None
-    max_retries: Optional[int] = None
-    base_delay_ms: Optional[int] = None
-    provider: Optional[ProviderRetrySettings] = None
+    enabled: bool | None = None
+    max_retries: int | None = None
+    base_delay_ms: int | None = None
+    provider: ProviderRetrySettings | None = None
 
 
 @dataclass
 class ThinkingBudgetsSettings:
-    minimal: Optional[int] = None
-    low: Optional[int] = None
-    medium: Optional[int] = None
-    high: Optional[int] = None
-    xhigh: Optional[int] = None
-    max: Optional[int] = None
+    minimal: int | None = None
+    low: int | None = None
+    medium: int | None = None
+    high: int | None = None
+    xhigh: int | None = None
+    max: int | None = None
 
 
 @dataclass
 class ImageSettings:
-    auto_resize: Optional[bool] = None    # resize images to 2000×2000 max before sending to LLM (default: True)
-    block_images: Optional[bool] = None   # prevent all images from being sent to the LLM (default: False)
+    auto_resize: bool | None = (
+        None  # resize images to 2000×2000 max before sending to LLM (default: True)
+    )
+    block_images: bool | None = (
+        None  # prevent all images from being sent to the LLM (default: False)
+    )
 
 
 @dataclass
 class CompactionSettings:
-    enabled: Optional[bool] = None              # enable auto-compaction (default: True)
-    reserve_tokens: Optional[int] = None        # tokens reserved for LLM response (default: 16384)
-    keep_recent_tokens: Optional[int] = None    # recent tokens to keep verbatim (default: 20000)
+    enabled: bool | None = None  # enable auto-compaction (default: True)
+    reserve_tokens: int | None = None  # tokens reserved for LLM response (default: 16384)
+    keep_recent_tokens: int | None = None  # recent tokens to keep verbatim (default: 20000)
 
 
 @dataclass
 class BranchSummarySettings:
-    enabled: Optional[bool] = None        # enable branch summarization (default: True)
-    skip_prompt: Optional[bool] = None    # always skip the "Summarize branch?" prompt (default: False)
-    reserve_tokens: Optional[int] = None  # tokens to reserve when summarizing (default: 16384)
+    enabled: bool | None = None  # enable branch summarization (default: True)
+    skip_prompt: bool | None = (
+        None  # always skip the "Summarize branch?" prompt (default: False)
+    )
+    reserve_tokens: int | None = None  # tokens to reserve when summarizing (default: 16384)
 
 
 @dataclass
 class ExtensionEntry:
     """Per-extension config entry stored in the ``extensions.list`` settings block."""
+
     path: str
-    name: Optional[str] = None
+    name: str | None = None
     enabled: bool = True
-    source: Optional[str] = None
-    author: Optional[str] = None
-    settings: Optional[dict] = field(default=None)
+    source: str | None = None
+    author: str | None = None
+    settings: dict | None = field(default=None)
 
 
 @dataclass
 class ExtensionsSettings:
     """Global extension toggle plus per-extension configuration list."""
-    enabled: Optional[bool] = None          # global on/off for all extensions
-    list: Optional[list[ExtensionEntry]] = None
+
+    enabled: bool | None = None  # global on/off for all extensions
+    list: list[ExtensionEntry] | None = None
 
 
 @dataclass
 class PackageEntry:
     """A package installed via pip/uv/poetry into the tau-managed venv."""
-    source: str                             # "pypi:name@1.0", "git+https://...", "/local/path"
-    name: str                               # package name (normalised)
-    version: Optional[str] = None           # installed version, if known
-    installed_path: Optional[str] = None    # path to package dir inside the venv
+
+    source: str  # "pypi:name@1.0", "git+https://...", "/local/path"
+    name: str  # package name (normalised)
+    version: str | None = None  # installed version, if known
+    installed_path: str | None = None  # path to package dir inside the venv
     enabled: bool = True
 
 
 @dataclass
 class PackagesSettings:
     """Installed package list stored in settings."""
-    list: Optional[list[PackageEntry]] = None
+
+    list: list[PackageEntry] | None = None
 
 
 @dataclass
 class TerminalSettings:
-    shell_path: Optional[str] = None             # custom shell binary (default: system shell)
-    shell_command_prefix: Optional[str] = None   # lines prepended inside the shell before each command
+    shell_path: str | None = None  # custom shell binary (default: system shell)
+    shell_command_prefix: str | None = (
+        None  # lines prepended inside the shell before each command
+    )
 
 
 @dataclass
 class HTTPProxySettings:
-    url: Optional[str] = None                           # Proxy URL for both HTTP and HTTPS (overrides env vars)
-    no_proxy: Optional[str] = None                      # Comma-separated hosts to exclude from proxying
-    headers: Optional[dict[str, str]] = None            # Custom headers for proxy (e.g., authentication)
+    url: str | None = None  # Proxy URL for both HTTP and HTTPS (overrides env vars)
+    no_proxy: str | None = None  # Comma-separated hosts to exclude from proxying
+    headers: dict[str, str] | None = None  # Custom headers for proxy (e.g., authentication)
 
 
 @dataclass
 class Settings:
     # Model / provider
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    thinking_level: Optional[ThinkingLevel] = None
-    transport: Optional[Transport] = None
-    enabled_models: Optional[list[str]] = None
+    provider: str | None = None
+    model: str | None = None
+    thinking_level: ThinkingLevel | None = None
+    transport: Transport | None = None
+    enabled_models: list[str] | None = None
 
     # UI
-    theme: Optional[str] = None
-    show_thinking: Optional[bool] = None
-    show_tool_calls: Optional[bool] = None
-    show_images: Optional[bool] = None
-    picker_max_visible: Optional[int] = None
+    theme: str | None = None
+    show_thinking: bool | None = None
+    show_tool_calls: bool | None = None
+    show_images: bool | None = None
+    picker_max_visible: int | None = None
 
     # Queue behaviour
-    steering_mode: Optional[SteeringMode] = None
-    follow_up_mode: Optional[FollowupMode] = None
+    steering_mode: SteeringMode | None = None
+    follow_up_mode: FollowupMode | None = None
 
     # Nested sub-settings
-    retry: Optional[RetrySettings] = None
-    thinking_budgets: Optional[ThinkingBudgetsSettings] = None
-    image: Optional[ImageSettings] = None
-    compaction: Optional[CompactionSettings] = None
-    branch_summary: Optional[BranchSummarySettings] = None
+    retry: RetrySettings | None = None
+    thinking_budgets: ThinkingBudgetsSettings | None = None
+    image: ImageSettings | None = None
+    compaction: CompactionSettings | None = None
+    branch_summary: BranchSummarySettings | None = None
 
     # Execution
-    terminal: Optional[TerminalSettings] = None
+    terminal: TerminalSettings | None = None
 
     # Network
-    http_idle_timeout_ms: Optional[int] = None  # idle timeout for LLM HTTP streams (default: 60000)
-    websocket_connect_timeout_ms: Optional[int] = None  # WebSocket connect/open handshake timeout
-    http_proxy: Optional[HTTPProxySettings] = None  # HTTP proxy configuration (overrides env vars)
+    http_idle_timeout_ms: int | None = None  # idle timeout for LLM HTTP streams (default: 60000)
+    websocket_connect_timeout_ms: int | None = None  # WebSocket connect/open handshake timeout
+    http_proxy: HTTPProxySettings | None = None  # HTTP proxy configuration (overrides env vars)
 
     # Project trust (global only)
-    project_trust: Optional[Literal["ask", "always", "never"]] = None  # default: "ask" — controls loading of project files (.tau/ config, extensions), project context files (AGENTS.md/CLAUDE.md), and project skills
+    project_trust: Literal["ask", "always", "never"] | None = (
+        None  # default: "ask" — controls loading of project files (.tau/ config, extensions), project context files (AGENTS.md/CLAUDE.md), and project skills
+    )
 
     # Session
-    session_dir: Optional[str] = None
+    session_dir: str | None = None
 
     # Startup
-    quiet_startup: Optional[bool] = None  # suppress startup notices (default: False)
+    quiet_startup: bool | None = None  # suppress startup notices (default: False)
 
     # UI behaviour
-    double_escape_action: Optional[Literal["fork", "tree", "none"]] = None  # action on double-Escape with empty editor (default: "fork")
-    tree_filter_mode: Optional[Literal["default", "no-tools", "user-only", "labeled-only", "all"]] = None  # default /tree filter mode
-    autocomplete_max_visible: Optional[int] = None  # max items in autocomplete dropdown (default: 5)
-    show_hardware_cursor: Optional[bool] = None  # show terminal cursor while positioning (IME support, default: False)
-    editor_padding_x: Optional[int] = None  # horizontal padding for the input editor (default: 0)
+    double_escape_action: Literal["fork", "tree", "none"] | None = (
+        None  # action on double-Escape with empty editor (default: "fork")
+    )
+    tree_filter_mode: Literal["default", "no-tools", "user-only", "labeled-only", "all"] | None = None  # default /tree filter mode
+    autocomplete_max_visible: int | None = (
+        None  # max items in autocomplete dropdown (default: 5)
+    )
+    show_hardware_cursor: bool | None = (
+        None  # show terminal cursor while positioning (IME support, default: False)
+    )
+    editor_padding_x: int | None = None  # horizontal padding for the input editor (default: 0)
 
     # Extensions
-    extensions: Optional[ExtensionsSettings] = None
+    extensions: ExtensionsSettings | None = None
 
     # Packages
-    packages: Optional[PackagesSettings] = None
+    packages: PackagesSettings | None = None

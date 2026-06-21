@@ -1,23 +1,22 @@
 """Tests for tau/session/types.py — all entry types, SessionType enum."""
 from __future__ import annotations
 
+from tau.inference.types import ThinkingLevel
 from tau.session.types import (
-    SessionType,
-    SessionHeader,
-    MessageEntry,
-    ThinkingLevelChangeEntry,
-    ModelChangeEntry,
-    LabelEntry,
-    LeafEntry,
+    BranchSummaryEntry,
+    CompactionEntry,
     CustomInfoEntry,
     CustomMessageEntry,
-    CompactionEntry,
-    BranchSummaryEntry,
+    LabelEntry,
+    LeafEntry,
+    MessageEntry,
+    ModelChangeEntry,
+    SessionHeader,
     SessionInfoEntry,
     SessionOptions,
-    SessionInfo,
+    SessionType,
+    ThinkingLevelChangeEntry,
 )
-from tau.inference.types import ThinkingLevel
 
 
 class TestSessionTypeEnum:

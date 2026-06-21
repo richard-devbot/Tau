@@ -8,6 +8,7 @@ by (server_id, root) so the same server isn't started twice.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,8 +69,8 @@ class LSP:
             existing = self._servers.get(name)
             cmd = item.get("command")
             if cmd:
-                from .types import ServerDefinition
                 from .server import _nearest_root
+                from .types import ServerDefinition
                 ext = item.get("extensions", getattr(existing, "extensions", []))
                 self._servers[name] = ServerDefinition(
                     id=name,
@@ -282,11 +283,7 @@ class LSP:
         """
         import os
 
-        if server_ids is not None:
-            targets = server_ids
-        else:
-            # Use pygments to detect which languages are actually used in the project
-            targets = self._detect_servers()
+        targets = server_ids if server_ids is not None else self._detect_servers()
 
         for sid in targets:
             server = self._servers.get(sid)
@@ -311,6 +308,7 @@ class LSP:
         pathspec is not available or no .gitignore exists.
         """
         import os
+
         from pygments.lexers import get_lexer_for_filename
         from pygments.util import ClassNotFound
 
@@ -517,10 +515,8 @@ class LSP:
         which is handled automatically by the registered on_server_request callback.
         """
         for client in self._clients.values():
-            try:
+            with contextlib.suppress(Exception):
                 await client.execute_command(command, arguments)
-            except Exception:
-                pass
         # Yield so any pending workspace/applyEdit messages can be dispatched
         await asyncio.sleep(0.05)
 

@@ -31,7 +31,7 @@ class Spinner(Component):
         label: str = "",
         theme: SpinnerTheme | None = None,
     ) -> None:
-        self._tui   = tui
+        self._tui = tui
         self._label = label
         self._theme = theme or SpinnerTheme()
         self._frame = 0
@@ -67,7 +67,7 @@ class Spinner(Component):
         The spinner stays visible until every pushed reason is popped, so an
         independent driver can't be switched off by another's ``stop()``.
         """
-        self._reasons = [(k, l) for (k, l) in self._reasons if k != key]
+        self._reasons = [(k, lbl) for (k, lbl) in self._reasons if k != key]
         self._reasons.append((key, label))
         self._sync_task()
         self._tui.request_render()
@@ -78,7 +78,7 @@ class Spinner(Component):
         When the last reason is removed the spinner falls back to the base
         active/label state (e.g. an in-progress turn's "Thinking…").
         """
-        self._reasons = [(k, l) for (k, l) in self._reasons if k != key]
+        self._reasons = [(k, lbl) for (k, lbl) in self._reasons if k != key]
         self._sync_task()
         self._tui.request_render()
 
@@ -125,13 +125,13 @@ class Spinner(Component):
     def render(self, width: int) -> list[str]:
         if not self.active or self._force_hidden:
             return []
-        t      = self._theme
+        t = self._theme
         frames = self._custom_frames if self._custom_frames is not None else (t.frames or ["…"])
-        char   = frames[self._frame % len(frames)]
-        frame  = t.frame_color(char)
+        char = frames[self._frame % len(frames)]
+        frame = t.frame_color(char)
         # A layered reason (e.g. "Compacting…") takes precedence over the base label.
-        text   = self._reasons[-1][1] if self._reasons else self._label
-        label  = f" {t.label_color(text)}" if text else ""
+        text = self._reasons[-1][1] if self._reasons else self._label
+        label = f" {t.label_color(text)}" if text else ""
         return [(frame + label)[:width]]
 
     # -------------------------------------------------------------------------
@@ -139,9 +139,17 @@ class Spinner(Component):
     # -------------------------------------------------------------------------
 
     async def _run(self) -> None:
-        interval_ms = self._custom_interval_ms if self._custom_interval_ms is not None else self._theme.interval_ms
+        interval_ms = (
+            self._custom_interval_ms
+            if self._custom_interval_ms is not None
+            else self._theme.interval_ms
+        )
         interval = max(0.05, interval_ms / 1000)
-        frames = self._custom_frames if self._custom_frames is not None else (self._theme.frames or ["…"])
+        frames = (
+            self._custom_frames
+            if self._custom_frames is not None
+            else (self._theme.frames or ["…"])
+        )
         try:
             while self.active:
                 await asyncio.sleep(interval)

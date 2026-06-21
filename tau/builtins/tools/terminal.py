@@ -1,31 +1,38 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tau.tool.types import (
-    Tool, ToolKind, ToolExecutionMode,
-    ToolInvocation, ToolResult,
-    ToolExecutionUpdateCallback, AbortSignal, ToolContext,
-)
 from tau.tool.render import call_line
+from tau.tool.types import (
+    AbortSignal,
+    Tool,
+    ToolContext,
+    ToolExecutionUpdateCallback,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 _DEFAULT_TIMEOUT = 120
 
 
 def _render_terminal_call(args: dict, _streaming: bool) -> list[str]:
     return call_line("terminal", args.get("command", ""))
+
+
 _PREVIEW_LINES = 5
 
 
 def _render_terminal_result(content: str, opts: Any) -> list[str]:
-    from tau.tui.ansi import RED, DIM, RESET
+    from tau.tui.ansi import DIM, RED, RESET
+
     metadata = opts.metadata or {}
     exit_code = metadata.get("exit_code", 0)
     timed_out = metadata.get("timed_out", False)
-    failed    = timed_out or exit_code != 0
+    failed = timed_out or exit_code != 0
 
     if timed_out:
         return [f"{RED}Timed out{RESET}"]
@@ -52,6 +59,7 @@ def _render_terminal_result(content: str, opts: Any) -> list[str]:
 
 class TerminalParams(BaseModel):
     """Parameters for terminal command execution."""
+
     command: str = Field(description="Shell command to execute.")
     timeout: int = Field(
         default=_DEFAULT_TIMEOUT,
@@ -63,6 +71,7 @@ class TerminalParams(BaseModel):
 
 class TerminalTool(Tool):
     """Tool for executing shell commands."""
+
     def __init__(self) -> None:
         super().__init__(
             name="terminal",
@@ -87,9 +96,9 @@ class TerminalTool(Tool):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         """Execute a shell command and return the output."""
         params = TerminalParams.model_validate(invocation.params)
@@ -106,7 +115,9 @@ class TerminalTool(Tool):
         try:
             if shell_path:
                 proc = await asyncio.create_subprocess_exec(
-                    shell_path, "-c", command,
+                    shell_path,
+                    "-c",
+                    command,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
                     cwd=cwd,
@@ -120,13 +131,18 @@ class TerminalTool(Tool):
                 )
             try:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=params.timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 await proc.communicate()
                 return ToolResult.error(
                     invocation.id,
                     f"Command timed out after {params.timeout}s: {params.command}",
-                    metadata={"command": params.command, "exit_code": -1, "timed_out": True, "output_length": 0},
+                    metadata={
+                        "command": params.command,
+                        "exit_code": -1,
+                        "timed_out": True,
+                        "output_length": 0,
+                    },
                 )
         except OSError as e:
             return ToolResult.error(invocation.id, f"Failed to start command: {e}")

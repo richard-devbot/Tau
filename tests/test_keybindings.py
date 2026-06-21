@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import pytest
 
+from tau.tui.input import KeyEvent
 from tau.tui.keybindings import (
     KeybindingsManager,
-    get_keybindings,
     configure_keybindings,
-    _DEFAULTS,
+    get_keybindings,
 )
-from tau.tui.input import KeyEvent
 
 
 def _key(key: str, ctrl: bool = False, alt: bool = False, shift: bool = False, meta: bool = False) -> KeyEvent:

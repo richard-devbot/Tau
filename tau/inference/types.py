@@ -1,24 +1,33 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
-from datetime import timedelta
-from enum import Enum
-from typing import Any, Callable, Optional, TYPE_CHECKING
+
 import asyncio
 import time
+from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import dataclass, field
+from datetime import timedelta
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from tau.inference.utils import ErrorKind
 
 if TYPE_CHECKING:
-    from tau.message.types import LLMMessage, TextContent, ThinkingContent, ToolCallContent, ImageContent
+    from tau.message.types import (
+        ImageContent,
+        LLMMessage,
+        TextContent,
+        ThinkingContent,
+        ToolCallContent,
+    )
     from tau.tool.types import Tool
 
 
 # ── Shared enums ──────────────────────────────────────────────────────────────
 
-class Transport(str, Enum):
+
+class Transport(StrEnum):
     """Wire transport protocol used to reach the provider endpoint."""
 
     Auto = "auto"
@@ -27,15 +36,17 @@ class Transport(str, Enum):
     SSE = "sse"
 
 
-class AuthType(str, Enum):
+class AuthType(StrEnum):
     """Authentication mechanism used by a provider."""
 
     ApiKey = "api_key"
     OAuth = "oauth"
-    None_ = "none"  # provider needs no credential (e.g. local Ollama, which also proxies cloud models)
+    None_ = (
+        "none"  # provider needs no credential (e.g. local Ollama, which also proxies cloud models)
+    )
 
 
-class StopReason(str, Enum):
+class StopReason(StrEnum):
     """Normalised reason a model generation stopped."""
 
     Stop = "stop"
@@ -46,7 +57,7 @@ class StopReason(str, Enum):
     Error = "error"
 
 
-class ThinkingLevel(str, Enum):
+class ThinkingLevel(StrEnum):
     """Ordered thinking/reasoning intensity levels mapped to provider budgets."""
 
     Off = "off"
@@ -61,18 +72,23 @@ class ThinkingLevel(str, Enum):
 @dataclass
 class ThinkingBudgets:
     """Token budgets for providers that map ThinkingLevel to budget_tokens."""
-    minimal: Optional[int] = 1024
-    low: Optional[int] = 2048
-    medium: Optional[int] = 4096
-    high: Optional[int] = 8192
-    xhigh: Optional[int] = 16384
-    max: Optional[int] = 32768
+
+    minimal: int | None = 1024
+    low: int | None = 2048
+    medium: int | None = 4096
+    high: int | None = 8192
+    xhigh: int | None = 16384
+    max: int | None = 32768
 
     def get(self, level: ThinkingLevel) -> int:
         """Return the budget_tokens value for the given ThinkingLevel, falling back to built-in defaults."""
         _defaults = {
-            "minimal": 1024, "low": 2048, "medium": 4096,
-            "high": 8192, "xhigh": 16384, "max": 32768,
+            "minimal": 1024,
+            "low": 2048,
+            "medium": 4096,
+            "high": 8192,
+            "xhigh": 16384,
+            "max": 32768,
         }
         value = getattr(self, level.value, None)
         return value if value is not None else _defaults[level.value]
@@ -80,7 +96,8 @@ class ThinkingBudgets:
 
 # ── LLM types ─────────────────────────────────────────────────────────────────
 
-class LLMEventType(str, Enum):
+
+class LLMEventType(StrEnum):
     """Discriminant tag carried by every LLMEvent dataclass."""
 
     Start = "start"
@@ -99,7 +116,7 @@ class LLMEventType(str, Enum):
 
 
 AbortSignal = asyncio.Event
-PayloadCallback = Callable[[dict[str, Any]], Optional[dict[str, Any]]]
+PayloadCallback = Callable[[dict[str, Any]], dict[str, Any] | None]
 ResponseCallback = Callable[[Any], None]
 
 
@@ -107,21 +124,21 @@ ResponseCallback = Callable[[Any], None]
 class LLMOptions:
     """Runtime configuration passed to every BaseLLMAPI constructor and stream() call."""
 
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    headers: Optional[dict[str, str]] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    headers: dict[str, str] | None = None
     max_retries: int = 3
     retry_base_delay_ms: int = 1000
     timeout: timedelta = field(default_factory=lambda: timedelta(seconds=60))
     temperature: float = 1.0
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     transport: Transport = Transport.HTTP
-    thinking_level: Optional[ThinkingLevel] = None
-    thinking_budgets: Optional[ThinkingBudgets] = None
-    signal: Optional[AbortSignal] = None
-    extra_params: Optional[dict[str, Any]] = None
-    on_payload: Optional[PayloadCallback] = None
-    on_response: Optional[ResponseCallback] = None
+    thinking_level: ThinkingLevel | None = None
+    thinking_budgets: ThinkingBudgets | None = None
+    signal: AbortSignal | None = None
+    extra_params: dict[str, Any] | None = None
+    on_payload: PayloadCallback | None = None
+    on_response: ResponseCallback | None = None
 
 
 @dataclass
@@ -136,7 +153,9 @@ class StructuredResponseFormat:
 StructuredResponseInput = StructuredResponseFormat | type[Any] | dict[str, Any]
 
 
-def normalize_structured_response_format(response_format: StructuredResponseInput | None) -> StructuredResponseFormat | None:
+def normalize_structured_response_format(
+    response_format: StructuredResponseInput | None,
+) -> StructuredResponseFormat | None:
     """Coerce any supported response_format shape into a StructuredResponseFormat, or None."""
     if response_format is None:
         return None
@@ -163,22 +182,25 @@ def normalize_structured_response_format(response_format: StructuredResponseInpu
             schema = deepcopy(schema["schema"])
         return StructuredResponseFormat(name=name, schema=schema, strict=strict)
 
-    raise TypeError("response_format must be a Pydantic model class, JSON schema dict, or StructuredResponseFormat")
+    raise TypeError(
+        "response_format must be a Pydantic model class, JSON schema dict, or StructuredResponseFormat"
+    )
 
 
 @dataclass
 class LLMContext:
     """All inputs required to execute one LLM turn: messages, tools, and optional overrides."""
 
-    messages: list["LLMMessage"]
-    tools: list["Tool"] = field(default_factory=list)
-    system_prompt: Optional[str] = None
-    response_format: Optional[StructuredResponseInput] = None
+    messages: list[LLMMessage]
+    tools: list[Tool] = field(default_factory=list)
+    system_prompt: str | None = None
+    response_format: StructuredResponseInput | None = None
 
 
 def _default_text_event_data():
     """Return an empty TextContent; used as a field default_factory to avoid mutable defaults."""
     from tau.message.types import TextContent
+
     return TextContent(content="")
 
 
@@ -186,21 +208,21 @@ def _default_text_event_data():
 class TextEventData:
     """Mixin carrying a TextContent payload for text-phase events."""
 
-    text: "TextContent" = field(default_factory=_default_text_event_data)
+    text: TextContent = field(default_factory=_default_text_event_data)
 
 
 @dataclass
 class ThinkingEventData:
     """Mixin carrying an optional ThinkingContent payload for thinking-phase events."""
 
-    thinking: Optional["ThinkingContent"] = None
+    thinking: ThinkingContent | None = None
 
 
 @dataclass
 class ToolCallEventData:
     """Mixin carrying an optional ToolCallContent payload for tool-call-phase events."""
 
-    tool_call: Optional["ToolCallContent"] = None
+    tool_call: ToolCallContent | None = None
 
 
 @dataclass
@@ -227,7 +249,9 @@ class ErrorEvent:
     type: LLMEventType = field(default=LLMEventType.Error, init=False)
     reason: StopReason = StopReason.Stop
     error: str = ""
-    kind: ErrorKind = ErrorKind.UNKNOWN  # classification carried through for recovery (e.g. compact-on-overflow)
+    kind: ErrorKind = (
+        ErrorKind.UNKNOWN
+    )  # classification carried through for recovery (e.g. compact-on-overflow)
 
 
 @dataclass
@@ -247,7 +271,7 @@ class TextStartEvent:
     """Signals the opening of a new text content block."""
 
     type: LLMEventType = field(default=LLMEventType.TextStart, init=False)
-    text: "TextContent"
+    text: TextContent
 
 
 @dataclass
@@ -255,7 +279,7 @@ class TextDeltaEvent:
     """Carries an incremental text chunk within the active text block."""
 
     type: LLMEventType = field(default=LLMEventType.TextDelta, init=False)
-    text: "TextContent"
+    text: TextContent
 
 
 @dataclass
@@ -263,7 +287,7 @@ class TextEndEvent:
     """Signals the close of a text block, carrying the fully accumulated text."""
 
     type: LLMEventType = field(default=LLMEventType.TextEnd, init=False)
-    text: "TextContent"
+    text: TextContent
 
 
 @dataclass
@@ -271,7 +295,7 @@ class ThinkingStartEvent:
     """Signals the opening of a thinking/reasoning content block."""
 
     type: LLMEventType = field(default=LLMEventType.ThinkingStart, init=False)
-    thinking: Optional["ThinkingContent"] = None
+    thinking: ThinkingContent | None = None
 
 
 @dataclass
@@ -279,7 +303,7 @@ class ThinkingDeltaEvent:
     """Carries an incremental chunk of thinking/reasoning text."""
 
     type: LLMEventType = field(default=LLMEventType.ThinkingDelta, init=False)
-    thinking: "ThinkingContent"
+    thinking: ThinkingContent
 
 
 @dataclass
@@ -287,7 +311,7 @@ class ThinkingEndEvent:
     """Signals the close of a thinking block, carrying the fully accumulated text."""
 
     type: LLMEventType = field(default=LLMEventType.ThinkingEnd, init=False)
-    thinking: "ThinkingContent"
+    thinking: ThinkingContent
 
 
 @dataclass
@@ -295,7 +319,7 @@ class ToolCallStartEvent:
     """Signals that the model has started emitting a tool call (id and name known)."""
 
     type: LLMEventType = field(default=LLMEventType.ToolCallStart, init=False)
-    tool_call: "ToolCallContent"
+    tool_call: ToolCallContent
 
 
 @dataclass
@@ -303,7 +327,7 @@ class ToolCallDeltaEvent:
     """Carries a partial JSON arguments chunk for an in-progress tool call."""
 
     type: LLMEventType = field(default=LLMEventType.ToolCallDelta, init=False)
-    tool_call: "ToolCallContent"
+    tool_call: ToolCallContent
 
 
 @dataclass
@@ -311,7 +335,7 @@ class ToolCallEndEvent:
     """Signals the completion of a tool call with the final parsed arguments."""
 
     type: LLMEventType = field(default=LLMEventType.ToolCallEnd, init=False)
-    tool_call: "ToolCallContent"
+    tool_call: ToolCallContent
 
 
 LLMEvent = (
@@ -333,7 +357,8 @@ LLMEvent = (
 
 # ── Image types ───────────────────────────────────────────────────────────────
 
-class ImageStopReason(str, Enum):
+
+class ImageStopReason(StrEnum):
     """Normalised reason an image generation run stopped."""
 
     Stop = "stop"
@@ -345,22 +370,22 @@ class ImageStopReason(str, Enum):
 class ImageOptions:
     """Runtime configuration for image generation API calls."""
 
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    headers: Optional[dict[str, str]] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    headers: dict[str, str] | None = None
     timeout: timedelta = field(default_factory=lambda: timedelta(seconds=120))
     max_retries: int = 3
-    on_payload: Optional[PayloadCallback] = None
-    on_response: Optional[ResponseCallback] = None
+    on_payload: PayloadCallback | None = None
+    on_response: ResponseCallback | None = None
 
 
 @dataclass
 class ImageContext:
     """Inputs for a single image generation request."""
 
-    contents: list["TextContent | ImageContent"]
-    size: Optional[str] = None
-    quality: Optional[str] = None
+    contents: list[TextContent | ImageContent]
+    size: str | None = None
+    quality: str | None = None
     n: int = 1
 
 
@@ -370,30 +395,33 @@ class GeneratedImage:
 
     model_id: str
     provider: str
-    output: list["TextContent | ImageContent"]
+    output: list[TextContent | ImageContent]
     stop_reason: ImageStopReason
-    usage: Any = field(default_factory=lambda: __import__("tau.message.types", fromlist=["Usage"]).Usage())
+    usage: Any = field(
+        default_factory=lambda: __import__("tau.message.types", fromlist=["Usage"]).Usage()
+    )
     error: str = ""
     timestamp: float = field(default_factory=time.time)
 
 
 # ── Video types ───────────────────────────────────────────────────────────────
 
-class VideoFormat(str, Enum):
+
+class VideoFormat(StrEnum):
     """Container format for generated video output."""
 
-    MP4  = "mp4"
+    MP4 = "mp4"
     WEBM = "webm"
-    MOV  = "mov"
-    GIF  = "gif"
+    MOV = "mov"
+    GIF = "gif"
 
 
-class VideoStopReason(str, Enum):
+class VideoStopReason(StrEnum):
     """Normalised reason a video generation job stopped."""
 
-    Stop    = "stop"
-    Error   = "error"
-    Abort   = "abort"
+    Stop = "stop"
+    Error = "error"
+    Abort = "abort"
     Timeout = "timeout"
 
 
@@ -401,14 +429,14 @@ class VideoStopReason(str, Enum):
 class VideoOptions:
     """Runtime configuration for video generation API calls."""
 
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    headers: Optional[dict[str, str]] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    headers: dict[str, str] | None = None
     timeout: timedelta = field(default_factory=lambda: timedelta(seconds=600))
     poll_interval: float = 3.0
     max_retries: int = 3
-    on_payload: Optional[PayloadCallback] = None
-    on_response: Optional[ResponseCallback] = None
+    on_payload: PayloadCallback | None = None
+    on_response: ResponseCallback | None = None
 
 
 @dataclass
@@ -416,10 +444,10 @@ class VideoContext:
     """Inputs for a single video generation request."""
 
     prompt: str
-    image: Optional[bytes] = None
-    duration: Optional[float] = None
-    aspect_ratio: Optional[str] = None
-    resolution: Optional[str] = None
+    image: bytes | None = None
+    duration: float | None = None
+    aspect_ratio: str | None = None
+    resolution: str | None = None
 
 
 @dataclass
@@ -428,10 +456,10 @@ class GeneratedVideo:
 
     model_id: str
     provider: str
-    url: Optional[str] = None
-    video: Optional[bytes] = None
+    url: str | None = None
+    video: bytes | None = None
     format: VideoFormat = VideoFormat.MP4
-    duration: Optional[float] = None
+    duration: float | None = None
     stop_reason: VideoStopReason = VideoStopReason.Stop
     usage: Any = None
     error: str = ""
@@ -440,7 +468,8 @@ class GeneratedVideo:
 
 # ── Audio types ───────────────────────────────────────────────────────────────
 
-class AudioFormat(str, Enum):
+
+class AudioFormat(StrEnum):
     """Audio codec/container format for TTS output or STT input."""
 
     MP3 = "mp3"
@@ -451,7 +480,7 @@ class AudioFormat(str, Enum):
     PCM = "pcm"
 
 
-class AudioStopReason(str, Enum):
+class AudioStopReason(StrEnum):
     """Normalised reason an audio synthesis or transcription call stopped."""
 
     Stop = "stop"
@@ -459,7 +488,7 @@ class AudioStopReason(str, Enum):
     Abort = "abort"
 
 
-class TimestampGranularity(str, Enum):
+class TimestampGranularity(StrEnum):
     """Level of timestamp detail requested in a transcription response."""
 
     Word = "word"
@@ -470,13 +499,13 @@ class TimestampGranularity(str, Enum):
 class AudioOptions:
     """Runtime configuration for TTS and STT API calls."""
 
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    headers: Optional[dict[str, str]] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    headers: dict[str, str] | None = None
     timeout: timedelta = field(default_factory=lambda: timedelta(seconds=120))
     max_retries: int = 3
-    on_payload: Optional[PayloadCallback] = None
-    on_response: Optional[ResponseCallback] = None
+    on_payload: PayloadCallback | None = None
+    on_response: ResponseCallback | None = None
 
 
 @dataclass
@@ -487,8 +516,8 @@ class TTSContext:
     voice: str
     speed: float = 1.0
     response_format: AudioFormat = AudioFormat.MP3
-    language: Optional[str] = None
-    instructions: Optional[str] = None
+    language: str | None = None
+    instructions: str | None = None
 
 
 @dataclass
@@ -516,10 +545,10 @@ class STTContext:
 
     audio: bytes
     format: AudioFormat = AudioFormat.MP3
-    language: Optional[str] = None
+    language: str | None = None
     temperature: float = 0.0
     timestamp_granularities: list[TimestampGranularity] = field(default_factory=list)
-    prompt: Optional[str] = None
+    prompt: str | None = None
 
 
 @dataclass
@@ -543,8 +572,8 @@ class TranscribedAudio:
     model_id: str
     provider: str
     text: str
-    language: Optional[str] = None
-    duration: Optional[float] = None
+    language: str | None = None
+    duration: float | None = None
     words: list[WordTimestamp] = field(default_factory=list)
     segments: list[SegmentTimestamp] = field(default_factory=list)
     stop_reason: AudioStopReason = AudioStopReason.Stop

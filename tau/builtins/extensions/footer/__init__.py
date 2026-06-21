@@ -1,4 +1,5 @@
 """Built-in footer status extension — git branch left, model/context right."""
+
 from __future__ import annotations
 
 from .git import GitBadge
@@ -8,9 +9,9 @@ from .model import ModelBadge
 def register(tau: object) -> None:
     from tau.tui.component import Row
 
-    git_badge   = GitBadge()
+    git_badge = GitBadge()
     model_badge = ModelBadge()
-    row         = Row([(git_badge, "left"), (model_badge, "right")])  # type: ignore[arg-type]
+    row = Row([(git_badge, "left"), (model_badge, "right")])  # type: ignore[arg-type]
 
     def _request_render(ctx: object) -> None:
         layout = getattr(ctx, "_layout", None)

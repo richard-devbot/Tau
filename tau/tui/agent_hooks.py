@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Awaitable, Callable, TYPE_CHECKING
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tau.runtime.service import Runtime
@@ -21,11 +22,11 @@ def _find_component(root: object, attr: str) -> object | None:
         return None
     if hasattr(root, attr):
         return root
-    for child in (getattr(root, "children", None) or []):
+    for child in getattr(root, "children", None) or []:
         found = _find_component(child, attr)
         if found is not None:
             return found
-    for slot in (getattr(root, "_slots", None) or []):
+    for slot in getattr(root, "_slots", None) or []:
         comp = slot[0] if isinstance(slot, tuple) else slot
         found = _find_component(comp, attr)
         if found is not None:
@@ -41,10 +42,15 @@ class AgentHookHandler:
     ``unsubscribe()`` (or use the returned unsub callables) on teardown.
     """
 
-    def __init__(self, runtime: Runtime, layout: Layout, tui: TUI,
-                 on_palette_refresh: Callable[[], None] | None = None,
-                 on_turn_content: Callable[[], None] | None = None,
-                 on_settled: Callable[[], Awaitable[None]] | None = None) -> None:
+    def __init__(
+        self,
+        runtime: Runtime,
+        layout: Layout,
+        tui: TUI,
+        on_palette_refresh: Callable[[], None] | None = None,
+        on_turn_content: Callable[[], None] | None = None,
+        on_settled: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         self._runtime = runtime
         self._layout = layout
         self._tui = tui
@@ -69,22 +75,22 @@ class AgentHookHandler:
             return
         hooks = agent.hooks
         self._unsubs = [
-            hooks.register("agent_start",          self._on_agent_start),
-            hooks.register("agent_end",            self._on_agent_end),
-            hooks.register("settled",              self._on_settled),
-            hooks.register("message_start",        self._on_message_start),
-            hooks.register("message_update",       self._on_message_update),
-            hooks.register("message_end",          self._on_message_end),
-            hooks.register("message_rollback",     self._on_message_rollback),
+            hooks.register("agent_start", self._on_agent_start),
+            hooks.register("agent_end", self._on_agent_end),
+            hooks.register("settled", self._on_settled),
+            hooks.register("message_start", self._on_message_start),
+            hooks.register("message_update", self._on_message_update),
+            hooks.register("message_end", self._on_message_end),
+            hooks.register("message_rollback", self._on_message_rollback),
             hooks.register("tool_execution_start", self._on_tool_start),
-            hooks.register("tool_execution_end",   self._on_tool_end),
-            hooks.register("model_select",         self._on_model_select),
-            hooks.register("terminal_execution",       self._on_terminal_execution),
-            hooks.register("terminal_output",          self._on_terminal_output),
-            hooks.register("session_start",        self._on_session_start),
-            hooks.register("queue_update",         self._on_queue_update),
-            hooks.register("compaction_start",     self._on_compaction_start),
-            hooks.register("compaction_end",       self._on_compaction_end),
+            hooks.register("tool_execution_end", self._on_tool_end),
+            hooks.register("model_select", self._on_model_select),
+            hooks.register("terminal_execution", self._on_terminal_execution),
+            hooks.register("terminal_output", self._on_terminal_output),
+            hooks.register("session_start", self._on_session_start),
+            hooks.register("queue_update", self._on_queue_update),
+            hooks.register("compaction_start", self._on_compaction_start),
+            hooks.register("compaction_end", self._on_compaction_end),
         ]
 
     def unsubscribe(self) -> None:
@@ -96,6 +102,7 @@ class AgentHookHandler:
 
     async def _on_session_start(self, event: object) -> None:
         from tau.hooks.session import SessionStartReason
+
         reason = getattr(event, "reason", None)
         # Reasons that swap in a different message history: Fork/Resume/Clone
         # replay the new branch into the transcript; New just clears it.
@@ -136,6 +143,7 @@ class AgentHookHandler:
             return
         try:
             from tau.extensions.context import ExtensionContext
+
             update(ExtensionContext.from_runtime(self._runtime))
         except Exception:
             pass
@@ -177,7 +185,8 @@ class AgentHookHandler:
         self._tui.request_render()
 
     async def _on_message_update(self, event: object) -> None:
-        from tau.message.types import ThinkingContent, TextContent
+        from tau.message.types import TextContent, ThinkingContent
+
         msg = getattr(event, "message", None)
         if msg is None or self._current_block is None:
             return
@@ -215,6 +224,7 @@ class AgentHookHandler:
 
     async def _on_message_end(self, event: object) -> None:
         from tau.message.types import AssistantMessage, ToolMessage
+
         # Cancel any pending batch flush — message_end supersedes it.
         if self._pending_flush_handle is not None:
             self._pending_flush_handle.cancel()
@@ -298,7 +308,7 @@ class AgentHookHandler:
             engine_state = agent._engine.state
 
         steering: list[str] = []
-        followup:  list[str] = []
+        followup: list[str] = []
 
         if engine_state is not None:
             for queue, out in [
@@ -308,7 +318,8 @@ class AgentHookHandler:
                 if queue:
                     for msg in queue.snapshot():
                         text = "".join(
-                            c.content for c in getattr(msg, "contents", [])
+                            c.content
+                            for c in getattr(msg, "contents", [])
                             if isinstance(c, TextContent)
                         )
                         if text:
@@ -355,5 +366,6 @@ class AgentHookHandler:
 
 def _text_length(message: object) -> int:
     from tau.message.types import TextContent
+
     contents = getattr(message, "contents", [])
     return sum(len(item.content) for item in contents if isinstance(item, TextContent))

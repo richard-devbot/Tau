@@ -53,9 +53,12 @@ def _probe_cell_dimensions() -> CellDimensions:
 def _tmux_forwards_hyperlinks() -> bool:
     try:
         import subprocess
+
         result = subprocess.run(
             ["tmux", "display-message", "-p", "#{client_termfeatures}"],
-            capture_output=True, text=True, timeout=0.25,
+            capture_output=True,
+            text=True,
+            timeout=0.25,
         )
         return "hyperlinks" in result.stdout.split(",")
     except Exception:
@@ -70,7 +73,9 @@ def detect_capabilities() -> TerminalCapabilities:
     truecolor = color_term in ("truecolor", "24bit")
 
     if os.environ.get("TMUX") or term.startswith("tmux"):
-        return TerminalCapabilities(images=None, truecolor=truecolor, hyperlinks=_tmux_forwards_hyperlinks())
+        return TerminalCapabilities(
+            images=None, truecolor=truecolor, hyperlinks=_tmux_forwards_hyperlinks()
+        )
 
     if term.startswith("screen"):
         return TerminalCapabilities(images=None, truecolor=truecolor, hyperlinks=False)

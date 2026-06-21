@@ -7,9 +7,11 @@ Each line on stdout is a JSON object (event or response).
 Protocol matches the reference implementation (rpc-types.ts).
 Commands are dispatched via :func:`run_rpc_mode`.
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import json
 import sys
@@ -22,6 +24,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Output helpers
 # ---------------------------------------------------------------------------
+
 
 def _write(obj: dict) -> None:
     """Write a JSON line to stdout immediately."""
@@ -38,6 +41,7 @@ def _serialize_event(event: object) -> dict:
 # ---------------------------------------------------------------------------
 # Extension UI context for RPC
 # ---------------------------------------------------------------------------
+
 
 class RpcExtensionUIContext:
     """
@@ -96,8 +100,17 @@ class RpcExtensionUIContext:
     def set_status(self, status_key: str, status_text: str | None) -> None:
         self._fire({"method": "setStatus", "statusKey": status_key, "statusText": status_text})
 
-    def set_widget(self, widget_key: str, widget_lines: list[str] | None, placement: str = "aboveEditor") -> None:
-        self._fire({"method": "setWidget", "widgetKey": widget_key, "widgetLines": widget_lines, "widgetPlacement": placement})
+    def set_widget(
+        self, widget_key: str, widget_lines: list[str] | None, placement: str = "aboveEditor"
+    ) -> None:
+        self._fire(
+            {
+                "method": "setWidget",
+                "widgetKey": widget_key,
+                "widgetLines": widget_lines,
+                "widgetPlacement": placement,
+            }
+        )
 
     def set_title(self, title: str) -> None:
         self._fire({"method": "setTitle", "title": title})
@@ -110,7 +123,10 @@ class RpcExtensionUIContext:
 # Command dispatcher
 # ---------------------------------------------------------------------------
 
-async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, asyncio.Future]) -> None:
+
+async def _handle_command(
+    cmd: dict, runtime: Runtime, ui_pending: dict[str, asyncio.Future]
+) -> None:
     """Dispatch one RPC command. Writes a response line when done."""
     cmd_type = cmd.get("type", "")
     cmd_id = cmd.get("id")
@@ -131,7 +147,6 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
 
     try:
         match cmd_type:
-
             # ── Prompting ────────────────────────────────────────────────────
 
             case "prompt":
@@ -148,11 +163,13 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                     return
 
                 if is_streaming and streaming_behavior == "steer":
-                    from tau.message.types import UserMessage, TextContent
+                    from tau.message.types import TextContent, UserMessage
+
                     msg = UserMessage(contents=[TextContent(content=text)])
                     await agent._engine.steer(msg)  # type: ignore[union-attr]
                 elif is_streaming and streaming_behavior == "followUp":
-                    from tau.message.types import UserMessage, TextContent
+                    from tau.message.types import TextContent, UserMessage
+
                     msg = UserMessage(contents=[TextContent(content=text)])
                     await agent._engine.follow_up(msg)  # type: ignore[union-attr]
                 else:
@@ -168,7 +185,8 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 if agent is None:
                     _err("No active agent")
                     return
-                from tau.message.types import UserMessage, TextContent
+                from tau.message.types import TextContent, UserMessage
+
                 msg = UserMessage(contents=[TextContent(content=text)])
                 await agent._engine.steer(msg)
                 _ok()
@@ -182,7 +200,8 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 if agent is None:
                     _err("No active agent")
                     return
-                from tau.message.types import UserMessage, TextContent
+                from tau.message.types import TextContent, UserMessage
+
                 msg = UserMessage(contents=[TextContent(content=text)])
                 await agent._engine.follow_up(msg)
                 _ok()
@@ -229,11 +248,14 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                             thinking_level = getattr(tl, "value", str(tl))
 
                 session_id = getattr(sm, "session_id", None) if sm is not None else None
-                session_file = str(getattr(sm, "session_file", "") or "") if sm is not None else None
+                session_file = (
+                    str(getattr(sm, "session_file", "") or "") if sm is not None else None
+                )
 
                 msg_count = 0
                 if sm is not None:
                     from tau.session.types import MessageEntry
+
                     msg_count = sum(1 for e in sm.get_branch() if isinstance(e, MessageEntry))
 
                 auto_compact = True
@@ -242,17 +264,19 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                     if compaction_cfg is not None:
                         auto_compact = bool(getattr(compaction_cfg, "enabled", True))
 
-                _ok({
-                    "model": model_info,
-                    "thinkingLevel": thinking_level,
-                    "isStreaming": is_streaming,
-                    "isCompacting": False,
-                    "sessionFile": session_file,
-                    "sessionId": session_id,
-                    "autoCompactionEnabled": auto_compact,
-                    "messageCount": msg_count,
-                    "pendingMessageCount": 0,
-                })
+                _ok(
+                    {
+                        "model": model_info,
+                        "thinkingLevel": thinking_level,
+                        "isStreaming": is_streaming,
+                        "isCompacting": False,
+                        "sessionFile": session_file,
+                        "sessionId": session_id,
+                        "autoCompactionEnabled": auto_compact,
+                        "messageCount": msg_count,
+                        "pendingMessageCount": 0,
+                    }
+                )
 
             # ── Model ────────────────────────────────────────────────────────
 
@@ -269,7 +293,10 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                     llm = agent._engine.llm
                     model = getattr(llm, "model", None)
                     if model is not None:
-                        model_info = {"id": getattr(model, "id", ""), "provider": getattr(model, "provider", "")}
+                        model_info = {
+                            "id": getattr(model, "id", ""),
+                            "provider": getattr(model, "provider", ""),
+                        }
                 _ok(model_info)
 
             case "cycle_model":
@@ -279,6 +306,7 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 if agent is not None:
                     try:
                         from tau.inference.api.text.service import TextLLM
+
                         llm = agent._engine.llm
                         current_id = getattr(getattr(llm, "model", None), "id", None)
                         all_models = TextLLM.list_available()
@@ -301,13 +329,16 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 models: list[dict] = []
                 try:
                     from tau.inference.api.text.service import TextLLM
+
                     for m in TextLLM.list_available():
-                        models.append({
-                            "id": getattr(m, "id", str(m)),
-                            "provider": getattr(m, "provider", ""),
-                            "name": getattr(m, "name", "") or getattr(m, "id", ""),
-                            "contextWindow": getattr(m, "context_length", None),
-                        })
+                        models.append(
+                            {
+                                "id": getattr(m, "id", str(m)),
+                                "provider": getattr(m, "provider", ""),
+                                "name": getattr(m, "name", "") or getattr(m, "id", ""),
+                                "contextWindow": getattr(m, "context_length", None),
+                            }
+                        )
                 except Exception:
                     pass
                 _ok({"models": models})
@@ -320,6 +351,7 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 if agent is not None:
                     try:
                         from tau.inference.types import ThinkingLevel
+
                         tl = ThinkingLevel(level)
                         llm = agent._engine.llm
                         set_fn = getattr(llm, "set_thinking_level", None)
@@ -336,6 +368,7 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 if agent is not None:
                     try:
                         from tau.inference.types import ThinkingLevel
+
                         llm = agent._engine.llm
                         opts = getattr(getattr(llm, "api", None), "options", None)
                         if opts is not None:
@@ -361,30 +394,28 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 # Accept both "one-at-a-time" and "one_at_a_time" (internal)
                 py_mode = mode.replace("-", "_")
                 from tau.engine.types import SteeringMode
+
                 agent = runtime.agent
                 if agent is not None:
                     engine = agent._engine
                     queue = getattr(engine, "steering_queue", None)
                     if queue is not None and hasattr(queue, "mode"):
-                        try:
+                        with contextlib.suppress(ValueError):
                             queue.mode = SteeringMode(py_mode)
-                        except ValueError:
-                            pass
                 _ok()
 
             case "set_follow_up_mode":
                 mode = cmd.get("mode", "one-at-a-time")
                 py_mode = mode.replace("-", "_")
                 from tau.engine.types import FollowupMode
+
                 agent = runtime.agent
                 if agent is not None:
                     engine = agent._engine
                     queue = getattr(engine, "follow_up_queue", None)
                     if queue is not None and hasattr(queue, "mode"):
-                        try:
+                        with contextlib.suppress(ValueError):
                             queue.mode = FollowupMode(py_mode)
-                        except ValueError:
-                            pass
                 _ok()
 
             # ── Compaction ───────────────────────────────────────────────────
@@ -397,14 +428,19 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                     compact_fn = getattr(agent, "compact", None)
                     if callable(compact_fn):
                         import inspect
+
                         result = compact_fn(custom_instructions=instructions)
                         if inspect.isawaitable(result):
                             compaction_result = await result
                             if compaction_result is not None:
                                 result_data = {
                                     "summary": getattr(compaction_result, "summary", ""),
-                                    "firstKeptEntryId": getattr(compaction_result, "first_kept_entry_id", None),
-                                    "tokensBefore": getattr(compaction_result, "tokens_before", None),
+                                    "firstKeptEntryId": getattr(
+                                        compaction_result, "first_kept_entry_id", None
+                                    ),
+                                    "tokensBefore": getattr(
+                                        compaction_result, "tokens_before", None
+                                    ),
                                 }
                 _ok(result_data)
 
@@ -441,7 +477,9 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
 
             case "terminal":
                 terminal_cmd = cmd.get("command", "")
-                exclude = bool(cmd.get("excludeFromContext", cmd.get("exclude_from_context", False)))
+                exclude = bool(
+                    cmd.get("excludeFromContext", cmd.get("exclude_from_context", False))
+                )
                 if not terminal_cmd:
                     _err("'command' is required")
                     return
@@ -465,8 +503,9 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                     _ok({"sessionId": None, "totalMessages": 0, "cwd": None})
                     return
                 entries = sm.get_branch()
+                from tau.message.types import AssistantMessage, UserMessage
                 from tau.session.types import MessageEntry
-                from tau.message.types import UserMessage, AssistantMessage
+
                 user_count = 0
                 asst_count = 0
                 for e in entries:
@@ -485,16 +524,22 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                         tokens = getattr(usage, "tokens", None)
                         window = getattr(usage, "context_window", None) or 0
                         percent = (tokens / window * 100) if (tokens and window) else None
-                        context_usage = {"tokens": tokens, "contextWindow": window, "percent": percent}
-                _ok({
-                    "sessionFile": str(getattr(sm, "session_file", "") or ""),
-                    "sessionId": getattr(sm, "session_id", None),
-                    "userMessages": user_count,
-                    "assistantMessages": asst_count,
-                    "totalMessages": user_count + asst_count,
-                    "cwd": str(sm.cwd),
-                    "contextUsage": context_usage,
-                })
+                        context_usage = {
+                            "tokens": tokens,
+                            "contextWindow": window,
+                            "percent": percent,
+                        }
+                _ok(
+                    {
+                        "sessionFile": str(getattr(sm, "session_file", "") or ""),
+                        "sessionId": getattr(sm, "session_id", None),
+                        "userMessages": user_count,
+                        "assistantMessages": asst_count,
+                        "totalMessages": user_count + asst_count,
+                        "cwd": str(sm.cwd),
+                        "contextUsage": context_usage,
+                    }
+                )
 
             case "export_html":
                 # HTML export is not implemented; return a not-supported error
@@ -506,6 +551,7 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                     _err("'sessionPath' is required")
                     return
                 from pathlib import Path as _Path
+
                 cancelled = False
                 try:
                     await runtime.resume_session(_Path(path))
@@ -526,10 +572,15 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                     # Read the original prompt text before forking
                     sm = runtime.session_manager
                     if sm is not None:
+                        from tau.message.types import TextContent, UserMessage
                         from tau.session.types import MessageEntry
-                        from tau.message.types import UserMessage, TextContent
+
                         for e in sm.get_branch():
-                            if isinstance(e, MessageEntry) and e.id == entry_id and isinstance(e.message, UserMessage):
+                            if (
+                                isinstance(e, MessageEntry)
+                                and e.id == entry_id
+                                and isinstance(e.message, UserMessage)
+                            ):
                                 for c in e.message.contents:
                                     if isinstance(c, TextContent):
                                         fork_text += c.content
@@ -560,8 +611,9 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 if sm is None:
                     _ok({"messages": []})
                     return
+                from tau.message.types import TextContent, UserMessage
                 from tau.session.types import MessageEntry
-                from tau.message.types import UserMessage, TextContent
+
                 fork_messages = []
                 for e in sm.get_branch():
                     if not isinstance(e, MessageEntry) or not isinstance(e.message, UserMessage):
@@ -577,10 +629,13 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                 sm = runtime.session_manager
                 text = ""
                 if sm is not None:
-                    from tau.session.types import MessageEntry
                     from tau.message.types import AssistantMessage, TextContent
+                    from tau.session.types import MessageEntry
+
                     for entry in reversed(sm.get_branch()):
-                        if isinstance(entry, MessageEntry) and isinstance(entry.message, AssistantMessage):
+                        if isinstance(entry, MessageEntry) and isinstance(
+                            entry.message, AssistantMessage
+                        ):
                             for c in entry.message.contents:
                                 if isinstance(c, TextContent):
                                     text += c.content
@@ -604,6 +659,7 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
                     _ok({"messages": []})
                     return
                 from tau.session.types import MessageEntry
+
                 messages = []
                 for entry in sm.get_branch():
                     if not isinstance(entry, MessageEntry):
@@ -626,22 +682,34 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
             case "get_commands":
                 cmds = []
                 for info in runtime.commands.list():
-                    cmds.append({
-                        "name": info.name,
-                        "description": info.description,
-                        "source": "extension",
-                    })
+                    cmds.append(
+                        {
+                            "name": info.name,
+                            "description": info.description,
+                            "source": "extension",
+                        }
+                    )
                 # Also include prompt templates and skills
                 try:
                     from tau.prompts.registry import prompt_registry
+
                     for tmpl in prompt_registry.list():
-                        cmds.append({"name": tmpl.name, "description": tmpl.description, "source": "prompt"})
+                        cmds.append(
+                            {"name": tmpl.name, "description": tmpl.description, "source": "prompt"}
+                        )
                 except Exception:
                     pass
                 try:
                     from tau.skills.registry import skill_registry
+
                     for skill in skill_registry.list():
-                        cmds.append({"name": f"skill:{skill.name}", "description": skill.description or "", "source": "skill"})
+                        cmds.append(
+                            {
+                                "name": f"skill:{skill.name}",
+                                "description": skill.description or "",
+                                "source": "skill",
+                            }
+                        )
                 except Exception:
                     pass
                 _ok({"commands": cmds})
@@ -671,7 +739,8 @@ async def _handle_command(cmd: dict, runtime: "Runtime", ui_pending: dict[str, a
 # Main entry point
 # ---------------------------------------------------------------------------
 
-async def run_rpc_mode(runtime: "Runtime") -> None:
+
+async def run_rpc_mode(runtime: Runtime) -> None:
     """Run the RPC mode loop — reads JSON lines from stdin, writes to stdout."""
 
     # Pending extension UI futures keyed by request id
@@ -680,12 +749,19 @@ async def run_rpc_mode(runtime: "Runtime") -> None:
     # ── Subscribe to agent events and stream them out ────────────────────────
 
     hook_names = [
-        "agent_start", "agent_end",
-        "turn_start", "turn_end",
-        "message_start", "message_update", "message_end",
-        "tool_execution_start", "tool_execution_update", "tool_execution_end",
+        "agent_start",
+        "agent_end",
+        "turn_start",
+        "turn_end",
+        "message_start",
+        "message_update",
+        "message_end",
+        "tool_execution_start",
+        "tool_execution_update",
+        "tool_execution_end",
         "agent_error",
-        "compaction_start", "compaction_end",
+        "compaction_start",
+        "compaction_end",
         "queue_update",
         "settled",
     ]
@@ -709,6 +785,7 @@ async def run_rpc_mode(runtime: "Runtime") -> None:
         shutdown_event.set()
 
     import signal as _signal
+
     try:
         loop.add_signal_handler(_signal.SIGTERM, _on_signal)
         loop.add_signal_handler(_signal.SIGHUP, _on_signal)
@@ -717,11 +794,13 @@ async def run_rpc_mode(runtime: "Runtime") -> None:
 
     # ── Announce ready ───────────────────────────────────────────────────────
     sm = runtime.session_manager
-    _write({
-        "type": "ready",
-        "sessionId": getattr(sm, "session_id", None) if sm is not None else None,
-        "cwd": str(sm.cwd) if sm is not None else None,
-    })
+    _write(
+        {
+            "type": "ready",
+            "sessionId": getattr(sm, "session_id", None) if sm is not None else None,
+            "cwd": str(sm.cwd) if sm is not None else None,
+        }
+    )
 
     # ── Stdin reader ─────────────────────────────────────────────────────────
     reader = asyncio.StreamReader()
@@ -732,6 +811,7 @@ async def run_rpc_mode(runtime: "Runtime") -> None:
         # Fallback for environments that don't support connect_read_pipe
         async def _stdin_loop() -> None:
             import concurrent.futures
+
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             while not shutdown_event.is_set():
                 try:
@@ -747,7 +827,14 @@ async def run_rpc_mode(runtime: "Runtime") -> None:
                 try:
                     obj = json.loads(line)
                 except json.JSONDecodeError as exc:
-                    _write({"type": "response", "command": "parse", "success": False, "error": f"Failed to parse command: {exc}"})
+                    _write(
+                        {
+                            "type": "response",
+                            "command": "parse",
+                            "success": False,
+                            "error": f"Failed to parse command: {exc}",
+                        }
+                    )
                     continue
                 asyncio.ensure_future(_handle_command(obj, runtime, ui_pending))
 
@@ -771,7 +858,14 @@ async def run_rpc_mode(runtime: "Runtime") -> None:
             try:
                 obj = json.loads(line)
             except json.JSONDecodeError as exc:
-                _write({"type": "response", "command": "parse", "success": False, "error": f"Failed to parse command: {exc}"})
+                _write(
+                    {
+                        "type": "response",
+                        "command": "parse",
+                        "success": False,
+                        "error": f"Failed to parse command: {exc}",
+                    }
+                )
                 continue
             asyncio.ensure_future(_handle_command(obj, runtime, ui_pending))
 

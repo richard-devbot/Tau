@@ -4,27 +4,27 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tau.runtime.types import RuntimeConfig, RuntimeContext
 from tau.agent.service import Agent
 from tau.agent.types import PromptOptions
 from tau.commands.registry import CommandRegistry
 from tau.commands.types import ParsedCommand
+from tau.hooks.runtime import InputEvent, InputEventResult, RuntimeReadyEvent, RuntimeStopEvent
 from tau.hooks.session import (
-    SessionStartEvent,
-    SessionStartReason,
-    SessionShutdownEvent,
-    SessionShutdownReason,
+    SessionBeforeForkEvent,
+    SessionBeforeForkResult,
     SessionBeforeSwitchEvent,
     SessionBeforeSwitchReason,
     SessionBeforeSwitchResult,
-    SessionBeforeForkEvent,
-    SessionBeforeForkResult,
     SessionBeforeTreeEvent,
     SessionBeforeTreeResult,
-    TreePreparation,
+    SessionShutdownEvent,
+    SessionShutdownReason,
+    SessionStartEvent,
+    SessionStartReason,
     SessionTreeEvent,
+    TreePreparation,
 )
-from tau.hooks.runtime import InputEvent, InputEventResult, RuntimeReadyEvent, RuntimeStopEvent
+from tau.runtime.types import RuntimeConfig, RuntimeContext
 
 if TYPE_CHECKING:
     from tau.tui.components.layout import Layout
@@ -129,6 +129,7 @@ class Runtime:
         if self._layout is None:
             return
         import time
+
         from tau.message.types import CustomMessage, LinesContent
 
         msg = CustomMessage(
@@ -185,8 +186,8 @@ class Runtime:
 
     async def set_model(self, model_id: str, provider: str | None = None) -> None:
         """Swap the active model. Only safe to call when the agent is idle."""
-        from tau.inference.api.text.service import TextLLM
         from tau.hooks.tui import ModelSelectEvent
+        from tau.inference.api.text.service import TextLLM
 
         agent = self._context.agent
         if agent is None:
@@ -219,13 +220,14 @@ class Runtime:
         """Run a shell command, stream output chunks, persist to session, and emit events."""
         import asyncio
         from asyncio.subprocess import PIPE, STDOUT
-        from tau.message.types import TerminalExecutionMessage
+
         from tau.hooks.types import (
             TerminalExecutionEvent,
             TerminalOutputEvent,
             UserTerminalEvent,
             UserTerminalResult,
         )
+        from tau.message.types import TerminalExecutionMessage
 
         exit_code: int | None = None
         cancelled = False
@@ -295,15 +297,16 @@ class Runtime:
         immediately — no new session required.
         """
         from pathlib import Path
+
         from tau.agent.prompt.builder import build_prompt
         from tau.agent.prompt.types import PromptOptions
-        from tau.extensions.api import _RuntimeRef, LoadExtensionsResult
+        from tau.extensions.api import LoadExtensionsResult, _RuntimeRef
         from tau.extensions.events import EventBus
         from tau.extensions.loader import ExtensionLoader
         from tau.extensions.runtime import ExtensionRuntime
+        from tau.prompts.registry import prompt_registry
         from tau.settings.paths import get_extensions_dir
         from tau.skills.registry import skill_registry
-        from tau.prompts.registry import prompt_registry
 
         sm = self._context.settings_manager
         if sm is None:
@@ -335,8 +338,9 @@ class Runtime:
 
         # extra_theme_paths: load each directory into the theme registry
         if extra_theme_paths:
-            from tau.themes.registry import theme_registry
             import logging as _logging
+
+            from tau.themes.registry import theme_registry
 
             _log = _logging.getLogger(__name__)
             for tp in extra_theme_paths:
@@ -416,6 +420,7 @@ class Runtime:
         can't be resolved.
         """
         from pathlib import Path
+
         from tau.agent.prompt.builder import build_prompt
         from tau.agent.prompt.types import PromptOptions
         from tau.extensions.api import LoadExtensionsResult
@@ -521,6 +526,7 @@ class Runtime:
         """
         import inspect
         from types import SimpleNamespace
+
         from tau.extensions.context import ExtensionContext
 
         handlers = ext.handlers.get(event_type, [])
@@ -538,6 +544,7 @@ class Runtime:
                 # silently — a botched dispose (e.g. servers not reaped) must be
                 # visible rather than leaking resources unnoticed.
                 import logging
+
                 logging.getLogger(__name__).exception(
                     "extension %s handler for %r raised", ext.path, event_type
                 )
@@ -719,6 +726,7 @@ class Runtime:
         if with_session is None:
             return
         import inspect
+
         from tau.extensions.context import ExtensionContext
 
         ctx = ExtensionContext.from_runtime(self)

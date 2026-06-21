@@ -1,6 +1,11 @@
 from tau.extensions.api import (
-    ExtensionAPI, Extension, ExtensionError, LoadExtensionsResult,
-    ExecResult, ShortcutRegistration, FlagRegistration, _RuntimeRef,
+    ExecResult,
+    Extension,
+    ExtensionAPI,
+    ExtensionError,
+    FlagRegistration,
+    LoadExtensionsResult,
+    ShortcutRegistration,
 )
 from tau.extensions.context import ExtensionContext
 from tau.extensions.events import EventBus

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
 from typing import Any
 
 import httpx
@@ -69,6 +68,7 @@ def _parse_usage(data: dict[str, Any]) -> Usage:
 
 class OpenRouterImageAPI(BaseImageAPI):
     """Image generation API for OpenRouter models."""
+
     def __init__(self, options: ImageOptions) -> None:
         super().__init__(options)
 
@@ -108,12 +108,17 @@ class OpenRouterImageAPI(BaseImageAPI):
 
                     if not response.is_success:
                         text = response.text
-                        if attempt < self.options.max_retries and response.status_code in _RETRYABLE_STATUSES:
+                        if (
+                            attempt < self.options.max_retries
+                            and response.status_code in _RETRYABLE_STATUSES
+                        ):
                             last_error = RuntimeError(f"HTTP {response.status_code}: {text}")
                             continue
                         return GeneratedImage(
-                            model_id=model.id, provider=model.provider,
-                            output=[], stop_reason=ImageStopReason.Error,
+                            model_id=model.id,
+                            provider=model.provider,
+                            output=[],
+                            stop_reason=ImageStopReason.Error,
                             error=f"HTTP {response.status_code}: {text}",
                         )
 
@@ -128,8 +133,10 @@ class OpenRouterImageAPI(BaseImageAPI):
 
                 except asyncio.CancelledError:
                     return GeneratedImage(
-                        model_id=model.id, provider=model.provider,
-                        output=[], stop_reason=ImageStopReason.Abort,
+                        model_id=model.id,
+                        provider=model.provider,
+                        output=[],
+                        stop_reason=ImageStopReason.Abort,
                         error="Cancelled",
                     )
                 except Exception as exc:
@@ -138,7 +145,9 @@ class OpenRouterImageAPI(BaseImageAPI):
                         continue
 
         return GeneratedImage(
-            model_id=model.id, provider=model.provider,
-            output=[], stop_reason=ImageStopReason.Error,
+            model_id=model.id,
+            provider=model.provider,
+            output=[],
+            stop_reason=ImageStopReason.Error,
             error=str(last_error or "Failed after retries"),
         )

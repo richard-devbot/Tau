@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 
-from tau.engine.types import SteeringMode, FollowupMode, FollowupQueue, SteeringQueue
+from tau.engine.types import FollowupMode, FollowupQueue, SteeringMode, SteeringQueue
 from tau.message.types import UserMessage
 
 

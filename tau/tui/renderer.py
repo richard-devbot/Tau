@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from tau.tui.ansi import (
-    CURSOR_MARKER, RESET, visible_width, truncate,
-    _ANSI_RE, _char_width,  # type: ignore[attr-defined]
+    _ANSI_RE,
+    CURSOR_MARKER,
+    RESET,
+    _char_width,  # type: ignore[attr-defined]
+    truncate,
+    visible_width,
 )
-from tau.tui.terminal import Terminal
 from tau.tui.component import Component
+from tau.tui.terminal import Terminal
 
 _CURSOR_MARKER_LEN = len(CURSOR_MARKER)
 
@@ -33,9 +37,9 @@ class Renderer:
         self._terminal = terminal
         self._show_hardware_cursor = show_hardware_cursor
         self._prev_lines: list[str] = []
-        self._cursor_row: int = 0      # logical index of last rendered line
-        self._hw_cursor_row: int = 0   # where the terminal cursor actually is
-        self._viewport_top: int = 0    # first logical line visible on screen
+        self._cursor_row: int = 0  # logical index of last rendered line
+        self._hw_cursor_row: int = 0  # where the terminal cursor actually is
+        self._viewport_top: int = 0  # first logical line visible on screen
         self._max_lines: int = 0
         self._prev_width: int = 0
         self._prev_height: int = 0
@@ -101,7 +105,7 @@ class Renderer:
             if CURSOR_MARKER in _line:
                 _mi = _line.index(CURSOR_MARKER)
                 cursor_pos = (_r, visible_width(_line[:_mi]) + _LEFT_PAD)
-                new_lines[_r] = _line[:_mi] + _line[_mi + _CURSOR_MARKER_LEN:]
+                new_lines[_r] = _line[:_mi] + _line[_mi + _CURSOR_MARKER_LEN :]
                 break
 
         # Reserve the left/right margins on every line.
@@ -210,9 +214,7 @@ class Renderer:
     def clear(self) -> None:
         """Erase the entire screen and scrollback buffer."""
         self._terminal.write_flush(
-            self._terminal.begin_sync()
-            + "\x1b[2J\x1b[H\x1b[3J"
-            + self._terminal.end_sync()
+            self._terminal.begin_sync() + "\x1b[2J\x1b[H\x1b[3J" + self._terminal.end_sync()
         )
         self._prev_lines = []
         self._cursor_row = 0
@@ -264,9 +266,7 @@ class Renderer:
 
         self._position_hw_cursor(cursor_pos, new_lines)
 
-    def _position_hw_cursor(
-        self, cursor_pos: tuple[int, int] | None, new_lines: list[str]
-    ) -> None:
+    def _position_hw_cursor(self, cursor_pos: tuple[int, int] | None, new_lines: list[str]) -> None:
         """Move the hardware terminal cursor to the IME position and show/hide it."""
         if cursor_pos is None or not new_lines:
             self._terminal.write_flush("\x1b[?25l")
@@ -283,7 +283,7 @@ class Renderer:
             buf += f"\x1b[{-row_delta}A"
         buf += f"\x1b[{target_col + 1}G"  # absolute column (1-indexed)
         if self._show_hardware_cursor:
-            buf += "\x1b[?25h"              # show cursor (if enabled)
+            buf += "\x1b[?25h"  # show cursor (if enabled)
         self._terminal.write_flush(buf)
         self._hw_cursor_row = target_row
 
@@ -326,6 +326,7 @@ class Renderer:
 
 
 # ── Line helpers ──────────────────────────────────────────────────────────────
+
 
 def _fit_line(line: str, width: int) -> str:
     """Pad or truncate a line to exactly width visible columns."""

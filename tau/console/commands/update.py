@@ -9,8 +9,9 @@ import click
 
 @click.command("update")
 @click.argument("name", required=False, default=None)
-@click.option("--local", is_flag=True, default=False,
-              help="Update in project scope instead of global.")
+@click.option(
+    "--local", is_flag=True, default=False, help="Update in project scope instead of global."
+)
 def update(name: str | None, local: bool) -> None:
     """Update tau itself, or update an extension package by NAME."""
     if name is None:
@@ -50,6 +51,7 @@ def _update_tau() -> None:
     import os
     import shutil
     import subprocess
+
     from tau.settings.paths import get_app_name, get_package_name
 
     app = get_package_name()
@@ -60,9 +62,7 @@ def _update_tau() -> None:
     prefix = sys.prefix.replace(os.sep, "/")
     if "/pipx/" in prefix and shutil.which("pipx"):
         cmd = ["pipx", "upgrade", app]
-    elif "/uv/tools/" in prefix and shutil.which("uv"):
-        cmd = ["uv", "tool", "upgrade", app]
-    elif shutil.which("uv"):
+    elif "/uv/tools/" in prefix and shutil.which("uv") or shutil.which("uv"):
         cmd = ["uv", "tool", "upgrade", app]
     elif shutil.which("pipx"):
         cmd = ["pipx", "upgrade", app]

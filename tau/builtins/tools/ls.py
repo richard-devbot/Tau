@@ -1,36 +1,46 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tau.tool.types import (
-    Tool, ToolKind, ToolExecutionMode,
-    ToolInvocation, ToolResult,
-    ToolExecutionUpdateCallback, AbortSignal, ToolContext,
-)
 from tau.tool.render import call_line
+from tau.tool.types import (
+    AbortSignal,
+    Tool,
+    ToolContext,
+    ToolExecutionMode,
+    ToolExecutionUpdateCallback,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 
 def _render_ls_call(args: dict, _streaming: bool) -> list[str]:
     return call_line("ls", args.get("path", ""))
+
 
 _PREVIEW_LINES = 5
 
 
 class LsParams(BaseModel):
     """Parameters for the ls tool."""
-    path: str = Field(default="", description="Directory path to list. Defaults to the agent's cwd.")
+
+    path: str = Field(
+        default="", description="Directory path to list. Defaults to the agent's cwd."
+    )
 
 
 def _render_ls_result(content: str, opts: Any) -> list[str]:
     from tau.tui.ansi import DIM, RESET
+
     metadata = opts.metadata or {}
-    path      = metadata.get("path", "")
+    path = metadata.get("path", "")
     file_count = metadata.get("file_count", 0)
-    dir_count  = metadata.get("dir_count", 0)
-    entries    = metadata.get("entries", [])
+    dir_count = metadata.get("dir_count", 0)
+    entries = metadata.get("entries", [])
 
     parts = []
     if dir_count:
@@ -45,8 +55,8 @@ def _render_ls_result(content: str, opts: Any) -> list[str]:
 
     show = entries if opts.expanded else entries[:_PREVIEW_LINES]
     for entry in show:
-        name     = entry["name"]
-        is_dir   = entry["is_dir"]
+        name = entry["name"]
+        is_dir = entry["is_dir"]
         size_str = entry.get("size_str", "")
         if is_dir:
             result.append(f"{name}/")
@@ -64,6 +74,7 @@ def _render_ls_result(content: str, opts: Any) -> list[str]:
 
 class LsTool(Tool):
     """Tool for listing directory contents."""
+
     def __init__(self) -> None:
         super().__init__(
             name="ls",
@@ -83,9 +94,9 @@ class LsTool(Tool):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         params = LsParams.model_validate(invocation.params)
         target = Path(params.path or invocation.cwd or ".").resolve()

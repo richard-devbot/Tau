@@ -1,6 +1,7 @@
 from __future__ import annotations
-from tau.inference.api.registry import BaseAPIRegistry
+
 from tau.inference.api.audio.base import BaseAudioAPI
+from tau.inference.api.registry import BaseAPIRegistry
 
 
 class AudioAPIRegistry(BaseAPIRegistry[BaseAudioAPI]):
@@ -9,6 +10,7 @@ class AudioAPIRegistry(BaseAPIRegistry[BaseAudioAPI]):
     @classmethod
     def from_builtins(cls) -> AudioAPIRegistry:
         from tau.inference.api.audio.builtins import AUDIO_APIS
+
         instance = cls()
         for name, api in AUDIO_APIS:
             instance.register(name, api)

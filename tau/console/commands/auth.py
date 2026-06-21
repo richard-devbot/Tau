@@ -14,6 +14,7 @@ def auth():
 # list
 # ---------------------------------------------------------------------------
 
+
 @auth.command("list")
 def auth_list():
     """List all stored credentials with masked keys."""
@@ -35,6 +36,7 @@ def auth_list():
 # set
 # ---------------------------------------------------------------------------
 
+
 @auth.command("set")
 @click.argument("provider")
 @click.argument("key")
@@ -49,6 +51,7 @@ def auth_set(provider, key):
 # ---------------------------------------------------------------------------
 # unset
 # ---------------------------------------------------------------------------
+
 
 @auth.command("unset")
 @click.argument("provider")
@@ -66,11 +69,12 @@ def auth_unset(provider):
 # status
 # ---------------------------------------------------------------------------
 
+
 @auth.command("status")
 def auth_status():
     """Show configuration status for all known providers."""
-    from tau.builtins.providers.text import api_providers, oauth_providers
     from tau.auth.manager import AuthManager
+    from tau.builtins.providers.text import api_providers, oauth_providers
     from tau.inference.provider.registry import ProviderRegistry
     from tau.inference.provider.types import OAuthProvider
 
@@ -104,19 +108,21 @@ def auth_status():
 # login
 # ---------------------------------------------------------------------------
 
+
 @auth.command("login")
 @click.argument("provider")
 def auth_login(provider):
     """Start an OAuth login flow for a PROVIDER."""
     import asyncio
+
     asyncio.run(_login(provider))
 
 
 async def _login(provider_id: str) -> None:
-    from tau.builtins.providers.text import oauth_providers
     from tau.auth.manager import AuthManager
-    from tau.inference.provider.registry import ProviderRegistry
+    from tau.builtins.providers.text import oauth_providers
     from tau.inference.provider.oauth.types import OAuthLoginCallbacks
+    from tau.inference.provider.registry import ProviderRegistry
 
     oauth_ids = [p.id for p in oauth_providers]
     if provider_id not in oauth_ids:
@@ -145,17 +151,19 @@ async def _login(provider_id: str) -> None:
 # logout
 # ---------------------------------------------------------------------------
 
+
 @auth.command("logout")
 @click.argument("provider")
 def auth_logout(provider):
     """Revoke OAuth credentials for a PROVIDER."""
     import asyncio
+
     asyncio.run(_logout(provider))
 
 
 async def _logout(provider_id: str) -> None:
-    from tau.builtins.providers.text import oauth_providers
     from tau.auth.manager import AuthManager
+    from tau.builtins.providers.text import oauth_providers
     from tau.inference.provider.registry import ProviderRegistry
 
     registry = ProviderRegistry()
@@ -175,8 +183,10 @@ async def _logout(provider_id: str) -> None:
 # Storage helpers
 # ---------------------------------------------------------------------------
 
+
 def _load() -> dict:
     from tau.settings.paths import get_auth_path
+
     path = get_auth_path()
     if not path.exists():
         return {}
@@ -188,6 +198,7 @@ def _load() -> dict:
 
 def _save(data: dict) -> None:
     from tau.settings.paths import get_auth_path
+
     path = get_auth_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tau.message.types import CustomMessage
@@ -18,8 +19,8 @@ class MessageRendererRegistry:
 
     def render(
         self,
-        message: "CustomMessage",
-        theme: "MessageTheme",
+        message: CustomMessage,
+        theme: MessageTheme,
         width: int,
     ) -> list[str] | None:
         fn = self._registry.get(message.custom_type)

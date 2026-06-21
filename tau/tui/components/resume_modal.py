@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+import contextlib
 import re
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
+
+from tau.tui.ansi import (
+    BOLD,
+    BRIGHT_BLACK,
+    BRIGHT_RED,
+    BRIGHT_WHITE,
+    BRIGHT_YELLOW,
+    CYAN,
+    DIM,
+    RESET,
+)
 
 _MEDIA_UUID_PATTERN = re.compile(r"\[(?:image|audio|video):([^\]]+)\]")
 
@@ -44,23 +56,13 @@ def _cleanup_session_media(session_path: Path) -> None:
 
     for uid in deleted_uuids - live_uuids:
         for media_file in media_dir.glob(f"{uid}.*"):
-            try:
+            with contextlib.suppress(OSError):
                 media_file.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-from tau.tui.ansi import (
-    RESET, BOLD, DIM, BRIGHT_BLACK, BRIGHT_WHITE, BRIGHT_RED,
-    BRIGHT_YELLOW, CYAN,
-)
 
 
 def _age(dt: datetime) -> str:
     """Format a datetime as a compact relative age string."""
-    if dt.tzinfo is None:
-        now = datetime.now()
-    else:
-        now = datetime.now(tz=timezone.utc)
+    now = datetime.now() if dt.tzinfo is None else datetime.now(tz=UTC)
     secs = max(0, (now - dt).total_seconds())
     mins = int(secs / 60)
     if mins < 1:
@@ -117,8 +119,8 @@ class ResumeModal:
         self._cur_path = current_session_path
         self._max_visible = max_visible
 
-        self._scope = "current"   # "current" | "all"
-        self._sort_idx = 0        # index into _SORT_LABELS
+        self._scope = "current"  # "current" | "all"
+        self._sort_idx = 0  # index into _SORT_LABELS
         self._search = ""
         self._filtered: list = []
         self._selected = 0
@@ -243,16 +245,12 @@ class ResumeModal:
         # Hints
         if self._confirming_delete is not None:
             del_path = self._confirming_delete
-            short = _shorten(del_path)[:width - 20]
-            lines.append(
-                f"  {BRIGHT_RED}Delete '{short}'? enter=yes  esc=no{RESET}"
-            )
+            short = _shorten(del_path)[: width - 20]
+            lines.append(f"  {BRIGHT_RED}Delete '{short}'? enter=yes  esc=no{RESET}")
         elif self._status_msg:
             lines.append(f"  {BRIGHT_YELLOW}{self._status_msg}{RESET}")
         else:
-            hints = (
-                f"  {DIM}tab scope  ctrl+r sort  ctrl+d delete  type search  esc cancel{RESET}"
-            )
+            hints = f"  {DIM}tab scope  ctrl+r sort  ctrl+d delete  type search  esc cancel{RESET}"
             lines.append(hints)
 
         # Search line
@@ -282,7 +280,9 @@ class ResumeModal:
             for i in range(start, min(start + visible, count)):
                 session = self._filtered[i]
                 is_sel = i == self._selected
-                sel_path = Path(session.path) if not isinstance(session.path, Path) else session.path
+                sel_path = (
+                    Path(session.path) if not isinstance(session.path, Path) else session.path
+                )
                 is_del_target = sel_path == self._confirming_delete
 
                 display = session.name or session.id[:20]
@@ -297,7 +297,7 @@ class ResumeModal:
                 cursor = "→ " if is_sel else "  "
                 right_len = _visible_len(right)
                 available = width - 4 - right_len - 2
-                msg = display[:max(8, available)]
+                msg = display[: max(8, available)]
 
                 if is_del_target:
                     msg_styled = f"{BRIGHT_RED}{BOLD}{msg}{RESET}"
@@ -337,7 +337,8 @@ class ResumeModal:
 
         if q:
             filtered = [
-                s for s in sessions
+                s
+                for s in sessions
                 if q in (s.name or "").lower()
                 or q in s.id.lower()
                 or q in str(getattr(s, "cwd", "")).lower()
@@ -348,7 +349,8 @@ class ResumeModal:
         # Exclude active session from resume list
         if self._cur_path:
             filtered = [
-                s for s in filtered
+                s
+                for s in filtered
                 if (Path(s.path) if not isinstance(s.path, Path) else s.path) != self._cur_path
             ]
 
@@ -368,5 +370,6 @@ class ResumeModal:
 def _visible_len(s: str) -> int:
     """Approximate visible terminal width of a string (strips ANSI escapes)."""
     import re
+
     plain = re.sub(r"\x1b\[[0-9;]*[mK]|\x1b\][^\x07]*\x07", "", s)
     return len(plain)

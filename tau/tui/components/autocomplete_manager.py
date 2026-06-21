@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from tau.tui.components.autocomplete_picker import AutocompletePicker
 from tau.tui.input import InputEvent, KeyEvent
@@ -76,10 +77,13 @@ class AutocompleteManager:
             space_idx = text.find(" ")
             if space_idx != -1:
                 cmd_name = text[1:space_idx]
-                arg_prefix = text[space_idx + 1:]
+                arg_prefix = text[space_idx + 1 :]
                 cmd = next(
-                    (c for c in all_commands
-                     if c.name == cmd_name or cmd_name in (c.aliases or [])),
+                    (
+                        c
+                        for c in all_commands
+                        if c.name == cmd_name or cmd_name in (c.aliases or [])
+                    ),
                     None,
                 )
                 if cmd is not None and cmd.get_argument_completions is not None:
@@ -175,7 +179,7 @@ class AutocompleteManager:
             if ch == " ":
                 break
             if ch in triggers:
-                return ch, before[i + 1:], i
+                return ch, before[i + 1 :], i
         return None
 
     # -------------------------------------------------------------------------
@@ -188,6 +192,7 @@ class AutocompleteManager:
             return
 
         from tau.tui.autocomplete import AutocompleteContext
+
         ctx = AutocompleteContext(text=text, cursor_pos=cursor, trigger=trigger, query=query)
 
         if self._ac_pending_task is not None:
@@ -196,6 +201,7 @@ class AutocompleteManager:
 
         result = provider.get_items(ctx)
         if inspect.isawaitable(result):
+
             async def _fetch() -> None:
                 try:
                     items = await result  # type: ignore[misc]
@@ -207,6 +213,7 @@ class AutocompleteManager:
                     pass
                 except Exception:
                     pass
+
             self._ac_pending_task = asyncio.ensure_future(_fetch())
         else:
             self._ac_picker.set_items(result)  # type: ignore[arg-type]
@@ -234,6 +241,7 @@ class AutocompleteManager:
                     pass
                 except Exception:
                     pass
+
             self._cmd_arg_pending_task = asyncio.ensure_future(_fetch())
         else:
             self._cmd_arg_picker.set_items(result)  # type: ignore[arg-type]
@@ -249,11 +257,7 @@ class AutocompleteManager:
             return None
         insert = item.insert_text if item.insert_text is not None else item.label
         new_text = (
-            text[: self._ac_trigger_pos]
-            + self._ac_active_trigger
-            + insert
-            + " "
-            + text[cursor:]
+            text[: self._ac_trigger_pos] + self._ac_active_trigger + insert + " " + text[cursor:]
         )
         self._ac_picker.clear()
         self._ac_active_trigger = ""

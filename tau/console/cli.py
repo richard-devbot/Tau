@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-import sys
-import os
-import logging
-import click
 import asyncio
+import logging
+import os
+import sys
 from pathlib import Path
-from tau.runtime.service import Runtime
+
+import click
+
 from tau.console.commands.auth import auth
-from tau.console.commands.packages import install, remove, list_packages
+from tau.console.commands.packages import install, list_packages, remove
 from tau.console.commands.update import update
+from tau.runtime.service import Runtime
 from tau.settings.paths import get_app_version
 
 _MODES = ("interactive", "print", "json", "rpc")
@@ -39,34 +41,81 @@ def resolve_model(model: str | None, provider: str | None) -> tuple[str | None, 
 @click.option("--version", "-v", is_flag=True, default=False, help="Print version and exit.")
 @click.option("--debug", "-d", is_flag=True, default=False, help="Enable debug logging.")
 @click.option("--cwd", "-c", default=None, metavar="PATH", help="Set the working directory.")
-@click.option("--prompt", "-p", default=None, metavar="TEXT",
-              help="Run a single prompt in non-interactive mode.")
-@click.option("--output-format", "-f", type=click.Choice(_OUTPUT_FORMATS), default="text", show_default=True,
-              help="Output format for non-interactive mode (text, json).")
-@click.option("--quiet", "-q", is_flag=True, default=False,
-              help="Hide spinner in non-interactive mode.")
+@click.option(
+    "--prompt",
+    "-p",
+    default=None,
+    metavar="TEXT",
+    help="Run a single prompt in non-interactive mode.",
+)
+@click.option(
+    "--output-format",
+    "-f",
+    type=click.Choice(_OUTPUT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format for non-interactive mode (text, json).",
+)
+@click.option(
+    "--quiet", "-q", is_flag=True, default=False, help="Hide spinner in non-interactive mode."
+)
 @click.option("--provider", default=None, help="Provider to use (e.g. groq, mistral, openrouter).")
-@click.option("--model", default=None, help="Model ID, or provider/model shorthand (e.g. groq/llama-3.3-70b-versatile).")
-@click.option("--theme", "-t", default=None, metavar="NAME",
-              help="UI theme name (default: dark). Builtins: dark, light. See /theme for all installed themes.")
-@click.option("--resume", "-r", is_flag=True, default=False,
-              help="Resume the most recent session.")
-@click.option("--system", "-s", default=None, metavar="TEXT",
-              help="Inject additional text into the system prompt.")
-@click.option("--session", default=None, metavar="ID",
-              help="Resume a specific session by ID or path.")
-@click.option("--ephemeral", "-e", is_flag=True, default=False,
-              help="Don't save this session to disk.")
-@click.option("--print", "print_flag", is_flag=True, default=False,
-              help="Shorthand for --mode print.")
-@click.option("--mode", type=click.Choice(_MODES), default=None,
-              help="Run mode: interactive (default), print, json, rpc.")
-@click.option("--no-context-files", "-nc", is_flag=True, default=False,
-              help="Disable AGENTS.md and CLAUDE.md discovery and loading.")
-@click.option("--approve", "-a", is_flag=True, default=False,
-              help="Trust project-local files (extensions, settings, context files).")
-@click.option("--no-approve", "-na", is_flag=True, default=False,
-              help="Don't trust project-local files (opposite of --approve).")
+@click.option(
+    "--model",
+    default=None,
+    help="Model ID, or provider/model shorthand (e.g. groq/llama-3.3-70b-versatile).",
+)
+@click.option(
+    "--theme",
+    "-t",
+    default=None,
+    metavar="NAME",
+    help="UI theme name (default: dark). Builtins: dark, light. See /theme for all installed themes.",
+)
+@click.option("--resume", "-r", is_flag=True, default=False, help="Resume the most recent session.")
+@click.option(
+    "--system",
+    "-s",
+    default=None,
+    metavar="TEXT",
+    help="Inject additional text into the system prompt.",
+)
+@click.option(
+    "--session", default=None, metavar="ID", help="Resume a specific session by ID or path."
+)
+@click.option(
+    "--ephemeral", "-e", is_flag=True, default=False, help="Don't save this session to disk."
+)
+@click.option(
+    "--print", "print_flag", is_flag=True, default=False, help="Shorthand for --mode print."
+)
+@click.option(
+    "--mode",
+    type=click.Choice(_MODES),
+    default=None,
+    help="Run mode: interactive (default), print, json, rpc.",
+)
+@click.option(
+    "--no-context-files",
+    "-nc",
+    is_flag=True,
+    default=False,
+    help="Disable AGENTS.md and CLAUDE.md discovery and loading.",
+)
+@click.option(
+    "--approve",
+    "-a",
+    is_flag=True,
+    default=False,
+    help="Trust project-local files (extensions, settings, context files).",
+)
+@click.option(
+    "--no-approve",
+    "-na",
+    is_flag=True,
+    default=False,
+    help="Don't trust project-local files (opposite of --approve).",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -159,6 +208,7 @@ async def _start(opts: dict) -> None:
                 await _run_json(runtime, opts["prompt"], quiet=opts.get("quiet", False))
             case "rpc":
                 from tau.rpc.mode import run_rpc_mode
+
                 await run_rpc_mode(runtime)
     finally:
         # Emit `runtime_stop` once, in every mode, on the way out — symmetric to
@@ -166,20 +216,22 @@ async def _start(opts: dict) -> None:
         await runtime.ashutdown()
 
 
-async def _run_interactive(runtime: "Runtime", theme: str | None) -> None:
+async def _run_interactive(runtime: Runtime, theme: str | None) -> None:
     """Run the interactive TUI mode."""
     from tau.tui.app import App
+
     app = await App.create(runtime, theme=theme)
     await app.run()
 
 
-async def _run_print(runtime: "Runtime", message: str | None, quiet: bool = False) -> None:
+async def _run_print(runtime: Runtime, message: str | None, quiet: bool = False) -> None:
     """Run in print mode: send a message and print the response."""
     if not message:
-        raise click.ClickException("A message is required in print mode. Usage: tau --print \"your prompt\"")
+        raise click.ClickException(
+            'A message is required in print mode. Usage: tau --print "your prompt"'
+        )
 
     from tau.message.types import AssistantMessage
-    from tau.hooks.types import SettledEvent
 
     result: AssistantMessage | None = None
     settled = asyncio.Event()
@@ -214,13 +266,16 @@ async def _run_print(runtime: "Runtime", message: str | None, quiet: bool = Fals
             click.echo(content.text, nl=False)
 
 
-async def _run_json(runtime: "Runtime", message: str | None, quiet: bool = False) -> None:
+async def _run_json(runtime: Runtime, message: str | None, quiet: bool = False) -> None:
     """Run in JSON mode: send a message and return structured JSON output."""
     if not message:
-        raise click.ClickException("A message is required in json mode. Usage: tau --mode json \"your prompt\"")
+        raise click.ClickException(
+            'A message is required in json mode. Usage: tau --mode json "your prompt"'
+        )
 
-    import json
     import dataclasses
+    import json
+
     from tau.hooks.types import SettledEvent
 
     settled = asyncio.Event()
@@ -238,8 +293,13 @@ async def _run_json(runtime: "Runtime", message: str | None, quiet: bool = False
 
     hooks = runtime.hooks
     hook_names = [
-        "agent_start", "agent_end", "message_start", "message_update",
-        "message_end", "tool_execution_start", "tool_execution_end",
+        "agent_start",
+        "agent_end",
+        "message_start",
+        "message_update",
+        "message_end",
+        "tool_execution_start",
+        "tool_execution_end",
         "settled",
     ]
     unsubs = [hooks.register(name, on_event) for name in hook_names]

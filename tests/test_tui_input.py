@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from tau.tui.input import (
+    BgColorEvent,
+    Key,
     KeyEvent,
+    MouseEvent,
+    PasteEvent,
     _normalize_keyid,
     matches_key,
-    Key,
-    PasteEvent,
-    MouseEvent,
-    BgColorEvent,
 )
 
 

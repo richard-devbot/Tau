@@ -4,12 +4,12 @@ from __future__ import annotations
 import re
 
 from tau.tui.theme import (
-    SpinnerTheme,
+    InputTheme,
+    LayoutTheme,
     MarkdownTheme,
     MessageTheme,
-    InputTheme,
     SelectListTheme,
-    LayoutTheme,
+    SpinnerTheme,
     color,
     rgb,
     rgb_bold,

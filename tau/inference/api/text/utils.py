@@ -1,14 +1,19 @@
 """Shared utilities for LLM API provider implementations."""
+
 from __future__ import annotations
 
 import json
 from typing import Any
 
-
 __all__ = [
     "parse_tool_args",
-    "openai_user_content", "openai_assistant_content", "openai_messages_to_chat", "openai_response_format",
-    "anthropic_messages_to_list", "anthropic_output_config", "anthropic_apply_message_cache",
+    "openai_user_content",
+    "openai_assistant_content",
+    "openai_messages_to_chat",
+    "openai_response_format",
+    "anthropic_messages_to_list",
+    "anthropic_output_config",
+    "anthropic_apply_message_cache",
 ]
 
 
@@ -33,6 +38,7 @@ def anthropic_apply_message_cache(
     Returns a new list; the original is not mutated.
     """
     import copy
+
     messages = copy.deepcopy(messages)
     total = len(messages)
     stable_end = total - skip_tail  # index just past the last stable message
@@ -72,7 +78,8 @@ def parse_tool_args(value: Any) -> dict:
 
 def openai_user_content(content_items: list) -> str | list[dict[str, Any]]:
     """Convert user message contents to OpenAI chat format (completions/copilot/mistral)."""
-    from tau.message.types import TextContent, ImageContent
+    from tau.message.types import ImageContent, TextContent
+
     parts: list[dict[str, Any]] = []
     for item in content_items:
         match item:
@@ -80,7 +87,11 @@ def openai_user_content(content_items: list) -> str | list[dict[str, Any]]:
                 parts.append({"type": "text", "text": item.content})
             case ImageContent():
                 for b64, mime in item.to_base64():
-                    url = b64 if b64.startswith("http") else f"data:{mime or 'image/png'};base64,{b64}"
+                    url = (
+                        b64
+                        if b64.startswith("http")
+                        else f"data:{mime or 'image/png'};base64,{b64}"
+                    )
                     parts.append({"type": "image_url", "image_url": {"url": url}})
                 if item.dimension_note:
                     parts.append({"type": "text", "text": item.dimension_note})
@@ -92,6 +103,7 @@ def openai_user_content(content_items: list) -> str | list[dict[str, Any]]:
 def openai_assistant_content(content_items: list) -> tuple[str | None, list[dict[str, Any]]]:
     """Convert assistant message contents to OpenAI chat format (completions/copilot)."""
     from tau.message.types import TextContent, ToolCallContent
+
     text_parts: list[str] = []
     tool_calls: list[dict[str, Any]] = []
     for item in content_items:
@@ -99,17 +111,20 @@ def openai_assistant_content(content_items: list) -> tuple[str | None, list[dict
             case TextContent():
                 text_parts.append(item.content)
             case ToolCallContent():
-                tool_calls.append({
-                    "id": item.id,
-                    "type": "function",
-                    "function": {"name": item.name, "arguments": json.dumps(item.args)},
-                })
+                tool_calls.append(
+                    {
+                        "id": item.id,
+                        "type": "function",
+                        "function": {"name": item.name, "arguments": json.dumps(item.args)},
+                    }
+                )
     return "".join(text_parts) or None, tool_calls
 
 
 def openai_response_format(response_format: Any | None) -> dict[str, Any] | None:
     """Convert response_format to OpenAI json_schema format (completions/copilot/mistral)."""
     from tau.inference.types import normalize_structured_response_format
+
     structured = normalize_structured_response_format(response_format)
     if structured is None:
         return None
@@ -126,9 +141,14 @@ def openai_response_format(response_format: Any | None) -> dict[str, Any] | None
 def openai_messages_to_chat(messages: list) -> list[dict[str, Any]]:
     """Convert a message list to OpenAI chat completions format."""
     from tau.message.types import (
-        SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-        TextContent, ToolResultContent,
+        AssistantMessage,
+        SystemMessage,
+        TextContent,
+        ToolMessage,
+        ToolResultContent,
+        UserMessage,
     )
+
     result: list[dict[str, Any]] = []
     for msg in messages:
         match msg:
@@ -150,24 +170,36 @@ def openai_messages_to_chat(messages: list) -> list[dict[str, Any]]:
             case ToolMessage():
                 for content in msg.contents:
                     if isinstance(content, ToolResultContent):
-                        result.append({
-                            "role": "tool",
-                            "tool_call_id": content.id,
-                            "content": content.content,
-                        })
+                        result.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": content.id,
+                                "content": content.content,
+                            }
+                        )
     return result
 
 
-def anthropic_messages_to_list(messages: list, supports_thinking: bool = True) -> tuple[str | None, list[dict[str, Any]]]:
+def anthropic_messages_to_list(
+    messages: list, supports_thinking: bool = True
+) -> tuple[str | None, list[dict[str, Any]]]:
     """Convert a message list to Anthropic Messages API format.
 
     When supports_thinking is False, ThinkingContent blocks are stripped so
     non-extended-thinking models don't receive reasoning input they can't accept.
     """
     from tau.message.types import (
-        SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-        TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+        AssistantMessage,
+        ImageContent,
+        SystemMessage,
+        TextContent,
+        ThinkingContent,
+        ToolCallContent,
+        ToolMessage,
+        ToolResultContent,
+        UserMessage,
     )
+
     system: str | None = None
     result: list[dict[str, Any]] = []
     for msg in messages:
@@ -188,10 +220,16 @@ def anthropic_messages_to_list(messages: list, supports_thinking: bool = True) -
                         case ImageContent():
                             has_image = True
                             for b64, mime in item.to_base64():
-                                parts.append({
-                                    "type": "image",
-                                    "source": {"type": "base64", "media_type": mime or "image/png", "data": b64},
-                                })
+                                parts.append(
+                                    {
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": mime or "image/png",
+                                            "data": b64,
+                                        },
+                                    }
+                                )
                             if item.dimension_note:
                                 parts.append({"type": "text", "text": item.dimension_note})
                 if has_image and not has_text:
@@ -210,11 +248,24 @@ def anthropic_messages_to_list(messages: list, supports_thinking: bool = True) -
                                 text_parts_asst.append(item.content)
                         case ThinkingContent():
                             if supports_thinking:
-                                parts.append({"type": "thinking", "thinking": item.content, "signature": item.signature})
+                                parts.append(
+                                    {
+                                        "type": "thinking",
+                                        "thinking": item.content,
+                                        "signature": item.signature,
+                                    }
+                                )
                             else:
                                 thinking_parts.append(item.content)
                         case ToolCallContent():
-                            parts.append({"type": "tool_use", "id": item.id, "name": item.name, "input": item.args})
+                            parts.append(
+                                {
+                                    "type": "tool_use",
+                                    "id": item.id,
+                                    "name": item.name,
+                                    "input": item.args,
+                                }
+                            )
                 if not supports_thinking and (thinking_parts or text_parts_asst):
                     merged = "\n".join(thinking_parts + text_parts_asst)
                     parts.insert(0, {"type": "text", "text": merged})
@@ -223,12 +274,14 @@ def anthropic_messages_to_list(messages: list, supports_thinking: bool = True) -
                 tool_results = []
                 for content in msg.contents:
                     if isinstance(content, ToolResultContent):
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": content.id,
-                            "content": content.content,
-                            "is_error": content.is_error,
-                        })
+                        tool_results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": content.id,
+                                "content": content.content,
+                                "is_error": content.is_error,
+                            }
+                        )
                 if tool_results:
                     result.append({"role": "user", "content": tool_results})
     return system, result
@@ -237,6 +290,7 @@ def anthropic_messages_to_list(messages: list, supports_thinking: bool = True) -
 def anthropic_output_config(response_format: Any | None) -> dict[str, Any] | None:
     """Convert response_format to Anthropic output config format."""
     from tau.inference.types import normalize_structured_response_format
+
     structured = normalize_structured_response_format(response_format)
     if structured is None:
         return None

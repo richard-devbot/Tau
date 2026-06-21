@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from tau.builtins.extensions.footer.utils import read_branch, shorten_home
 

@@ -1,22 +1,27 @@
 from __future__ import annotations
+
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, Type
-from pydantic import BaseModel
+from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from tau.inference.api.text.service import TextLLM as LLM
     from tau.settings.manager import SettingsManager
 
+
 @dataclass
 class ToolError:
     """File-level tool load failure with optional stack trace."""
+
     path: str
     error: str
-    stack: str = ''
+    stack: str = ""
 
 
 @dataclass
@@ -27,7 +32,7 @@ class LoadToolResults:
     errors: list[ToolError] = field(default_factory=list)
 
 
-class ToolKind(str, Enum):
+class ToolKind(StrEnum):
     """Semantic category used by the engine to apply execution policy to a tool call."""
 
     Read = "read"
@@ -37,7 +42,7 @@ class ToolKind(str, Enum):
     Web = "web"
 
 
-class ToolExecutionMode(str, Enum):
+class ToolExecutionMode(StrEnum):
     """Controls how the engine schedules concurrent calls to the same tool."""
 
     Sequential = "sequential"
@@ -48,6 +53,7 @@ class ToolExecutionMode(str, Enum):
 @dataclass
 class ToolInvocation:
     """Complete tool call specification with resolved args and execution context."""
+
     id: str
     name: str
     cwd: Path | None
@@ -57,6 +63,7 @@ class ToolInvocation:
 @dataclass
 class ToolResult:
     """Tool execution outcome with optional error flag and early termination signal."""
+
     id: str
     content: str
     is_error: bool = False
@@ -102,6 +109,7 @@ class ToolResult:
         """
         return cls(id=id, content=content, is_error=True, metadata=metadata or {})
 
+
 ToolExecutionUpdateCallback = Callable[[ToolResult], Awaitable[None]]
 
 AbortSignal = asyncio.Event
@@ -110,6 +118,7 @@ AbortSignal = asyncio.Event
 @dataclass
 class ToolContext:
     """Runtime services available to tools during execution (LLM, agents, managers, etc)."""
+
     llm: LLM | None = None
     cwd: Path | None = None
     settings: SettingsManager | None = None
@@ -124,12 +133,11 @@ class ToolRenderOptions:
     is_partial: True while the tool is still executing (streaming output).
     metadata:   Arbitrary data the tool stored in ToolResult.metadata.
     """
+
     is_error: bool = False
     expanded: bool = False
     is_partial: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
-
-
 
 
 class Tool(ABC):
@@ -137,24 +145,24 @@ class Tool(ABC):
 
     # Explicit class-level annotations so Pyright infers the correct attribute
     # types at every call site without relying on __init__ parameter inference.
-    render_call: Optional[Callable[[dict, bool], list[str]]]
-    render_result: Optional[Callable[[str, "ToolRenderOptions"], list[str]]]
+    render_call: Callable[[dict, bool], list[str]] | None
+    render_result: Callable[[str, ToolRenderOptions], list[str]] | None
     render_shell: str
 
     def __init__(
         self,
         name: str,
         description: str,
-        schema: Type[BaseModel],
+        schema: type[BaseModel],
         kind: ToolKind,
         execution_mode: ToolExecutionMode = ToolExecutionMode.Sequential,
         *,
-        render_call: Optional[Callable[[dict, bool], list[str]]] = None,
-        render_result: Optional[Callable[[str, "ToolRenderOptions"], list[str]]] = None,
+        render_call: Callable[[dict, bool], list[str]] | None = None,
+        render_result: Callable[[str, ToolRenderOptions], list[str]] | None = None,
         render_shell: str = "self",
-        prompt_snippet: Optional[str] = None,
-        prompt_guidelines: Optional[str] = None,
-        prepare_arguments: Optional[Callable[[dict], dict]] = None,
+        prompt_snippet: str | None = None,
+        prompt_guidelines: str | None = None,
+        prepare_arguments: Callable[[dict], dict] | None = None,
     ) -> None:
         """Initialize tool with name, description, schema, kind, and execution concurrency policy.
 
@@ -189,6 +197,7 @@ class Tool(ABC):
             return True, []
         except Exception as e:
             from pydantic import ValidationError
+
             # Format Pydantic errors with field path for clarity
             if isinstance(e, ValidationError):
                 errors = [
@@ -211,7 +220,7 @@ class Tool(ABC):
             "input_schema": self.schema.model_json_schema(),
         }
 
-    def _is_cancelled(self, signal: Optional[AbortSignal]) -> bool:
+    def _is_cancelled(self, signal: AbortSignal | None) -> bool:
         """Check if abort signal has been set.
 
         Args:
@@ -226,9 +235,9 @@ class Tool(ABC):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         """Execute the tool with params; subclasses must override.
 

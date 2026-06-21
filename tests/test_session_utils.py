@@ -5,22 +5,19 @@ import json
 import time
 from pathlib import Path
 
-import pytest
-
-from tau.session.utils import (
-    generate_id,
-    get_default_session_dir,
-    is_valid_session_file,
-    find_most_recent_session,
-    is_message_with_contents,
-)
 from tau.message.types import (
-    UserMessage,
     AssistantMessage,
-    TextContent,
+    CompactionSummaryMessage,
     ImageContent,
     ToolCallContent,
-    CompactionSummaryMessage,
+    UserMessage,
+)
+from tau.session.utils import (
+    find_most_recent_session,
+    generate_id,
+    get_default_session_dir,
+    is_message_with_contents,
+    is_valid_session_file,
 )
 
 
@@ -129,7 +126,7 @@ class TestFindMostRecentSession:
         assert result is None
 
     def test_returns_most_recent_file(self, tmp_path):
-        older = self._make_valid_session(tmp_path / "old.jsonl")
+        self._make_valid_session(tmp_path / "old.jsonl")
         time.sleep(0.01)
         newer = self._make_valid_session(tmp_path / "new.jsonl")
         # Touch newer to ensure mtime difference
@@ -150,7 +147,6 @@ class TestIsMessageWithContents:
         assert is_message_with_contents(msg) is True
 
     def test_user_with_image_content(self):
-        import base64
         # Minimal PNG bytes
         png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
         msg = UserMessage(contents=[ImageContent(images=[png])])

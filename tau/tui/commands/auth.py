@@ -8,22 +8,32 @@ from tau.tui.commands.context import CommandContext
 def open_login_selector(ctx: CommandContext) -> None:
     """Step 1 — choose auth type: subscription (OAuth) or API key."""
     from tau.inference.api.text.service import TextLLM
-    from tau.inference.provider.types import OAuthProvider, APIProvider
+    from tau.inference.provider.types import APIProvider, OAuthProvider
     from tau.tui.components.select_list import SelectItem
 
     has_oauth = any(isinstance(p, OAuthProvider) for p in TextLLM._providers.list())
-    has_api   = any(isinstance(p, APIProvider)   for p in TextLLM._providers.list())
+    has_api = any(isinstance(p, APIProvider) for p in TextLLM._providers.list())
 
     if has_oauth and has_api:
         items = [
-            SelectItem(label="Subscription", description="OAuth — GitHub Copilot, OpenAI Codex, etc.", value="oauth"),
-            SelectItem(label="API key",      description="A static key, $ENV_VAR, or !command for a provider", value="api_key"),
+            SelectItem(
+                label="Subscription",
+                description="OAuth — GitHub Copilot, OpenAI Codex, etc.",
+                value="oauth",
+            ),
+            SelectItem(
+                label="API key",
+                description="A static key, $ENV_VAR, or !command for a provider",
+                value="api_key",
+            ),
         ]
+
         def on_type(auth_type: str) -> None:
             if auth_type == "oauth":
                 open_oauth_provider_selector(ctx)
             else:
                 open_api_key_provider_selector(ctx)
+
         ctx.layout.open_tree_selector(items, on_type, lambda: ctx.notify("Login cancelled."))
     elif has_oauth:
         open_oauth_provider_selector(ctx)
@@ -33,6 +43,7 @@ def open_login_selector(ctx: CommandContext) -> None:
 
 def _provider_items(providers: list) -> list:
     from tau.tui.components.select_list import SelectItem
+
     return [SelectItem(label=p.name, description=p.id, value=p.id) for p in providers]
 
 
@@ -57,33 +68,41 @@ def open_oauth_provider_selector(ctx: CommandContext) -> None:
 async def run_oauth_login(ctx: CommandContext, provider_id: str) -> None:
     """Run the full OAuth login flow, wiring callbacks to the TUI."""
     import webbrowser
-    from tau.tui.ansi import BOLD, DIM, RESET
+
     from tau.inference.api.text.service import TextLLM
+    from tau.inference.provider.oauth.types import OAuthAuthInfo, OAuthLoginCallbacks, OAuthPrompt
     from tau.inference.provider.types import OAuthProvider
-    from tau.inference.provider.oauth.types import OAuthLoginCallbacks, OAuthPrompt, OAuthAuthInfo
+    from tau.tui.ansi import BOLD, DIM, RESET
 
     provider = next(
-        (p for p in TextLLM._providers.list()
-         if isinstance(p, OAuthProvider) and p.id == provider_id),
+        (
+            p
+            for p in TextLLM._providers.list()
+            if isinstance(p, OAuthProvider) and p.id == provider_id
+        ),
         None,
     )
     if provider is None:
         ctx.notify(f"Provider '{provider_id}' not found.")
         return
 
-    ctx.layout.open_oauth_status([
-        f"  {BOLD}Logging in to {provider.name}{RESET}  {DIM}(Esc not available during flow){RESET}",
-    ])
+    ctx.layout.open_oauth_status(
+        [
+            f"  {BOLD}Logging in to {provider.name}{RESET}  {DIM}(Esc not available during flow){RESET}",
+        ]
+    )
 
     _prompt_future: asyncio.Future[str] | None = None
 
     def on_auth(info: OAuthAuthInfo) -> None:
-        ctx.layout.open_oauth_status([
-            f"  {BOLD}Logging in to {provider.name}{RESET}",
-            "",
-            f"  {DIM}Open this URL in your browser:{RESET}",
-            f"  {info.url}",
-        ])
+        ctx.layout.open_oauth_status(
+            [
+                f"  {BOLD}Logging in to {provider.name}{RESET}",
+                "",
+                f"  {DIM}Open this URL in your browser:{RESET}",
+                f"  {info.url}",
+            ]
+        )
         if info.instructions:
             ctx.layout.update_oauth_status(f"  {DIM}{info.instructions}{RESET}")
         webbrowser.open(info.url)
@@ -98,20 +117,28 @@ async def run_oauth_login(ctx: CommandContext, provider_id: str) -> None:
         ctx.layout.close_oauth_status()
         ctx.layout.open_prompt(
             label=label,
-            on_commit=lambda val: _prompt_future.set_result(val) if not _prompt_future.done() else None,
-            on_cancel=lambda: _prompt_future.set_exception(asyncio.CancelledError()) if not _prompt_future.done() else None,
+            on_commit=lambda val: (
+                _prompt_future.set_result(val) if not _prompt_future.done() else None
+            ),
+            on_cancel=lambda: (
+                _prompt_future.set_exception(asyncio.CancelledError())
+                if not _prompt_future.done()
+                else None
+            ),
             secret=False,
         )
         try:
             return await _prompt_future
         except asyncio.CancelledError:
-            raise ValueError("Login cancelled")
+            raise ValueError("Login cancelled") from None
 
     def on_progress(message: str) -> None:
-        ctx.layout.open_oauth_status([
-            f"  {BOLD}Logging in to {provider.name}{RESET}",
-            f"  {DIM}{message}{RESET}",
-        ])
+        ctx.layout.open_oauth_status(
+            [
+                f"  {BOLD}Logging in to {provider.name}{RESET}",
+                f"  {DIM}{message}{RESET}",
+            ]
+        )
 
     callbacks = OAuthLoginCallbacks(
         on_auth=on_auth,
@@ -162,8 +189,8 @@ def open_api_key_provider_selector(ctx: CommandContext) -> None:
 
 
 def _save_api_key(ctx: CommandContext, provider_id: str, provider_name: str, key: str) -> None:
-    from tau.inference.api.text.service import TextLLM
     from tau.auth.types import APICredential
+    from tau.inference.api.text.service import TextLLM
 
     key = key.strip()
     if not key:
@@ -182,6 +209,7 @@ def get_palette_overrides() -> dict[str, str]:
     overrides: dict[str, str] = {}
     try:
         from tau.inference.api.text.service import TextLLM
+
         auth = TextLLM._auth_manager
         auth.reload()
         logged_in = auth.list()

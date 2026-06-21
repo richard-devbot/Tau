@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Generic, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from tau.tui.ansi import visible_width
 from tau.tui.component import Component
@@ -16,14 +17,15 @@ T = TypeVar("T")
 
 
 @dataclass
-class SelectItem(Generic[T]):
+class SelectItem[T]:
     """A single row in a SelectList."""
-    label:       str
+
+    label: str
     description: str = ""
-    value:       T | None = None   # type: ignore[assignment]
+    value: T | None = None  # type: ignore[assignment]
 
 
-class SelectList(Component, Generic[T]):
+class SelectList[T](Component):
     """
     Filterable, scrollable list of SelectItem rows.
 
@@ -47,16 +49,17 @@ class SelectList(Component, Generic[T]):
         max_visible: int = 5,
         theme: SelectListTheme | None = None,
     ) -> None:
-        self._all_items:    list[SelectItem[T]] = items or []
-        self._filtered:     list[SelectItem[T]] = list(self._all_items)
-        self._max_visible   = max(1, max_visible)
-        self._selected      = 0
+        self._all_items: list[SelectItem[T]] = items or []
+        self._filtered: list[SelectItem[T]] = list(self._all_items)
+        self._max_visible = max(1, max_visible)
+        self._selected = 0
         self._scroll_offset = 0
-        self._query         = ""
-        self._on_confirm:  Callable[[SelectItem[T]], None] | None = None
-        self._on_dismiss:  Callable[[], None] | None = None
+        self._query = ""
+        self._on_confirm: Callable[[SelectItem[T]], None] | None = None
+        self._on_dismiss: Callable[[], None] | None = None
 
         from tau.tui.theme import SelectListTheme as _ST
+
         self._theme = theme or _ST()
 
     # -------------------------------------------------------------------------
@@ -117,7 +120,7 @@ class SelectList(Component, Generic[T]):
         if not items:
             return [t.empty("  no matches")]
 
-        count   = len(items)
+        count = len(items)
         visible = min(self._max_visible, count)
 
         # Keep scroll window so selected stays in view
@@ -125,11 +128,14 @@ class SelectList(Component, Generic[T]):
         start = self._scroll_offset
 
         # Label column width: widest label in visible slice (min 8, max ~40% of width)
-        label_w = max(8, min(
-            max(len(it.label) for it in items[start:start + visible]),
-            width // 2,
-        ))
-        desc_w = max(0, width - label_w - 3)   # 3 = "  " indent + " " gap
+        label_w = max(
+            8,
+            min(
+                max(len(it.label) for it in items[start : start + visible]),
+                width // 2,
+            ),
+        )
+        desc_w = max(0, width - label_w - 3)  # 3 = "  " indent + " " gap
 
         lines: list[str] = []
 
@@ -138,19 +144,19 @@ class SelectList(Component, Generic[T]):
             lines.append(t.indicator(f"  ↑ {start} more"))
 
         for i in range(start, start + visible):
-            item  = items[i]
+            item = items[i]
             is_sel = i == self._selected
 
             label = item.label[:label_w].ljust(label_w)
-            desc  = (item.description[:desc_w] if desc_w > 0 else "")
+            desc = item.description[:desc_w] if desc_w > 0 else ""
 
             if is_sel:
                 row = "  " + t.selected_label(label) + " " + t.selected_desc(desc)
                 if t.selected_bg:
                     # Fill to full width and apply background
-                    vw   = visible_width(row)
+                    vw = visible_width(row)
                     fill = max(0, width - vw)
-                    row  = t.selected_bg(row + " " * fill)
+                    row = t.selected_bg(row + " " * fill)
             else:
                 row = "  " + t.normal_label(label) + " " + t.normal_desc(desc)
 
@@ -211,7 +217,7 @@ class SelectList(Component, Generic[T]):
         self._scroll_offset = 0
 
     def _clamp_scroll(self) -> None:
-        count   = len(self._filtered)
+        count = len(self._filtered)
         visible = min(self._max_visible, count)
         # selected must be in [scroll_offset, scroll_offset + visible)
         if self._selected < self._scroll_offset:

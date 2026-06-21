@@ -14,7 +14,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     if end == -1:
         return {}, text
     fm_text = text[3:end].strip()
-    body = text[end + 4:].lstrip("\n")
+    body = text[end + 4 :].lstrip("\n")
     meta: dict[str, str] = {}
     for line in fm_text.splitlines():
         if ":" in line:

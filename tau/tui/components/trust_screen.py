@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from tau.tui.ansi import RESET, BOLD, BRIGHT_BLACK, BRIGHT_WHITE, CYAN
+from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, CYAN, RESET
 from tau.tui.component import Component
 from tau.tui.input import InputEvent, KeyEvent
 
@@ -44,12 +45,19 @@ class TrustScreen(Component):
 
         cwd_display = self._cwd
         if len(cwd_display) > width - len(indent) - 2:
-            cwd_display = "…" + cwd_display[-(width - len(indent) - 3):]
+            cwd_display = "…" + cwd_display[-(width - len(indent) - 3) :]
         lines.append(indent + CYAN + cwd_display + RESET)
         lines.append("")
 
-        lines.append(indent + BRIGHT_BLACK + "This allows tau to load .py settings and resources," + RESET)
-        lines.append(indent + BRIGHT_BLACK + "install missing project packages, and run project extensions." + RESET)
+        lines.append(
+            indent + BRIGHT_BLACK + "This allows tau to load .py settings and resources," + RESET
+        )
+        lines.append(
+            indent
+            + BRIGHT_BLACK
+            + "install missing project packages, and run project extensions."
+            + RESET
+        )
         lines.append("")
         lines.append("")
 
@@ -58,10 +66,7 @@ class TrustScreen(Component):
             prefix = "› " if is_sel else "  "
             label = opt.label
             row = indent + prefix + label
-            if is_sel:
-                row = BOLD + BRIGHT_WHITE + row + RESET
-            else:
-                row = BRIGHT_BLACK + row + RESET
+            row = BOLD + BRIGHT_WHITE + row + RESET if is_sel else BRIGHT_BLACK + row + RESET
             lines.append(row)
 
         lines.append("")

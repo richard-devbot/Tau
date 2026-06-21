@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Callable, Generic, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from tau.tui.ansi import BOLD, DIM, RESET, pad, visible_width
 from tau.tui.component import Component
@@ -10,6 +11,7 @@ from tau.tui.input import InputEvent, KeyEvent
 T = TypeVar("T")
 
 # ── Box drawing helper ────────────────────────────────────────────────────────
+
 
 def _box(inner_lines: list[str], title: str, width: int) -> list[str]:
     """Wrap inner_lines in a Unicode border box of the given width."""
@@ -34,7 +36,8 @@ def _box(inner_lines: list[str], title: str, width: int) -> list[str]:
 
 # ── PickerOverlay ─────────────────────────────────────────────────────────────
 
-class PickerOverlay(Component, Generic[T]):
+
+class PickerOverlay[T](Component):
     """A floating modal picker: box border + optional search bar + SelectList.
 
     Usage::
@@ -127,6 +130,7 @@ class PickerOverlay(Component, Generic[T]):
 
 
 # ── TextOverlay ───────────────────────────────────────────────────────────────
+
 
 class TextOverlay(Component):
     """A floating read-only text display.

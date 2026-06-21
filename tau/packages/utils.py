@@ -28,7 +28,9 @@ def parse_source(source: str) -> ParsedSource:
             name, version = rest, None
         name = name.strip()
         spec = f"{name}=={version}" if version else name
-        return ParsedSource(source=SourceType.PYPI, raw=source, name=name, version=version, install_spec=spec)
+        return ParsedSource(
+            source=SourceType.PYPI, raw=source, name=name, version=version, install_spec=spec
+        )
 
     if s.startswith("git+"):
         # git+https://github.com/user/repo@tag  →  name = "repo"
@@ -38,14 +40,18 @@ def parse_source(source: str) -> ParsedSource:
 
     if s.startswith(("/", ".", "~")):
         path = Path(s).expanduser().resolve()
-        return ParsedSource(source=SourceType.LOCAL, raw=source, name=path.name, install_spec=str(path))
+        return ParsedSource(
+            source=SourceType.LOCAL, raw=source, name=path.name, install_spec=str(path)
+        )
 
     # Bare name — treat as pypi
     m = re.match(r"^([a-zA-Z0-9_.-]+)(?:@(.+))?$", s)
     if m:
         name, version = m.group(1), m.group(2)
         spec = f"{name}=={version}" if version else name
-        return ParsedSource(source=SourceType.PYPI, raw=source, name=name, version=version, install_spec=spec)
+        return ParsedSource(
+            source=SourceType.PYPI, raw=source, name=name, version=version, install_spec=spec
+        )
 
     raise ValueError(f"Cannot parse package source: {source!r}")
 

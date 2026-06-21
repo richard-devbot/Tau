@@ -1,13 +1,13 @@
 """Tests for tau/session/branch_summarization.py — pure helper functions."""
 from __future__ import annotations
 
+from tau.message.types import AssistantMessage, ToolCallContent
 from tau.session.branch_summarization import (
     FileOperations,
     _compute_file_lists,
     _format_file_operations,
     prepare_branch_entries,
 )
-from tau.message.types import AssistantMessage, ToolCallContent
 from tau.session.types import MessageEntry
 
 

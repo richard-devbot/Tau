@@ -1,10 +1,10 @@
 from __future__ import annotations
-import asyncio
-from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Optional
-from tau.inference.provider.types import AuthType
-from tau.auth.types import OAuthCredential
 
+import asyncio
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+
+from tau.auth.types import OAuthCredential
 
 __all__ = ["OAuthCredential", "OAuthPrompt", "OAuthAuthInfo", "OAuthLoginCallbacks", "AbortSignal"]
 
@@ -37,10 +37,10 @@ class OAuthLoginCallbacks:
     """Display authorization URL and instructions to the user."""
     on_prompt: Callable[[OAuthPrompt], Awaitable[str]]
     """Prompt the user for input and return their response."""
-    on_progress: Optional[Callable[[str], None]] = None
+    on_progress: Callable[[str], None] | None = None
     """Report progress messages back to the caller (optional)."""
-    signal: Optional[AbortSignal] = None
+    signal: AbortSignal | None = None
     """Signal to abort the OAuth flow (optional)."""
     # Optional: lets the user paste a code manually when no local server is available
-    on_manual_code_input: Optional[Callable[[], Awaitable[str]]] = None
+    on_manual_code_input: Callable[[], Awaitable[str]] | None = None
     """Fallback: ask user to paste auth code if callback server is unavailable (optional)."""

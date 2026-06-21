@@ -1,12 +1,8 @@
 """Tests for tau/auth/manager.py — credential CRUD and helper functions."""
 from __future__ import annotations
 
-import os
-
-import pytest
-
 from tau.auth.manager import AuthManager, _get_env_api_key, _is_unrecoverable_refresh_error
-from tau.auth.types import APICredential, OAuthCredential, AuthStatus
+from tau.auth.types import APICredential, OAuthCredential
 from tau.inference.provider.registry import ProviderRegistry
 
 

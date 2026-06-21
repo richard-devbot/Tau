@@ -18,7 +18,7 @@ Example:
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ def _get_proxy_env(key: str) -> str:
     return os.environ.get(key.lower(), "") or os.environ.get(key.upper(), "")
 
 
-def _parse_proxy_target_url(target_url: str) -> Optional[tuple[str, str, int]]:
+def _parse_proxy_target_url(target_url: str) -> tuple[str, str, int] | None:
     """Parse target URL into (scheme, hostname, port) or None if invalid."""
     try:
         parsed = urlparse(target_url)
@@ -58,7 +58,7 @@ def _parse_proxy_target_url(target_url: str) -> Optional[tuple[str, str, int]]:
         return None
 
 
-def _should_proxy_hostname(hostname: str, port: int, no_proxy: Optional[str] = None) -> bool:
+def _should_proxy_hostname(hostname: str, port: int, no_proxy: str | None = None) -> bool:
     """Check if hostname should be proxied (respecting NO_PROXY).
 
     Args:
@@ -66,10 +66,7 @@ def _should_proxy_hostname(hostname: str, port: int, no_proxy: Optional[str] = N
         port: Port number
         no_proxy: Optional NO_PROXY string. If not provided, checks environment variables.
     """
-    if no_proxy is None:
-        no_proxy = _get_proxy_env("no_proxy").lower()
-    else:
-        no_proxy = no_proxy.lower()
+    no_proxy = _get_proxy_env("no_proxy").lower() if no_proxy is None else no_proxy.lower()
 
     if not no_proxy:
         return True
@@ -107,7 +104,9 @@ def _should_proxy_hostname(hostname: str, port: int, no_proxy: Optional[str] = N
     return True
 
 
-def get_proxy_url_for_target(target_url: str, settings_manager: Optional[SettingsManager] = None) -> Optional[str]:
+def get_proxy_url_for_target(
+    target_url: str, settings_manager: SettingsManager | None = None
+) -> str | None:
     """
     Get HTTP proxy URL for a target URL from settings or environment variables.
 
@@ -163,15 +162,15 @@ def _validate_proxy_url(proxy: str) -> None:
     try:
         parsed = urlparse(proxy)
     except Exception as e:
-        raise ValueError(f"Invalid proxy URL {proxy!r}: {e}")
+        raise ValueError(f"Invalid proxy URL {proxy!r}: {e}") from e
 
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"{UNSUPPORTED_PROXY_PROTOCOL_MESSAGE} Got {parsed.scheme!r}")
 
 
 def get_proxies_for_client(
-    api_base_url: str, settings_manager: Optional[SettingsManager] = None
-) -> Optional[dict[str, str]]:
+    api_base_url: str, settings_manager: SettingsManager | None = None
+) -> dict[str, str] | None:
     """
     Get proxy configuration dict for httpx.AsyncClient or requests.
 
@@ -200,7 +199,9 @@ def get_proxies_for_client(
     }
 
 
-def get_proxy_headers(settings_manager: Optional[SettingsManager] = None) -> Optional[dict[str, str]]:
+def get_proxy_headers(
+    settings_manager: SettingsManager | None = None,
+) -> dict[str, str] | None:
     """
     Get custom proxy headers for proxy authentication.
 

@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import weakref
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from tau.settings.manager import SettingsManager
     from tau.tui.component import Component
     from tau.tui.components.layout import Layout
-    from tau.tui.theme import LayoutTheme
     from tau.tui.input import InputEvent
-    from tau.settings.manager import SettingsManager
+    from tau.tui.theme import LayoutTheme
 
 
 @dataclass
@@ -20,6 +21,7 @@ class FooterData:
     Factories with signature ``(tui, theme, footer_data)`` receive this on
     every render so they can display up-to-date stats without polling.
     """
+
     git_branch: str = ""
     context_tokens: int | None = None
     context_window: int = 0
@@ -31,8 +33,10 @@ class FooterData:
 
 class _NullHandle:
     """Returned by show_overlay when there is no active layout (headless mode)."""
+
     def close(self) -> None:
         pass
+
     hide = close
 
 
@@ -45,8 +49,8 @@ class _InterceptComponent:
 
     def __init__(
         self,
-        inner: "Component",
-        on_handle: Callable[["InputEvent"], bool | None],
+        inner: Component,
+        on_handle: Callable[[InputEvent], bool | None],
     ) -> None:
         self._inner = inner
         self._on_handle = on_handle
@@ -54,7 +58,7 @@ class _InterceptComponent:
     def render(self, width: int) -> list[str]:
         return self._inner.render(width)
 
-    def handle_input(self, event: "InputEvent") -> bool:
+    def handle_input(self, event: InputEvent) -> bool:
         if self._on_handle(event) is True:
             return True
         return self._inner.handle_input(event)
@@ -71,11 +75,11 @@ class UIContext:
     and replace the input editor — all on the live layout.
     """
 
-    def __init__(self, layout: "Layout", settings: "SettingsManager | None" = None) -> None:
-        self._layout_ref: weakref.ref["Layout"] = weakref.ref(layout)
+    def __init__(self, layout: Layout, settings: SettingsManager | None = None) -> None:
+        self._layout_ref: weakref.ref[Layout] = weakref.ref(layout)
         self._settings = settings
 
-    def _layout(self) -> "Layout | None":
+    def _layout(self) -> Layout | None:
         return self._layout_ref()
 
     # -------------------------------------------------------------------------
@@ -85,7 +89,7 @@ class UIContext:
     def set_widget(
         self,
         id: str,
-        widget: "Component | list[str]",
+        widget: Component | list[str],
         placement: str = "above_editor",
     ) -> None:
         """Inject a widget above or below the editor. placement: 'above_editor' | 'below_editor'."""
@@ -103,7 +107,7 @@ class UIContext:
     # Footer
     # -------------------------------------------------------------------------
 
-    def set_footer(self, component_or_factory: "Component | Callable[..., Component]") -> None:
+    def set_footer(self, component_or_factory: Component | Callable[..., Component]) -> None:
         """Replace the footer with a custom component or factory.
 
         Three factory signatures are supported:
@@ -115,6 +119,7 @@ class UIContext:
         Pass ``None`` to revert to the built-in footer.
         """
         import inspect
+
         layout = self._layout()
         if layout is None:
             return
@@ -140,7 +145,7 @@ class UIContext:
         layout.set_custom_footer(component)
 
     @staticmethod
-    def _build_footer_data(layout: "Layout") -> FooterData:
+    def _build_footer_data(layout: Layout) -> FooterData:
         """Collect live stats to populate a FooterData for enhanced footer factories."""
         git_branch = ""
         footer = getattr(layout, "footer", None)
@@ -199,7 +204,7 @@ class UIContext:
     # Editor replacement
     # -------------------------------------------------------------------------
 
-    def set_editor_component(self, factory: "Callable[[Any, Any], Component] | None") -> None:
+    def set_editor_component(self, factory: Callable[[Any, Any], Component] | None) -> None:
         """Replace the input editor, or pass None to restore the default.
 
         Factory receives ``(InputTheme, keybindings)`` and returns a Component.
@@ -208,7 +213,7 @@ class UIContext:
         if layout is not None:
             layout.set_custom_input(factory)
 
-    def get_editor_component(self) -> "Callable[[Any, Any], Component] | None":
+    def get_editor_component(self) -> Callable[[Any, Any], Component] | None:
         """Return the currently installed custom editor factory, or None when using the default."""
         layout = self._layout()
         if layout is None:
@@ -233,6 +238,7 @@ class UIContext:
         if layout is None:
             return None
         from tau.tui.components.select_list import SelectItem
+
         items: list[SelectItem[str]] = [
             SelectItem(label=o, description=title if i == 0 else "", value=o)
             for i, o in enumerate(options)
@@ -323,7 +329,7 @@ class UIContext:
 
     async def custom(
         self,
-        factory: "Callable[..., Component]",
+        factory: Callable[..., Component],
         options: Any = None,
     ) -> Any:
         """Show a fully custom focusable component and wait for it to complete.
@@ -368,8 +374,8 @@ class UIContext:
         if layout is None:
             return None
 
-        from tau.tui.overlay import CustomOptions as _CO, OverlayOptions
         from tau.tui.keybindings import get_keybindings
+        from tau.tui.overlay import CustomOptions as _CO
 
         opts = options if options is not None else _CO()
         loop = asyncio.get_running_loop()
@@ -396,12 +402,12 @@ class UIContext:
 
     def show_overlay(
         self,
-        component: "Component",
+        component: Component,
         width: int | str = "60%",
         max_height: int | str = "80%",
         anchor: str = "center",
         non_capturing: bool = False,
-    ) -> "object":
+    ) -> object:
         """Show a floating overlay window and return an OverlayHandle.
 
         The handle has a ``close()`` method to dismiss the overlay.
@@ -423,7 +429,9 @@ class UIContext:
         if layout is None:
             return _NullHandle()
         from typing import cast as _cast
-        from tau.tui.overlay import OverlayOptions, OverlayAnchor
+
+        from tau.tui.overlay import OverlayAnchor, OverlayOptions
+
         opts = OverlayOptions(
             width=width,
             max_height=max_height,
@@ -448,7 +456,9 @@ class UIContext:
             return
         import time
         from typing import cast
-        from tau.message.types import CustomMessage, TextContent, LinesContent, ImageContent
+
+        from tau.message.types import CustomMessage, ImageContent, LinesContent, TextContent
+
         custom_type = "tool" if type == "tool" else "system"
         _contents = (
             [LinesContent(lines=message, notify_type=type)]
@@ -477,7 +487,7 @@ class UIContext:
 
     def set_header(
         self,
-        factory: "Component | Callable[[], Component] | None",
+        factory: Component | Callable[[], Component] | None,
     ) -> None:
         """Inject a component above the message list, or pass None to remove it.
 
@@ -613,7 +623,7 @@ class UIContext:
     # -------------------------------------------------------------------------
 
     @property
-    def theme(self) -> "LayoutTheme | None":
+    def theme(self) -> LayoutTheme | None:
         """The active LayoutTheme instance (read-only reference).
 
         Usage::
@@ -631,9 +641,10 @@ class UIContext:
             names = ctx.ui.get_all_themes()
         """
         from tau.themes.registry import theme_registry
+
         return theme_registry.list()
 
-    def set_theme(self, theme: "str | LayoutTheme", *, persist: bool = False) -> bool:
+    def set_theme(self, theme: str | LayoutTheme, *, persist: bool = False) -> bool:
         """Switch the active theme by name or LayoutTheme instance. Returns True on success.
 
         Pass a name string to look up a registered theme, or a ``LayoutTheme``
@@ -648,12 +659,14 @@ class UIContext:
             ctx.ui.set_theme(LayoutTheme(divider_execute=lambda s: "\\x1b[32m" + s + "\\x1b[0m"))
         """
         from tau.tui.theme import LayoutTheme as _LT
+
         layout = self._layout()
         if layout is None:
             return False
 
         if isinstance(theme, str):
             from tau.themes.registry import theme_registry
+
             try:
                 new_theme = theme_registry.get(theme)
             except ValueError:
@@ -725,6 +738,7 @@ class UIContext:
         if layout is None:
             return
         from tau.message.types import AssistantMessage, ToolMessage
+
         for block in layout.messages._blocks:
             if isinstance(block.message, (AssistantMessage, ToolMessage)):
                 block._expanded = expanded
@@ -735,7 +749,7 @@ class UIContext:
     # Raw terminal input subscription
     # -------------------------------------------------------------------------
 
-    def on_terminal_input(self, handler: "Callable[[Any], bool | None]") -> "Callable[[], None]":
+    def on_terminal_input(self, handler: Callable[[Any], bool | None]) -> Callable[[], None]:
         """Subscribe to raw terminal input events. Returns an unsubscribe callable.
 
         The handler runs before the editor and any overlays. Return True to

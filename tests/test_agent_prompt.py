@@ -5,11 +5,11 @@ import platform
 from pathlib import Path
 
 from tau.agent.prompt.builder import (
-    load_project_context_file,
+    _DEFAULT_IDENTITY,
+    PromptBuilder,
     _detect_os,
     _detect_shell,
-    PromptBuilder,
-    _DEFAULT_IDENTITY,
+    load_project_context_file,
 )
 from tau.agent.prompt.types import PromptOptions
 from tau.builtins.tools.read import ReadTool
@@ -55,7 +55,7 @@ class TestLoadProjectContextFile:
         (tmp_path / "agents.md").write_text("content")
         # Should not match AGENTS.MD/AGENTS.md on case-sensitive filesystems
         # We test that supported variants work
-        result = load_project_context_file(tmp_path)
+        load_project_context_file(tmp_path)
         # lowercase may or may not match depending on OS — just verify no exception
 
 

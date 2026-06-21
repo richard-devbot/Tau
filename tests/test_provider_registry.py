@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from tau.inference.provider.registry import (
+    AudioProviderRegistry,
+    ImageProviderRegistry,
     ProviderRegistry,
     TextProviderRegistry,
-    ImageProviderRegistry,
-    AudioProviderRegistry,
     VideoProviderRegistry,
 )
-from tau.inference.provider.types import APIProvider, ImageProvider, AudioProvider, VideoProvider
+from tau.inference.provider.types import APIProvider, AudioProvider, ImageProvider, VideoProvider
 from tau.inference.types import LLMOptions
 
 

@@ -1,4 +1,5 @@
 """Built-in header extension — shows app name and version above the message list."""
+
 from __future__ import annotations
 
 

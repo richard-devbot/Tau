@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 E = TypeVar("E")
 
 
-class Registry(ABC, Generic[T, E]):
+class Registry[T, E](ABC):
     """
     Base for lazy-loaded 3-tier content registries (prompts, skills).
 
@@ -43,7 +43,7 @@ class Registry(ABC, Generic[T, E]):
         """Pull the error list out of a load result."""
 
     def _item_key(self, item: T) -> str:
-        return getattr(item, "name").lower()
+        return item.name.lower()
 
     # ── Shared implementation ─────────────────────────────────────────────────
 
@@ -51,6 +51,7 @@ class Registry(ABC, Generic[T, E]):
         if self._builtins_loaded:
             return
         from tau.settings.paths import get_builtins_dir
+
         _dir = get_builtins_dir() / self._builtins_subdir()
         for item in self._extract_items(self._load_from_dir(_dir)).values():
             self._registry[self._item_key(item)] = item
@@ -65,7 +66,7 @@ class Registry(ABC, Generic[T, E]):
         self._registry.clear()
         self._builtins_loaded = False
         errors = self.load_external(cwd)
-        for p in (extra_paths or []):
+        for p in extra_paths or []:
             r = self._load_from_dir(Path(p))
             errors.extend(self._extract_errors(r))
             self._registry.update(self._extract_items(r))

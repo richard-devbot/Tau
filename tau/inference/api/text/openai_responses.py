@@ -1,24 +1,47 @@
 from __future__ import annotations
+
 import json
-from tau.inference.api.text.utils import parse_tool_args
-from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Any
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
+
 from openai import AsyncOpenAI
+
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
+from tau.inference.api.text.utils import parse_tool_args
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    LLMContext, LLMEvent, LLMOptions, StopReason, ThinkingLevel,
-    StartEvent, EndEvent, ErrorEvent,
-    TextStartEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingStartEvent, ThinkingDeltaEvent, ThinkingEndEvent,
-    ToolCallStartEvent, ToolCallDeltaEvent, ToolCallEndEvent,
+    EndEvent,
+    ErrorEvent,
+    LLMContext,
+    LLMEvent,
+    LLMOptions,
+    StartEvent,
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    TextStartEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingLevel,
+    ThinkingStartEvent,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
     normalize_structured_response_format,
 )
 from tau.message.types import (
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+    AssistantMessage,
+    ImageContent,
+    LLMMessage,
+    SystemMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    UserMessage,
 )
-from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from tau.tool.types import Tool
 
@@ -59,15 +82,21 @@ def _content_to_openai(content_items: list, supports_thinking: bool = True) -> l
                     text_parts.append(item.content)
                 case ImageContent():
                     for b64, mime in item.to_base64():
-                        url = b64 if b64.startswith("http") else f"data:{mime or 'image/png'};base64,{b64}"
+                        url = (
+                            b64
+                            if b64.startswith("http")
+                            else f"data:{mime or 'image/png'};base64,{b64}"
+                        )
                         other_parts.append({"type": "input_image", "image_url": url})
                 case ToolCallContent():
-                    other_parts.append({
-                        "type": "function_call",
-                        "call_id": item.id,
-                        "name": item.name,
-                        "arguments": json.dumps(item.args),
-                    })
+                    other_parts.append(
+                        {
+                            "type": "function_call",
+                            "call_id": item.id,
+                            "name": item.name,
+                            "arguments": json.dumps(item.args),
+                        }
+                    )
         parts: list[dict[str, Any]] = []
         if thinking_parts or text_parts:
             merged = "\n".join(thinking_parts + text_parts)
@@ -82,21 +111,29 @@ def _content_to_openai(content_items: list, supports_thinking: bool = True) -> l
                 parts.append({"type": "input_text", "text": item.content})
             case ImageContent():
                 for b64, mime in item.to_base64():
-                    url = b64 if b64.startswith("http") else f"data:{mime or 'image/png'};base64,{b64}"
+                    url = (
+                        b64
+                        if b64.startswith("http")
+                        else f"data:{mime or 'image/png'};base64,{b64}"
+                    )
                     parts.append({"type": "input_image", "image_url": url})
             case ThinkingContent():
-                parts.append({
-                    "type": "thinking",
-                    "thinking": item.content,
-                    "signature": item.signature,
-                })
+                parts.append(
+                    {
+                        "type": "thinking",
+                        "thinking": item.content,
+                        "signature": item.signature,
+                    }
+                )
             case ToolCallContent():
-                parts.append({
-                    "type": "function_call",
-                    "call_id": item.id,
-                    "name": item.name,
-                    "arguments": json.dumps(item.args),
-                })
+                parts.append(
+                    {
+                        "type": "function_call",
+                        "call_id": item.id,
+                        "name": item.name,
+                        "arguments": json.dumps(item.args),
+                    }
+                )
     return parts
 
 
@@ -116,11 +153,13 @@ def _messages_to_input(
             case ToolMessage():
                 for content in msg.contents:
                     if isinstance(content, ToolResultContent):
-                        input_items.append({
-                            "type": "function_call_output",
-                            "call_id": content.id,
-                            "output": content.content,
-                        })
+                        input_items.append(
+                            {
+                                "type": "function_call_output",
+                                "call_id": content.id,
+                                "output": content.content,
+                            }
+                        )
             case UserMessage() | AssistantMessage():
                 role = "user" if isinstance(msg, UserMessage) else "assistant"
                 parts = _content_to_openai(msg.contents, supports_thinking=supports_thinking)
@@ -159,7 +198,13 @@ class OpenAIResponsesAPI(BaseAPI):
             timeout=options.timeout.total_seconds(),
         )
 
-    def _build_params(self, model: Model, instructions: str | None, input_items: list, tools: Optional[list[Tool]] = None) -> dict[str, Any]:
+    def _build_params(
+        self,
+        model: Model,
+        instructions: str | None,
+        input_items: list,
+        tools: list[Tool] | None = None,
+    ) -> dict[str, Any]:
         """Assemble the OpenAI Responses API request payload."""
         params: dict[str, Any] = {
             "model": model.id,
@@ -170,9 +215,12 @@ class OpenAIResponsesAPI(BaseAPI):
             params["instructions"] = instructions
         if self.options.max_tokens is not None:
             params["max_output_tokens"] = self.options.max_tokens
-        if self.options.thinking_level is not None and self.options.thinking_level != ThinkingLevel.Off:
+        if (
+            self.options.thinking_level is not None
+            and self.options.thinking_level != ThinkingLevel.Off
+        ):
             params["reasoning"] = {"effort": _THINKING_EFFORT[self.options.thinking_level]}
-        
+
         if tools:
             params["tools"] = [
                 {
@@ -190,7 +238,9 @@ class OpenAIResponsesAPI(BaseAPI):
         """Stream LLMEvents from the OpenAI Responses API."""
         if self.options.api_key:
             self._client.api_key = self.options.api_key
-        instructions, input_items = _messages_to_input(context.messages, supports_thinking=bool(model.thinking))
+        instructions, input_items = _messages_to_input(
+            context.messages, supports_thinking=bool(model.thinking)
+        )
         params = self._build_params(model, instructions, input_items, tools=context.tools or None)
         text_format = _text_format(context.response_format)
         if text_format is not None:
@@ -223,7 +273,9 @@ class OpenAIResponsesAPI(BaseAPI):
                         yield ThinkingStartEvent(thinking=None)
                     elif item.type == "function_call":
                         tool_names[item.call_id] = item.name
-                        yield ToolCallStartEvent(tool_call=ToolCallContent(id=item.call_id, name=item.name))
+                        yield ToolCallStartEvent(
+                            tool_call=ToolCallContent(id=item.call_id, name=item.name)
+                        )
 
                 elif etype == "response.output_text.delta":
                     yield TextDeltaEvent(text=TextContent(content=event.delta))
@@ -246,25 +298,30 @@ class OpenAIResponsesAPI(BaseAPI):
                     args_str = event.arguments.strip()
                     args = parse_tool_args(args_str)
 
-                    yield ToolCallEndEvent(tool_call=ToolCallContent(
-                        id=call_id,
-                        name=tool_names.get(call_id, ""),
-                        args=args
-                    ))
+                    yield ToolCallEndEvent(
+                        tool_call=ToolCallContent(
+                            id=call_id, name=tool_names.get(call_id, ""), args=args
+                        )
+                    )
 
                 elif etype == "response.done":
                     resp = event.response
-                    u = getattr(resp, 'usage', None)
+                    u = getattr(resp, "usage", None)
                     if u:
-                        _input_tokens = getattr(u, 'input_tokens', 0) or 0
-                        _output_tokens = getattr(u, 'output_tokens', 0) or 0
-                        _details = getattr(u, 'prompt_tokens_details', None)
-                        _cache_read_tokens = getattr(_details, 'cached_tokens', 0) or 0
+                        _input_tokens = getattr(u, "input_tokens", 0) or 0
+                        _output_tokens = getattr(u, "output_tokens", 0) or 0
+                        _details = getattr(u, "prompt_tokens_details", None)
+                        _cache_read_tokens = getattr(_details, "cached_tokens", 0) or 0
                     stop_reason = _STOP_REASON.get(
                         getattr(resp, "stop_reason", None) or "",
                         StopReason.Stop,
                     )
-                    yield EndEvent(reason=stop_reason, input_tokens=_input_tokens, output_tokens=_output_tokens, cache_read_tokens=_cache_read_tokens)
+                    yield EndEvent(
+                        reason=stop_reason,
+                        input_tokens=_input_tokens,
+                        output_tokens=_output_tokens,
+                        cache_read_tokens=_cache_read_tokens,
+                    )
 
                 elif etype == "error":
                     yield ErrorEvent(reason=StopReason.Abort, error=str(event))

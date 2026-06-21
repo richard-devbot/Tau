@@ -3,12 +3,19 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from engines import BaseSearchEngine
+from engines import SearchMode as _SearchMode
 from pydantic import BaseModel, Field
 
-from tau.tool.types import Tool, ToolContext, ToolExecutionMode, ToolInvocation, ToolKind, ToolResult
 from tau.tool.render import call_line
-
-from engines import SearchMode as _SearchMode, BaseSearchEngine
+from tau.tool.types import (
+    Tool,
+    ToolContext,
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 
 def _render_web_search_call(args: dict, _streaming: bool) -> list[str]:
@@ -56,7 +63,7 @@ def _result_lines(r: dict, mode: _SearchMode) -> tuple[str, str]:
 def _render_web_search(content: str, opts: Any) -> list[str]:
     from tau.tui.ansi import DIM, RESET
     metadata = opts.metadata or {}
-    query        = metadata.get("query", "")
+    _query       = metadata.get("query", "")
     mode         = metadata.get("mode", "text")
     result_count = metadata.get("result_count", 0)
     results      = metadata.get("results", [])

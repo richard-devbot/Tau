@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from tau.tui.ansi import BOLD, DIM, RESET, pad, visible_width
 from tau.tui.component import Component
@@ -135,13 +135,13 @@ class EditorOverlay(Component):
         inner_w = max(1, width - 4)
         self._clamp_scroll()
 
-        visible = self._lines[self._scroll_top: self._scroll_top + self.VISIBLE_ROWS]
+        visible = self._lines[self._scroll_top : self._scroll_top + self.VISIBLE_ROWS]
         rows: list[str] = []
         for ri, line in enumerate(visible):
             abs_row = self._scroll_top + ri
             if abs_row == self._cursor_row:
                 before = line[: self._cursor_col]
-                after = line[self._cursor_col:]
+                after = line[self._cursor_col :]
                 content = before + "█" + after
             else:
                 content = line
@@ -176,7 +176,7 @@ class EditorOverlay(Component):
             return True
         if k == "enter":
             line = self._lines[self._cursor_row]
-            before, after = line[: self._cursor_col], line[self._cursor_col:]
+            before, after = line[: self._cursor_col], line[self._cursor_col :]
             self._lines[self._cursor_row] = before
             self._lines.insert(self._cursor_row + 1, after)
             self._cursor_row += 1
@@ -185,7 +185,9 @@ class EditorOverlay(Component):
         if k == "backspace":
             if self._cursor_col > 0:
                 line = self._lines[self._cursor_row]
-                self._lines[self._cursor_row] = line[: self._cursor_col - 1] + line[self._cursor_col:]
+                self._lines[self._cursor_row] = (
+                    line[: self._cursor_col - 1] + line[self._cursor_col :]
+                )
                 self._cursor_col -= 1
             elif self._cursor_row > 0:
                 prev = self._lines[self._cursor_row - 1]
@@ -227,7 +229,7 @@ class EditorOverlay(Component):
             return True
         if len(k) == 1 and k.isprintable():
             line = self._lines[self._cursor_row]
-            self._lines[self._cursor_row] = line[: self._cursor_col] + k + line[self._cursor_col:]
+            self._lines[self._cursor_row] = line[: self._cursor_col] + k + line[self._cursor_col :]
             self._cursor_col += 1
             return True
         return False

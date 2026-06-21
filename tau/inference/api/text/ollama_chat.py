@@ -1,26 +1,46 @@
 from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
-from tau.inference.api.text.utils import parse_tool_args
-from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Any
+
 from ollama import AsyncClient
+
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
+from tau.inference.api.text.utils import parse_tool_args
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    LLMContext, LLMEvent, LLMOptions, StopReason, ThinkingLevel,
-    StartEvent, EndEvent, ErrorEvent,
-    TextStartEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingStartEvent, ThinkingDeltaEvent, ThinkingEndEvent,
-    ToolCallStartEvent, ToolCallEndEvent,
+    EndEvent,
+    ErrorEvent,
+    LLMContext,
+    LLMEvent,
+    LLMOptions,
+    StartEvent,
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    TextStartEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingLevel,
+    ThinkingStartEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
     normalize_structured_response_format,
 )
 from tau.message.types import (
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+    AssistantMessage,
+    ImageContent,
+    SystemMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    UserMessage,
 )
-from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
-    from tau.tool.types import Tool
     from tau.message.types import LLMMessage
 
 _MINIMAL_LEVELS = {ThinkingLevel.Low, ThinkingLevel.Minimal}
@@ -31,7 +51,9 @@ _STOP_REASON: dict[str, StopReason] = {
 }
 
 
-def _messages_to_ollama(messages: list[LLMMessage], supports_thinking: bool = True) -> list[dict[str, Any]]:
+def _messages_to_ollama(
+    messages: list[LLMMessage], supports_thinking: bool = True
+) -> list[dict[str, Any]]:
     """Convert a message list to Ollama Chat API format, placing images in a separate field.
 
     When supports_thinking is False, ThinkingContent is merged into the text
@@ -71,9 +93,9 @@ def _messages_to_ollama(messages: list[LLMMessage], supports_thinking: bool = Tr
                         case ThinkingContent():
                             thinking_parts.append(item.content)
                         case ToolCallContent():
-                            tool_calls.append({
-                                "function": {"name": item.name, "arguments": item.args}
-                            })
+                            tool_calls.append(
+                                {"function": {"name": item.name, "arguments": item.args}}
+                            )
                 if supports_thinking:
                     content = "\n".join(text_parts)
                     entry = {"role": "assistant", "content": content}
@@ -121,9 +143,13 @@ class OllamaChatAPI(BaseAPI):
 
     async def stream(self, context: LLMContext, model: Model) -> AsyncGenerator[LLMEvent, None]:  # type: ignore[override]
         """Stream LLMEvents from the local Ollama Chat endpoint."""
-        ollama_messages = _messages_to_ollama(context.messages, supports_thinking=bool(model.thinking))
+        ollama_messages = _messages_to_ollama(
+            context.messages, supports_thinking=bool(model.thinking)
+        )
         if context.system_prompt:
-            ollama_messages = [{"role": "system", "content": context.system_prompt}] + ollama_messages
+            ollama_messages = [
+                {"role": "system", "content": context.system_prompt}
+            ] + ollama_messages
 
         think: bool | None = None
         if self.options.thinking_level is not None:
@@ -160,7 +186,7 @@ class OllamaChatAPI(BaseAPI):
                             "name": tool.name,
                             "description": tool.description,
                             "parameters": tool.schema.model_json_schema(),
-                        }
+                        },
                     }
                     for tool in tools
                 ]
@@ -204,11 +230,13 @@ class OllamaChatAPI(BaseAPI):
                         tc_id = getattr(tc, "id", None) or f"call_{uuid4().hex}"
 
                         yield ToolCallStartEvent(tool_call=ToolCallContent(id=tc_id, name=fn.name))
-                        yield ToolCallEndEvent(tool_call=ToolCallContent(id=tc_id, name=fn.name, args=args))
+                        yield ToolCallEndEvent(
+                            tool_call=ToolCallContent(id=tc_id, name=fn.name, args=args)
+                        )
 
                 if chunk.done:
-                    _input_tokens = getattr(chunk, 'prompt_eval_count', 0) or 0
-                    _output_tokens = getattr(chunk, 'eval_count', 0) or 0
+                    _input_tokens = getattr(chunk, "prompt_eval_count", 0) or 0
+                    _output_tokens = getattr(chunk, "eval_count", 0) or 0
                     if thinking_started:
                         yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))
                     if text_started:
@@ -221,7 +249,9 @@ class OllamaChatAPI(BaseAPI):
                         stop_reason = StopReason.ToolCalls
                     else:
                         stop_reason = _STOP_REASON.get(chunk.done_reason or "", StopReason.Stop)
-                    yield EndEvent(reason=stop_reason, input_tokens=_input_tokens, output_tokens=_output_tokens)
+                    yield EndEvent(
+                        reason=stop_reason, input_tokens=_input_tokens, output_tokens=_output_tokens
+                    )
 
         except Exception as e:
             yield ErrorEvent(reason=StopReason.Error, error=str(e))

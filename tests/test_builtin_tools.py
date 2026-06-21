@@ -4,15 +4,13 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-import pytest
-
-from tau.tool.types import ToolInvocation
-from tau.builtins.tools.read import ReadTool
-from tau.builtins.tools.write import WriteTool
 from tau.builtins.tools.edit import EditTool
+from tau.builtins.tools.glob import GlobTool
 from tau.builtins.tools.grep import GrepTool
 from tau.builtins.tools.ls import LsTool, _human_size
-from tau.builtins.tools.glob import GlobTool
+from tau.builtins.tools.read import ReadTool
+from tau.builtins.tools.write import WriteTool
+from tau.tool.types import ToolInvocation
 
 
 def _inv(name: str, cwd: Path | None = None, **params) -> ToolInvocation:

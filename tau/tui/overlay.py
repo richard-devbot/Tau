@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from tau.tui.component import Component
-    from tau.tui.input import InputEvent
 
 # ---------------------------------------------------------------------------
 # Types
@@ -17,9 +17,14 @@ SizeValue = int | str
 # All nine anchor positions
 OverlayAnchor = Literal[
     "center",
-    "top-left",    "top-center",    "top-right",
-    "left-center",                  "right-center",
-    "bottom-left", "bottom-center", "bottom-right",
+    "top-left",
+    "top-center",
+    "top-right",
+    "left-center",
+    "right-center",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
 ]
 
 
@@ -33,6 +38,7 @@ def _parse_size(value: SizeValue, reference: int) -> int:
 # ---------------------------------------------------------------------------
 # OverlayOptions
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class OverlayOptions:
@@ -113,6 +119,7 @@ class OverlayOptions:
 # OverlayHandle
 # ---------------------------------------------------------------------------
 
+
 class OverlayHandle:
     """
     Returned by TUI.show_overlay() — controls a live overlay.
@@ -132,17 +139,17 @@ class OverlayHandle:
         close_fn: Callable[[], None],
         set_hidden_fn: Callable[[bool], None],
         focus_fn: Callable[[], None],
-        unfocus_fn: Callable[["Component | None"], None],
+        unfocus_fn: Callable[[Component | None], None],
         is_focused_fn: Callable[[], bool],
         is_hidden_fn: Callable[[], bool],
     ) -> None:
-        self._close_fn      = close_fn
+        self._close_fn = close_fn
         self._set_hidden_fn = set_hidden_fn
-        self._focus_fn      = focus_fn
-        self._unfocus_fn    = unfocus_fn
+        self._focus_fn = focus_fn
+        self._unfocus_fn = unfocus_fn
         self._is_focused_fn = is_focused_fn
-        self._is_hidden_fn  = is_hidden_fn
-        self._closed        = False
+        self._is_hidden_fn = is_hidden_fn
+        self._closed = False
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -178,7 +185,7 @@ class OverlayHandle:
         if not self._closed:
             self._focus_fn()
 
-    def unfocus(self, target: "Component | None" = None) -> None:
+    def unfocus(self, target: Component | None = None) -> None:
         """
         Release focus from this overlay.
 
@@ -197,14 +204,15 @@ class OverlayHandle:
 # OverlayEntry (internal)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class OverlayEntry:
     """Internal: one entry on the TUI overlay stack."""
 
-    component: "Component"
+    component: Component
     options: OverlayOptions = field(default_factory=OverlayOptions)
     hidden: bool = False
-    pre_focus: "Component | None" = None  # focus target to restore when this overlay closes
+    pre_focus: Component | None = None  # focus target to restore when this overlay closes
 
     def is_visible(self, term_w: int, term_h: int) -> bool:
         """Return False if the responsive visible() callback hides this overlay."""
@@ -246,10 +254,7 @@ class OverlayEntry:
         width = self.resolve_width(term_w)
 
         # ── Height ────────────────────────────────────────────────────────
-        if opt.height is not None:
-            height = _parse_size(opt.height, term_h)
-        else:
-            height = natural_h
+        height = _parse_size(opt.height, term_h) if opt.height is not None else natural_h
 
         if opt.min_height is not None:
             height = max(height, opt.min_height)
@@ -307,6 +312,7 @@ class OverlayEntry:
 # CustomOptions (for Layout.custom())
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CustomOptions:
     """
@@ -324,4 +330,4 @@ class CustomOptions:
     overlay: bool = False
     overlay_options: OverlayOptions = field(default_factory=OverlayOptions)
     # Called with the OverlayHandle immediately after the overlay is shown
-    on_handle: Callable[["OverlayHandle"], None] | None = None
+    on_handle: Callable[[OverlayHandle], None] | None = None

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from tau.tui.ansi import BRIGHT_BLACK, RESET
 from tau.tui.component import Component

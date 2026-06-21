@@ -13,9 +13,8 @@ from tau.inference.types import (
     AudioStopReason,
     STTContext,
     SynthesizedAudio,
-    TTSContext,
-    TimestampGranularity,
     TranscribedAudio,
+    TTSContext,
     WordTimestamp,
 )
 
@@ -23,11 +22,11 @@ _BASE_URL = "https://api.elevenlabs.io"
 
 # Maps our AudioFormat to ElevenLabs output_format query param values
 _FORMAT_MAP: dict[AudioFormat, str] = {
-    AudioFormat.MP3:  "mp3_44100_128",
-    AudioFormat.WAV:  "pcm_44100",
-    AudioFormat.PCM:  "pcm_44100",
+    AudioFormat.MP3: "mp3_44100_128",
+    AudioFormat.WAV: "pcm_44100",
+    AudioFormat.PCM: "pcm_44100",
     AudioFormat.OPUS: "mp3_44100_128",
-    AudioFormat.AAC:  "mp3_44100_128",
+    AudioFormat.AAC: "mp3_44100_128",
     AudioFormat.FLAC: "mp3_44100_128",
 }
 
@@ -65,9 +64,7 @@ class ElevenLabsAudioAPI(BaseAPI):
 
     async def synthesize(self, model: Model, context: TTSContext) -> SynthesizedAudio:
         el_format = _FORMAT_MAP.get(context.response_format, "mp3_44100_128")
-        resolved_format = (
-            AudioFormat.PCM if el_format in _PCM_FORMATS else context.response_format
-        )
+        resolved_format = AudioFormat.PCM if el_format in _PCM_FORMATS else context.response_format
 
         body: dict[str, Any] = {
             "text": context.input,

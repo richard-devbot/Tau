@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from tau.tui.ansi import RESET, BOLD, BRIGHT_BLACK, BRIGHT_WHITE, CYAN
+from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, CYAN, RESET
 from tau.tui.component import Component
 from tau.tui.fuzzy import fuzzy_filter
 from tau.tui.input import InputEvent, Key, KeyEvent
@@ -30,12 +30,12 @@ class FilePicker(Component):
 
     def __init__(self, cwd: Path | None = None) -> None:
         self._root = cwd or Path.cwd()
-        self._cwd  = self._root
+        self._cwd = self._root
         self._all_entries: list[FileEntry] = []
-        self._entries:     list[FileEntry] = []
-        self._selected  = 0
-        self._query     = ""
-        self._active    = False
+        self._entries: list[FileEntry] = []
+        self._selected = 0
+        self._query = ""
+        self._active = False
 
     # -------------------------------------------------------------------------
     # Public API
@@ -65,16 +65,16 @@ class FilePicker(Component):
     def open(self, cwd: Path | None = None) -> None:
         if cwd is not None:
             self._root = cwd
-            self._cwd  = cwd
-        self._active   = True
-        self._query    = ""
+            self._cwd = cwd
+        self._active = True
+        self._query = ""
         self._selected = 0
         self._refresh_entries()
 
     def close(self) -> None:
         self._active = False
-        self._cwd    = self._root
-        self._query  = ""
+        self._cwd = self._root
+        self._query = ""
 
     def set_query(self, query: str) -> None:
         """
@@ -117,8 +117,8 @@ class FilePicker(Component):
         if entry is None:
             return None
         if entry.is_dir:
-            self._cwd      = entry.path
-            self._query    = ""
+            self._cwd = entry.path
+            self._query = ""
             self._selected = 0
             self._refresh_entries()
             return None
@@ -128,8 +128,8 @@ class FilePicker(Component):
         """Ascend one directory.  Returns False if already at root."""
         if self._cwd == self._root:
             return False
-        self._cwd      = self._cwd.parent
-        self._query    = ""
+        self._cwd = self._cwd.parent
+        self._query = ""
         self._selected = 0
         self._refresh_entries()
         return True
@@ -161,28 +161,34 @@ class FilePicker(Component):
             lines.append(BRIGHT_BLACK + "  (no matches)" + RESET)
             return lines
 
-        count   = len(self._entries)
+        count = len(self._entries)
         visible = min(VISIBLE_ROWS, count)
-        start   = max(0, min(self._selected - visible + 1, count - visible))
+        start = max(0, min(self._selected - visible + 1, count - visible))
 
-        label_w = max(8, min(
-            max(len(e.name + ("/" if e.is_dir else "")) for e in self._entries[start : start + visible]),
-            30,
-        ))
+        label_w = max(
+            8,
+            min(
+                max(
+                    len(e.name + ("/" if e.is_dir else ""))
+                    for e in self._entries[start : start + visible]
+                ),
+                30,
+            ),
+        )
 
         if start > 0:
             lines.append(BRIGHT_BLACK + f"  ↑ {start} more" + RESET)
 
         for i in range(start, start + visible):
-            entry  = self._entries[i]
+            entry = self._entries[i]
             is_sel = i == self._selected
-            label  = (entry.name + ("/" if entry.is_dir else ""))[:label_w].ljust(label_w)
+            label = (entry.name + ("/" if entry.is_dir else ""))[:label_w].ljust(label_w)
 
             if is_sel:
                 color = CYAN if entry.is_dir else BRIGHT_WHITE
-                row   = "  " + BOLD + color + label + RESET
+                row = "  " + BOLD + color + label + RESET
             else:
-                row   = "  " + BRIGHT_BLACK + label + RESET
+                row = "  " + BRIGHT_BLACK + label + RESET
 
             lines.append(row)
 

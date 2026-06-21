@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import inspect
 import traceback
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from tau.extensions.api import (
-    Extension, ExtensionError, LoadExtensionsResult,
-    ShortcutRegistration, _RuntimeRef,
+    Extension,
+    ExtensionError,
+    LoadExtensionsResult,
+    ShortcutRegistration,
+    _RuntimeRef,
 )
 
 if TYPE_CHECKING:
@@ -18,15 +22,17 @@ if TYPE_CHECKING:
 # Events where handler return values matter for interception.
 # These are registered directly on the hooks bus (not via the catch-all subscriber)
 # so that Hooks.emit() collects their results.
-_INTERCEPTABLE_EVENTS: frozenset[str] = frozenset({
-    "before_compaction",
-    "user_terminal",
-    "resources_discover",
-    "project_trust",
-    "input",
-    "tool_result",
-    "context",
-})
+_INTERCEPTABLE_EVENTS: frozenset[str] = frozenset(
+    {
+        "before_compaction",
+        "user_terminal",
+        "resources_discover",
+        "project_trust",
+        "input",
+        "tool_result",
+        "context",
+    }
+)
 
 
 class ExtensionRuntime:
@@ -72,9 +78,11 @@ class ExtensionRuntime:
 
     def _make_interceptable_handler(self, ext: Extension, handler: Callable) -> Callable:
         """Return a hooks-compatible wrapper that injects ctx and propagates the return value."""
+
         async def wrapped(event: Any) -> Any:
             """Invoke handler with extension context."""
             from tau.extensions.context import ExtensionContext
+
             runtime = self.runtime_ref.runtime
             ctx = ExtensionContext.from_runtime(runtime) if runtime is not None else None
             try:
@@ -84,12 +92,14 @@ class ExtensionRuntime:
                 return result
             except Exception:
                 tb = traceback.format_exc()
-                self._errors.append(ExtensionError(
-                    extension_path=ext.path,
-                    event=getattr(event, "type", "unknown"),
-                    error=tb.strip().splitlines()[-1],
-                    stack=tb,
-                ))
+                self._errors.append(
+                    ExtensionError(
+                        extension_path=ext.path,
+                        event=getattr(event, "type", "unknown"),
+                        error=tb.strip().splitlines()[-1],
+                        stack=tb,
+                    )
+                )
                 return None
 
         return wrapped
@@ -107,6 +117,7 @@ class ExtensionRuntime:
             return
 
         from tau.extensions.context import ExtensionContext
+
         runtime = self.runtime_ref.runtime
         ctx = ExtensionContext.from_runtime(runtime) if runtime is not None else None
 
@@ -118,12 +129,14 @@ class ExtensionRuntime:
                         await result
                 except Exception:
                     tb = traceback.format_exc()
-                    self._errors.append(ExtensionError(
-                        extension_path=ext.path,
-                        event=event_type,
-                        error=tb.strip().splitlines()[-1],
-                        stack=tb,
-                    ))
+                    self._errors.append(
+                        ExtensionError(
+                            extension_path=ext.path,
+                            event=event_type,
+                            error=tb.strip().splitlines()[-1],
+                            stack=tb,
+                        )
+                    )
 
     def unsubscribe(self) -> None:
         """Detach from the hooks bus (called before hot-reload replaces this runtime)."""

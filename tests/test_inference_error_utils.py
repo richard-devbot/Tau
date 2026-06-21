@@ -1,7 +1,7 @@
 """Tests for tau/inference/utils.py — API error classification."""
 from __future__ import annotations
 
-from tau.inference.utils import classify_error, ErrorKind
+from tau.inference.utils import ErrorKind, classify_error
 
 
 def _err(msg: str = "", status: int | None = None, type_name: str | None = None) -> Exception:

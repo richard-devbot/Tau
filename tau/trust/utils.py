@@ -60,12 +60,14 @@ def get_trust_options(cwd: str | Path, *, session_only: bool = True) -> list[Tru
         TrustOption(label="Trust", trusted=True, save_path=resolved),
     ]
     if parent != resolved:
-        options.append(TrustOption(
-            label=f"Trust parent folder ({parent})",
-            trusted=True,
-            save_path=parent,
-            clear_child_path=resolved,
-        ))
+        options.append(
+            TrustOption(
+                label=f"Trust parent folder ({parent})",
+                trusted=True,
+                save_path=parent,
+                clear_child_path=resolved,
+            )
+        )
     if session_only:
         options.append(TrustOption(label="Trust (this session only)", trusted=True, save_path=None))
     options.append(TrustOption(label="Do not trust", trusted=False, save_path=resolved))

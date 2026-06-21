@@ -44,15 +44,15 @@ class TestParagraph:
 class TestHeadings:
     def test_h1_contains_text(self):
         lines = plain("# Title")
-        assert any("Title" in l for l in lines)
+        assert any("Title" in ln for ln in lines)
 
     def test_h2_contains_text(self):
         lines = plain("## Section")
-        assert any("Section" in l for l in lines)
+        assert any("Section" in ln for ln in lines)
 
     def test_h3_contains_text(self):
         lines = plain("### Subsection")
-        assert any("Subsection" in l for l in lines)
+        assert any("Subsection" in ln for ln in lines)
 
     def test_heading_has_ansi_styling(self):
         lines = render("# Title")
@@ -82,7 +82,7 @@ class TestThematicBreak:
     def test_hr_renders_as_line(self):
         lines = plain("---")
         assert len(lines) >= 1
-        assert any("─" in l or "-" in l or "─" in l for l in lines)
+        assert any("─" in ln or "-" in ln for ln in lines)
 
     def test_hr_spans_width(self):
         lines = plain("---", width=40)

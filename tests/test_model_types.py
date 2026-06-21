@@ -1,7 +1,7 @@
 """Tests for tau/inference/model/types.py — Model cost calculations."""
 from __future__ import annotations
 
-from tau.inference.model.types import Model, Cost, Modality
+from tau.inference.model.types import Cost, Modality, Model
 from tau.message.types import Usage
 
 
@@ -12,7 +12,7 @@ def _model(**kwargs) -> Model:
         provider=kwargs.get("provider", "test"),
         cost=kwargs.get("cost", Cost()),
         context_window=kwargs.get("context_window", 0),
-        max_input_tokens=kwargs.get("max_input_tokens", None),
+        max_input_tokens=kwargs.get("max_input_tokens"),
     )
 
 

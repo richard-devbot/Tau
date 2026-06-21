@@ -4,19 +4,26 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tau.agent.types import AgentConfig, AgentContext, AgentPhase, PromptOptions, ContextUsage
-from tau.hooks.service import Hooks
+from tau.agent.types import AgentConfig, AgentContext, AgentPhase, ContextUsage, PromptOptions
 from tau.hooks.engine import MessageEndEvent, MessageRollbackEvent, SavePointEvent, SettledEvent
-from tau.message.types import AgentMessage, AssistantMessage, TerminalExecutionMessage, LLMMessage, UserMessage, TextContent, ToolMessage
+from tau.hooks.service import Hooks
+from tau.message.types import (
+    AgentMessage,
+    AssistantMessage,
+    LLMMessage,
+    TerminalExecutionMessage,
+    TextContent,
+    ToolMessage,
+    UserMessage,
+)
 from tau.message.utils import strip_unusable_trailing_assistant
 from tau.tool.types import ToolInvocation, ToolResult
 
 if TYPE_CHECKING:
     from tau.engine.service import Engine
-    from tau.session.manager import SessionManager
     from tau.runtime.service import Runtime
     from tau.session.compaction import CompactionPreparation
-
+    from tau.session.manager import SessionManager
 
 
 def _to_llm_messages(messages: list[AgentMessage]) -> list[LLMMessage]:
@@ -29,7 +36,8 @@ def _to_llm_messages(messages: list[AgentMessage]) -> list[LLMMessage]:
     errors) and are skipped — an assistant turn with neither content nor tool
     calls is invalid to send back and triggers provider 400s.
     """
-    from tau.message.types import CompactionSummaryMessage, ToolCallContent, ThinkingContent
+    from tau.message.types import CompactionSummaryMessage, ThinkingContent, ToolCallContent
+
     result: list[LLMMessage] = []
     for msg in messages:
         if isinstance(msg, CompactionSummaryMessage):
@@ -40,8 +48,7 @@ def _to_llm_messages(messages: list[AgentMessage]) -> list[LLMMessage]:
                 result.append(msg.to_user_message())
         elif isinstance(msg, AssistantMessage):
             has_usable = any(
-                isinstance(c, (TextContent, ToolCallContent, ThinkingContent))
-                for c in msg.contents
+                isinstance(c, (TextContent, ToolCallContent, ThinkingContent)) for c in msg.contents
             )
             if has_usable:
                 result.append(msg)
@@ -114,6 +121,7 @@ class Agent:
     def update_context_tokens(self) -> None:
         """Recalculate context token usage."""
         from tau.session.compaction import estimate_context_tokens
+
         session_ctx = self._session_manager.build_session_context()
         llm_messages = _to_llm_messages(session_ctx.messages)
         usage = estimate_context_tokens(llm_messages)
@@ -122,7 +130,9 @@ class Agent:
     def get_context_usage(self) -> ContextUsage | None:
         """Get current context token usage and limits."""
         self.update_context_tokens()
-        percent = (self._context_tokens / self._context_window * 100) if self._context_window else None
+        percent = (
+            (self._context_tokens / self._context_window * 100) if self._context_window else None
+        )
         return ContextUsage(
             tokens=self._context_tokens,
             context_window=self._context_window,
@@ -191,7 +201,7 @@ class Agent:
             case _:
                 pass
 
-    async def _on_message_rollback(self, event: "MessageRollbackEvent") -> None:
+    async def _on_message_rollback(self, event: MessageRollbackEvent) -> None:
         """Retract the last ``event.count`` persisted messages from the session.
 
         Fired when an interrupted tool turn is dropped: the assistant tool-call
@@ -209,22 +219,26 @@ class Agent:
     async def compact(self, custom_instructions: str | None = None) -> bool:
         """Manually trigger context compaction. Returns True if compaction ran."""
         from tau.session.compaction import prepare_compaction
+
         entries = self._session_manager.get_branch()
         preparation = prepare_compaction(entries, self._config.compaction)
         if preparation is None:
             return False
-        await self._apply_compaction(preparation, entries, manual=True, custom_instructions=custom_instructions)
+        await self._apply_compaction(
+            preparation, entries, manual=True, custom_instructions=custom_instructions
+        )
         return True
 
     async def _apply_compaction(
         self,
-        preparation: "CompactionPreparation",
+        preparation: CompactionPreparation,
         entries: list,
         manual: bool,
         custom_instructions: str | None = None,
     ) -> None:
         """Run a prepared compaction, persist the summary, and emit the end event."""
         from tau.hooks.engine import CompactionEndEvent
+
         result, from_extension = await self._run_compaction(
             preparation, entries, manual=manual, custom_instructions=custom_instructions
         )
@@ -234,16 +248,19 @@ class Agent:
             tokens_before=result.tokens_before,
         )
         self._compaction_failures = 0
-        await self.hooks.emit(CompactionEndEvent(
-            manual=manual,
-            tokens_before=result.tokens_before,
-            summary_length=len(result.summary),
-            from_extension=from_extension,
-        ))
+        await self.hooks.emit(
+            CompactionEndEvent(
+                manual=manual,
+                tokens_before=result.tokens_before,
+                summary_length=len(result.summary),
+                from_extension=from_extension,
+            )
+        )
 
     def _latest_compaction_timestamp(self) -> float | None:
         """Timestamp of the most recent compaction in the active branch, if any."""
         from tau.session.types import CompactionEntry
+
         for entry in reversed(self._session_manager.get_branch()):
             if isinstance(entry, CompactionEntry):
                 return entry.timestamp
@@ -252,8 +269,9 @@ class Agent:
     async def _check_compaction(self) -> None:
         """Auto-compact if context usage exceeds the threshold. Circuit-breaks after 3 failures."""
         from tau.session.compaction import (
-            estimate_context_tokens, should_compact,
+            estimate_context_tokens,
             prepare_compaction,
+            should_compact,
         )
 
         if self._compaction_failures >= 3:
@@ -305,6 +323,7 @@ class Agent:
           leaving no room to generate, so it stops with zero output.
         """
         from tau.inference.types import StopReason
+
         cw = self._context_window
         if cw <= 0:
             return False
@@ -312,9 +331,7 @@ class Agent:
         inp = u.input_tokens + u.cache_read_tokens
         if message.stop_reason == StopReason.Stop and inp > cw:
             return True
-        if message.stop_reason == StopReason.Length and u.output_tokens == 0 and inp >= cw * 0.99:
-            return True
-        return False
+        return bool(message.stop_reason == StopReason.Length and u.output_tokens == 0 and inp >= cw * 0.99)
 
     async def _try_overflow_recovery(self) -> bool:
         """If the last turn died with a context-overflow error, compact once and signal a retry.
@@ -358,11 +375,18 @@ class Agent:
         if self._runtime is None:
             return
         from tau.extensions.context import ExtensionContext
+
         ctx = ExtensionContext.from_runtime(self._runtime)
         if ctx.ui is not None:
             ctx.ui.notify(message)
 
-    async def _run_compaction(self, preparation: "CompactionPreparation", entries: list, manual: bool, custom_instructions: str | None = None) -> tuple:
+    async def _run_compaction(
+        self,
+        preparation: CompactionPreparation,
+        entries: list,
+        manual: bool,
+        custom_instructions: str | None = None,
+    ) -> tuple:
         """Emit before_compaction (allowing interception), then run the default algorithm.
 
         Returns (CompactionResult, from_extension: bool).
@@ -370,14 +394,20 @@ class Agent:
         Exceptions in before_compaction handlers are swallowed — first non-error result wins,
         consistent with error-fallthrough behaviour.
         """
+        from tau.hooks.engine import (
+            BeforeCompactionEvent,
+            BeforeCompactionResult,
+            CompactionStartEvent,
+        )
         from tau.session.compaction import compact as _compact
-        from tau.hooks.engine import BeforeCompactionEvent, BeforeCompactionResult, CompactionStartEvent
 
-        before_results = await self.hooks.emit(BeforeCompactionEvent(
-            preparation=preparation,
-            entries=entries,
-            manual=manual,
-        ))
+        before_results = await self.hooks.emit(
+            BeforeCompactionEvent(
+                preparation=preparation,
+                entries=entries,
+                manual=manual,
+            )
+        )
 
         for res in before_results:
             if not isinstance(res, BeforeCompactionResult):
@@ -388,7 +418,9 @@ class Agent:
                 return res.compaction, True
 
         await self.hooks.emit(CompactionStartEvent(manual=manual))
-        result = await _compact(preparation, self._engine.llm, custom_instructions=custom_instructions)  # type: ignore[arg-type]
+        result = await _compact(
+            preparation, self._engine.llm, custom_instructions=custom_instructions
+        )  # type: ignore[arg-type]
         return result, False
 
     # -------------------------------------------------------------------------
@@ -398,7 +430,9 @@ class Agent:
     async def invoke(self, text: str, options: PromptOptions | None = None) -> None:
         """Run one user turn."""
         if self._phase != AgentPhase.IDLE:
-            raise RuntimeError(f"Agent is busy (phase={self._phase!r}). Wait for the current operation to finish.")
+            raise RuntimeError(
+                f"Agent is busy (phase={self._phase!r}). Wait for the current operation to finish."
+            )
 
         opts = options or PromptOptions()
 
@@ -452,11 +486,11 @@ class Agent:
 
     async def _run(self, ctx: AgentContext) -> None:
         unsubscribe = self.hooks.register(
-            'message_end',
+            "message_end",
             lambda event: self._on_message_end(event),
         )
         unsubscribe_rollback = self.hooks.register(
-            'message_rollback',
+            "message_rollback",
             lambda event: self._on_message_rollback(event),
         )
         try:

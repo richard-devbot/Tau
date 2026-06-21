@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import re
 import unicodedata as _ud
-from typing import Callable
+from collections.abc import Callable
 
-from tau.tui.ansi import CURSOR_MARKER, visible_width, RESET, DIM, BOLD
 import grapheme
 
+from tau.tui.ansi import BOLD, CURSOR_MARKER, DIM, RESET, visible_width
 from tau.tui.component import Component
 from tau.tui.input import InputEvent, Key, KeyEvent, PasteEvent
 
@@ -137,7 +137,17 @@ class TextInput(Component):
         if not self._text:
             cursor_block = CURSOR_MARKER + "\x1b[7m \x1b[27m"
             placeholder = self._placeholder[:available] if self._placeholder else ""
-            return [BOLD + self._prefix + padding + RESET + cursor_block + DIM + placeholder + padding + RESET]
+            return [
+                BOLD
+                + self._prefix
+                + padding
+                + RESET
+                + cursor_block
+                + DIM
+                + placeholder
+                + padding
+                + RESET
+            ]
 
         text_lines = self._text.split("\n")
         cursor_line_idx, cursor_col = self._cursor_line_col()
@@ -150,7 +160,12 @@ class TextInput(Component):
             col_in_line = cursor_col if i == cursor_line_idx else -1
             rendered, scroll = _render_line(line_text, col_in_line, available, scroll)
             self._line_scrolls[i] = scroll
-            if self._arg_hint and i == last_line_idx and i == cursor_line_idx and cursor_col == len(line_text):
+            if (
+                self._arg_hint
+                and i == last_line_idx
+                and i == cursor_line_idx
+                and cursor_col == len(line_text)
+            ):
                 rendered += DIM + self._arg_hint + RESET
             result.append(BOLD + prefix + padding + RESET + rendered + padding)
 
@@ -354,7 +369,7 @@ class TextInput(Component):
             else:
                 # Delete the whole grapheme cluster at the cursor.
                 cluster = next(iter(grapheme.graphemes(after)), "")
-                self._text = self._text[: self._cursor] + after[len(cluster):]
+                self._text = self._text[: self._cursor] + after[len(cluster) :]
             self._line_scrolls = {}
 
     def _move_left(self) -> None:
@@ -404,7 +419,7 @@ class TextInput(Component):
     @staticmethod
     def _line_offset(idx: int, lines: list[str]) -> int:
         """Character offset of the start of logical line ``idx`` (newlines count as 1)."""
-        return sum(len(l) + 1 for l in lines[:idx])
+        return sum(len(ln) + 1 for ln in lines[:idx])
 
     def _move_up(self) -> None:
         """Move the cursor up a line; browse history when already on the first line."""
@@ -504,6 +519,7 @@ class TextInput(Component):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _char_width(ch: str) -> int:
     cp = ord(ch)

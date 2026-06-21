@@ -4,6 +4,7 @@ Anthropic OAuth flow (Claude Pro/Max) — PKCE + local callback server.
 The access token returned by Anthropic is used directly as a Bearer token
 for calls to the Anthropic API, replacing a traditional API key.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,15 +17,24 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Optional
+from dataclasses import dataclass
 
 import certifi
 
-from dataclasses import dataclass
-from tau.inference.provider.types import OAuthProvider
 from tau.inference.provider.oauth.pkce import generate_pkce
-from tau.inference.provider.oauth.types import OAuthAuthInfo, OAuthCredential, OAuthLoginCallbacks, OAuthPrompt, AbortSignal
-from tau.inference.provider.oauth.utils import parse_authorization_input, start_oauth_callback_server, await_oauth_code
+from tau.inference.provider.oauth.types import (
+    AbortSignal,
+    OAuthAuthInfo,
+    OAuthCredential,
+    OAuthLoginCallbacks,
+    OAuthPrompt,
+)
+from tau.inference.provider.oauth.utils import (
+    await_oauth_code,
+    parse_authorization_input,
+    start_oauth_callback_server,
+)
+from tau.inference.provider.types import OAuthProvider
 
 __all__ = ["AnthropicClaudeCodeOAuthProvider"]
 
@@ -80,23 +90,29 @@ def _post_json(url: str, body: dict) -> dict:
 
 def _exchange_code(code: str, state: str, verifier: str) -> dict:
     """Exchange an authorization code for tokens using PKCE verification."""
-    return _post_json(TOKEN_URL, {
-        "grant_type": "authorization_code",
-        "client_id": CLIENT_ID,
-        "code": code,
-        "state": state,
-        "redirect_uri": REDIRECT_URI,
-        "code_verifier": verifier,
-    })
+    return _post_json(
+        TOKEN_URL,
+        {
+            "grant_type": "authorization_code",
+            "client_id": CLIENT_ID,
+            "code": code,
+            "state": state,
+            "redirect_uri": REDIRECT_URI,
+            "code_verifier": verifier,
+        },
+    )
 
 
 def _refresh_token_sync(refresh_token: str) -> dict:
     """Synchronously refresh an Anthropic OAuth token; called via asyncio.to_thread."""
-    return _post_json(TOKEN_URL, {
-        "grant_type": "refresh_token",
-        "client_id": CLIENT_ID,
-        "refresh_token": refresh_token,
-    })
+    return _post_json(
+        TOKEN_URL,
+        {
+            "grant_type": "refresh_token",
+            "client_id": CLIENT_ID,
+            "refresh_token": refresh_token,
+        },
+    )
 
 
 def _validate_token_sync(access_token: str) -> bool:
@@ -131,21 +147,24 @@ def _parse_token_response(data: dict) -> tuple[str, str, int]:
     return access, refresh, expires_ms
 
 
-
 def _read_cc_raw_secret() -> str | None:
     """Return the raw JSON string from the OS credential store, or None if unavailable."""
     try:
         if sys.platform == "darwin":
             r = subprocess.run(
                 ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             return r.stdout.strip() if r.returncode == 0 else None
 
         if sys.platform == "linux":
             r = subprocess.run(
                 ["secret-tool", "lookup", "service", "Claude Code-credentials"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             return r.stdout.strip() if r.returncode == 0 else None
 
@@ -159,7 +178,9 @@ def _read_cc_raw_secret() -> str | None:
             )
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             return r.stdout.strip() if r.returncode == 0 else None
     except Exception:
@@ -202,14 +223,18 @@ async def login_anthropic(callbacks: OAuthLoginCallbacks) -> OAuthCredential:
     state = verifier
     url = _build_authorization_url(challenge, state)
 
-    server, code_future = await start_oauth_callback_server(CALLBACK_PATH, state, CALLBACK_HOST, CALLBACK_PORT)
-    callbacks.on_auth(OAuthAuthInfo(
-        url=url,
-        instructions=(
-            "Complete login in your browser. "
-            "If the browser is on another machine, paste the final redirect URL here."
-        ),
-    ))
+    server, code_future = await start_oauth_callback_server(
+        CALLBACK_PATH, state, CALLBACK_HOST, CALLBACK_PORT
+    )
+    callbacks.on_auth(
+        OAuthAuthInfo(
+            url=url,
+            instructions=(
+                "Complete login in your browser. "
+                "If the browser is on another machine, paste the final redirect URL here."
+            ),
+        )
+    )
 
     # Race the browser callback against optional manual paste. The manual
     # task MUST be cancelable (see _read_line_cancelable) — cancelling it
@@ -219,10 +244,12 @@ async def login_anthropic(callbacks: OAuthLoginCallbacks) -> OAuthCredential:
     code, recv_state = await await_oauth_code(code_future, state, server, callbacks)
 
     if not code:
-        raw = await callbacks.on_prompt(OAuthPrompt(
-            message="Paste the authorization code or full redirect URL:",
-            placeholder=REDIRECT_URI,
-        ))
+        raw = await callbacks.on_prompt(
+            OAuthPrompt(
+                message="Paste the authorization code or full redirect URL:",
+                placeholder=REDIRECT_URI,
+            )
+        )
         parsed_code, parsed_state = parse_authorization_input(raw)
         if parsed_state and parsed_state != state:
             raise ValueError("OAuth state mismatch")
@@ -243,7 +270,9 @@ async def login_anthropic(callbacks: OAuthLoginCallbacks) -> OAuthCredential:
     return OAuthCredential(access=access, refresh=refresh, expires=expires_ms)
 
 
-async def refresh_anthropic_token(credential: OAuthCredential, signal: Optional[AbortSignal] = None) -> OAuthCredential:
+async def refresh_anthropic_token(
+    credential: OAuthCredential, signal: AbortSignal | None = None
+) -> OAuthCredential:
     """Exchange a refresh token for a new OAuthCredential; transparent to the streaming loop."""
     data = await asyncio.to_thread(_refresh_token_sync, credential.refresh)
     access, refresh, expires_ms = _parse_token_response(data)
@@ -262,7 +291,9 @@ class AnthropicClaudeCodeOAuthProvider(OAuthProvider):
         """Initiate the PKCE login flow through the Anthropic authorization server."""
         return await login_anthropic(callbacks)
 
-    async def refresh_token(self, credential: OAuthCredential, signal: Optional[AbortSignal] = None) -> OAuthCredential:
+    async def refresh_token(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> OAuthCredential:
         """Obtain a new access token using the stored refresh token."""
         return await refresh_anthropic_token(credential, signal=signal)
 
@@ -274,13 +305,15 @@ class AnthropicClaudeCodeOAuthProvider(OAuthProvider):
     def api(self):
         """Return the API class that handles requests with this provider's tokens."""
         from tau.inference.api.text.anthropic_claude_code import AnthropicClaudeCodeAPI
+
         return AnthropicClaudeCodeAPI
 
-    async def validate(self, credential: OAuthCredential, signal: Optional[AbortSignal] = None) -> bool:
+    async def validate(
+        self, credential: OAuthCredential, signal: AbortSignal | None = None
+    ) -> bool:
         """Return True if the credential is unexpired and accepted by the API."""
         if self.is_expired(credential):
             return False
         if signal and signal.is_set():
             return False
         return await asyncio.to_thread(_validate_token_sync, credential.access)
-

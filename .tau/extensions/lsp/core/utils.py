@@ -10,8 +10,8 @@ def detect_indent(path_str: str) -> tuple[int, bool]:
     """
     try:
         lines = Path(path_str).read_text(errors="replace").splitlines()[:200]
-        tabs = sum(1 for l in lines if l.startswith("\t"))
-        spaces = sum(1 for l in lines if l.startswith("  "))
+        tabs = sum(1 for ln in lines if ln.startswith("\t"))
+        spaces = sum(1 for ln in lines if ln.startswith("  "))
         if tabs > spaces:
             return 4, False
         counts: dict[int, int] = {}

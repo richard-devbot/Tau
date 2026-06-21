@@ -8,9 +8,8 @@ from tau.utils.http_proxy import (
     _parse_proxy_target_url,
     _should_proxy_hostname,
     _validate_proxy_url,
-    get_proxy_url_for_target,
     get_proxies_for_client,
-    UNSUPPORTED_PROXY_PROTOCOL_MESSAGE,
+    get_proxy_url_for_target,
 )
 
 

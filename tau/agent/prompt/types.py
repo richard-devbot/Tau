@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+
 from pydantic import BaseModel, Field
+
 from tau.tool.types import Tool
 
 
 class PromptOptions(BaseModel):
     """Options for constructing the system prompt."""
-    model_config = {'arbitrary_types_allowed': True}
+
+    model_config = {"arbitrary_types_allowed": True}
 
     cwd: Path
     tools: list[Tool] = Field(default_factory=list)

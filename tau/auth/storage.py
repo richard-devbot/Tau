@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
-from tau.auth.types import LockResult
-from filelock import FileLock
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+
+from filelock import FileLock
+
+from tau.auth.types import LockResult
 
 
 class AuthStorage(ABC):
@@ -14,7 +16,9 @@ class AuthStorage(ABC):
         pass
 
     @abstractmethod
-    async def with_lock_async(self, fn: Callable[[str | None], Awaitable[LockResult]]) -> LockResult:
+    async def with_lock_async(
+        self, fn: Callable[[str | None], Awaitable[LockResult]]
+    ) -> LockResult:
         """Execute async fn with exclusive access to storage."""
         pass
 
@@ -42,17 +46,23 @@ class FileAuthStorage(AuthStorage):
     def with_lock(self, fn: Callable[[str | None], LockResult]) -> LockResult:
         """Execute fn with exclusive access to storage."""
         with FileLock(self.lock_path):
-            current = self.store_path.read_text(encoding="utf-8") if self.store_path.exists() else None
+            current = (
+                self.store_path.read_text(encoding="utf-8") if self.store_path.exists() else None
+            )
             result = fn(current)
             if result.next is not None:
                 self.store_path.write_text(result.next, encoding="utf-8")
                 self.store_path.chmod(0o600)
             return result
 
-    async def with_lock_async(self, fn: Callable[[str | None], Awaitable[LockResult]]) -> LockResult:
+    async def with_lock_async(
+        self, fn: Callable[[str | None], Awaitable[LockResult]]
+    ) -> LockResult:
         """Execute async fn with exclusive access to storage."""
         with FileLock(self.lock_path):
-            current = self.store_path.read_text(encoding="utf-8") if self.store_path.exists() else None
+            current = (
+                self.store_path.read_text(encoding="utf-8") if self.store_path.exists() else None
+            )
             result = await fn(current)
             if result.next is not None:
                 self.store_path.write_text(result.next, encoding="utf-8")
@@ -74,7 +84,9 @@ class InMemoryAuthStorage(AuthStorage):
             self._value = result.next
         return result
 
-    async def with_lock_async(self, fn: Callable[[str | None], Awaitable[LockResult]]) -> LockResult:
+    async def with_lock_async(
+        self, fn: Callable[[str | None], Awaitable[LockResult]]
+    ) -> LockResult:
         """Execute async fn with exclusive access to memory storage."""
         result = await fn(self._value)
         if result.next is not None:

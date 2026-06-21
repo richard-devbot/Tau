@@ -4,38 +4,69 @@ Google Antigravity API — SSE streaming via cloudcode-pa.googleapis.com.
 Uses a Bearer token from Google OAuth to access Claude and Gemini models
 through Google's Antigravity IDE quota.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
-from tau.inference.api.text.utils import parse_tool_args
 import os
-from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Any, Optional, TYPE_CHECKING
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
 from tau.inference.api.text.types import APIResponse
+from tau.inference.api.text.utils import parse_tool_args
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    LLMContext, LLMEvent, LLMOptions, StopReason,
-    StartEvent, EndEvent, ErrorEvent,
-    TextStartEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingStartEvent, ThinkingDeltaEvent, ThinkingEndEvent,
-    ToolCallStartEvent, ToolCallDeltaEvent, ToolCallEndEvent,
+    EndEvent,
+    ErrorEvent,
+    LLMContext,
+    LLMEvent,
+    LLMOptions,
+    StartEvent,
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    TextStartEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingStartEvent,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
     normalize_structured_response_format,
 )
 from tau.message.types import (
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+    AssistantMessage,
+    ImageContent,
+    LLMMessage,
+    SystemMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    UserMessage,
 )
+
 if TYPE_CHECKING:
     from tau.tool.types import Tool
 
 __all__ = ["GoogleAntigravityAPI"]
 
-_SKIP_KEYS = {"title", "$schema", "$defs", "default", "prefixItems", "maxItems", "minItems", "exclusiveMinimum", "exclusiveMaximum"}
+_SKIP_KEYS = {
+    "title",
+    "$schema",
+    "$defs",
+    "default",
+    "prefixItems",
+    "maxItems",
+    "minItems",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+}
 
 
 def _resolve_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -80,6 +111,7 @@ def _resolve_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
     return _resolve(schema)
 
+
 _DEFAULT_BASE_URL = "https://cloudcode-pa.googleapis.com"
 _STREAM_PATH = "/v1internal:streamGenerateContent?alt=sse"
 _LOAD_CODE_ASSIST_PATH = "/v1internal:loadCodeAssist"
@@ -117,7 +149,7 @@ _METADATA = {
 }
 
 
-def _extract_managed_project(payload: dict[str, Any]) -> Optional[str]:
+def _extract_managed_project(payload: dict[str, Any]) -> str | None:
     project = payload.get("cloudaicompanionProject")
     if isinstance(project, str) and project:
         return project
@@ -126,7 +158,7 @@ def _extract_managed_project(payload: dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _pick_default_tier(allowed: list[dict[str, Any]]) -> Optional[str]:
+def _pick_default_tier(allowed: list[dict[str, Any]]) -> str | None:
     for tier in allowed:
         if tier.get("isDefault") and tier.get("id"):
             return tier["id"]
@@ -203,7 +235,9 @@ def _messages_to_contents(
                             parts.append({"text": item.content})
                         case ImageContent():
                             for b64, mime in item.to_base64():
-                                parts.append({"inlineData": {"mimeType": mime or "image/png", "data": b64}})
+                                parts.append(
+                                    {"inlineData": {"mimeType": mime or "image/png", "data": b64}}
+                                )
                 if parts:
                     raw.append({"role": "user", "parts": parts})
             case AssistantMessage():
@@ -234,12 +268,14 @@ def _messages_to_contents(
                 parts = []
                 for content in msg.contents:
                     if isinstance(content, ToolResultContent):
-                        parts.append({
-                            "functionResponse": {
-                                "name": content.id,
-                                "response": {"result": content.content}
+                        parts.append(
+                            {
+                                "functionResponse": {
+                                    "name": content.id,
+                                    "response": {"result": content.content},
+                                }
                             }
-                        })
+                        )
                 if parts:
                     raw.append({"role": "user", "parts": parts})
 
@@ -263,10 +299,11 @@ _PROVIDER_ID = "google-antigravity"
 _EXTRA_PROJECT_KEY = "project_id"
 
 
-def _load_cached_project_id() -> Optional[str]:
+def _load_cached_project_id() -> str | None:
     try:
-        from tau.inference.api.text.service import LLM
         from tau.auth.types import OAuthCredential as _Cred
+        from tau.inference.api.text.service import LLM
+
         cred = LLM._auth_store.get(_PROVIDER_ID)
         if isinstance(cred, _Cred):
             return cred.extra.get(_EXTRA_PROJECT_KEY) or None
@@ -277,8 +314,9 @@ def _load_cached_project_id() -> Optional[str]:
 
 def _persist_project_id(project_id: str) -> None:
     try:
-        from tau.inference.api.text.service import LLM
         from tau.auth.types import OAuthCredential as _Cred
+        from tau.inference.api.text.service import LLM
+
         cred = LLM._auth_store.get(_PROVIDER_ID)
         if isinstance(cred, _Cred) and cred.extra.get(_EXTRA_PROJECT_KEY) != project_id:
             cred.extra[_EXTRA_PROJECT_KEY] = project_id
@@ -291,16 +329,13 @@ class GoogleAntigravityAPI(BaseAPI):
     def __init__(self, options: LLMOptions) -> None:
         super().__init__(options)
         self._base_url = (options.base_url or _DEFAULT_BASE_URL).rstrip("/")
-        self._project_id: Optional[str] = (
-            (options.headers or {}).get("x-goog-user-project")
-            or _load_cached_project_id()
-        )
+        self._project_id: str | None = (options.headers or {}).get(
+            "x-goog-user-project"
+        ) or _load_cached_project_id()
 
     async def _ensure_project_id(self) -> str:
         if not self._project_id:
-            resolved = await resolve_project_id(
-                self.options.api_key or "", self._base_url
-            )
+            resolved = await resolve_project_id(self.options.api_key or "", self._base_url)
             self._project_id = resolved
             if resolved and resolved != _FALLBACK_PROJECT_ID:
                 _persist_project_id(resolved)
@@ -326,7 +361,7 @@ class GoogleAntigravityAPI(BaseAPI):
         project: str,
         system: str | None,
         contents: list[dict[str, Any]],
-        tools: Optional[list[Tool]] = None,
+        tools: list[Tool] | None = None,
         response_format: Any | None = None,
     ) -> dict[str, Any]:
         generation_config: dict[str, Any] = {}
@@ -339,7 +374,9 @@ class GoogleAntigravityAPI(BaseAPI):
             generation_config["responseMimeType"] = "application/json"
             generation_config["responseSchema"] = schema
         if self.options.thinking_level is not None:
-            from tau.inference.types import ThinkingBudgets, ThinkingLevel as _TL
+            from tau.inference.types import ThinkingBudgets
+            from tau.inference.types import ThinkingLevel as _TL
+
             if self.options.thinking_level == _TL.Off:
                 generation_config["thinkingConfig"] = {"thinkingBudget": 0}
             else:
@@ -394,19 +431,26 @@ class GoogleAntigravityAPI(BaseAPI):
 
         done = False
         try:
-            async with httpx.AsyncClient(timeout=self.options.timeout.total_seconds()) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(timeout=self.options.timeout.total_seconds()) as client,
+                client.stream(
                     "POST",
                     f"{self._base_url}{_STREAM_PATH}",
                     headers=headers,
                     content=json.dumps(body),
-                ) as response:
+                ) as response,
+            ):
                     if self.options.on_response:
-                        self.options.on_response(APIResponse(response.status_code, dict(response.headers)))
+                        self.options.on_response(
+                            APIResponse(response.status_code, dict(response.headers))
+                        )
 
                     if not response.is_success:
                         error_body = (await response.aread()).decode(errors="replace")
-                        yield ErrorEvent(reason=StopReason.Abort, error=f"HTTP {response.status_code}: {error_body}")
+                        yield ErrorEvent(
+                            reason=StopReason.Abort,
+                            error=f"HTTP {response.status_code}: {error_body}",
+                        )
                         return
 
                     # Use aiter_bytes() directly rather than the aiter_lines →
@@ -461,13 +505,23 @@ class GoogleAntigravityAPI(BaseAPI):
                                         thinking_buf += delta
                                         if part.get("thoughtSignature"):
                                             thinking_sig = part["thoughtSignature"]
-                                        yield ThinkingDeltaEvent(thinking=ThinkingContent(content=delta))
-                                    elif part.get("thought") and part.get("thoughtSignature") and not part.get("text"):
+                                        yield ThinkingDeltaEvent(
+                                            thinking=ThinkingContent(content=delta)
+                                        )
+                                    elif (
+                                        part.get("thought")
+                                        and part.get("thoughtSignature")
+                                        and not part.get("text")
+                                    ):
                                         # Gemini may send a signature-only thought part
                                         thinking_sig = part["thoughtSignature"]
                                     elif part.get("text"):
                                         if thinking_started:
-                                            yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf, signature=thinking_sig))
+                                            yield ThinkingEndEvent(
+                                                thinking=ThinkingContent(
+                                                    content=thinking_buf, signature=thinking_sig
+                                                )
+                                            )
                                             thinking_started = False
                                             thinking_index += 1
                                             thinking_buf = ""
@@ -488,20 +542,39 @@ class GoogleAntigravityAPI(BaseAPI):
                                         if part_sig:
                                             call_meta["thoughtSignature"] = part_sig
                                         call_id = fc.get("id") or name
-                                        yield ToolCallStartEvent(tool_call=ToolCallContent(id=call_id, name=name))
-                                        yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=call_id))
-                                        yield ToolCallEndEvent(tool_call=ToolCallContent(id=call_id, name=name, args=args, metadata=call_meta))
+                                        yield ToolCallStartEvent(
+                                            tool_call=ToolCallContent(id=call_id, name=name)
+                                        )
+                                        yield ToolCallDeltaEvent(
+                                            tool_call=ToolCallContent(id=call_id)
+                                        )
+                                        yield ToolCallEndEvent(
+                                            tool_call=ToolCallContent(
+                                                id=call_id, name=name, args=args, metadata=call_meta
+                                            )
+                                        )
                                         tool_index += 1
 
                                 finish_reason = candidate.get("finishReason", "")
-                                if finish_reason and finish_reason not in ("", "FINISH_REASON_UNSPECIFIED"):
+                                if finish_reason and finish_reason not in (
+                                    "",
+                                    "FINISH_REASON_UNSPECIFIED",
+                                ):
                                     if thinking_started:
-                                        yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf, signature=thinking_sig))
+                                        yield ThinkingEndEvent(
+                                            thinking=ThinkingContent(
+                                                content=thinking_buf, signature=thinking_sig
+                                            )
+                                        )
                                         thinking_index += 1
                                     if text_started:
                                         yield TextEndEvent(text=TextContent(content=text_buf))
                                         text_index += 1
-                                    stop = StopReason.ToolCalls if tool_index > 0 else _STOP_REASON.get(finish_reason, StopReason.Stop)
+                                    stop = (
+                                        StopReason.ToolCalls
+                                        if tool_index > 0
+                                        else _STOP_REASON.get(finish_reason, StopReason.Stop)
+                                    )
                                     yield EndEvent(reason=stop)
                                     done = True
                                     break
@@ -516,7 +589,9 @@ class GoogleAntigravityAPI(BaseAPI):
 
         if not done:
             if thinking_started:
-                yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf, signature=thinking_sig))
+                yield ThinkingEndEvent(
+                    thinking=ThinkingContent(content=thinking_buf, signature=thinking_sig)
+                )
             if text_started:
                 yield TextEndEvent(text=TextContent(content=text_buf))
             yield EndEvent(reason=StopReason.Stop)

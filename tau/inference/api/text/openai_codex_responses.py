@@ -1,12 +1,12 @@
 from __future__ import annotations
+
 import asyncio
 import base64
 import json
-from tau.inference.api.text.utils import parse_tool_args
 import re
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import aclosing
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import websockets
@@ -14,20 +14,42 @@ import websockets.asyncio.client
 
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
 from tau.inference.api.text.types import APIResponse
+from tau.inference.api.text.utils import parse_tool_args
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    LLMContext, LLMEvent, LLMOptions, StopReason, ThinkingLevel, Transport,
-    StartEvent, EndEvent, ErrorEvent,
-    TextStartEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingStartEvent, ThinkingDeltaEvent, ThinkingEndEvent,
-    ToolCallStartEvent, ToolCallDeltaEvent, ToolCallEndEvent,
+    EndEvent,
+    ErrorEvent,
+    LLMContext,
+    LLMEvent,
+    LLMOptions,
+    StartEvent,
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    TextStartEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingLevel,
+    ThinkingStartEvent,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
+    Transport,
     normalize_structured_response_format,
 )
 from tau.message.types import (
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+    AssistantMessage,
+    ImageContent,
+    LLMMessage,
+    SystemMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    UserMessage,
 )
-from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from tau.tool.types import Tool
 
@@ -60,6 +82,7 @@ _STOP_REASON: dict[str, StopReason] = {
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
+
 def _extract_account_id(token: str) -> str:
     try:
         parts = token.split(".")
@@ -77,6 +100,7 @@ def _extract_account_id(token: str) -> str:
 
 # ── URL ───────────────────────────────────────────────────────────────────────
 
+
 def _resolve_http_url(base_url: str | None) -> str:
     raw = (base_url or _DEFAULT_BASE_URL).rstrip("/")
     if raw.endswith("/codex/responses"):
@@ -93,6 +117,7 @@ def _resolve_ws_url(base_url: str | None) -> str:
 
 # ── Message → input conversion ────────────────────────────────────────────────
 
+
 def _content_to_input(content_items: list, role: str) -> list[dict[str, Any]]:
     # The Responses API requires assistant text parts to be "output_text"
     # ("input_text" is only valid for user/input content).
@@ -104,7 +129,11 @@ def _content_to_input(content_items: list, role: str) -> list[dict[str, Any]]:
                 parts.append({"type": text_type, "text": item.content})
             case ImageContent():
                 for b64, mime in item.to_base64():
-                    url = b64 if b64.startswith("http") else f"data:{mime or 'image/png'};base64,{b64}"
+                    url = (
+                        b64
+                        if b64.startswith("http")
+                        else f"data:{mime or 'image/png'};base64,{b64}"
+                    )
                     parts.append({"type": "input_image", "image_url": url})
     return parts
 
@@ -122,11 +151,13 @@ def _messages_to_input(messages: list[LLMMessage]) -> tuple[str, list[dict[str, 
             case ToolMessage():
                 for content in msg.contents:
                     if isinstance(content, ToolResultContent):
-                        input_items.append({
-                            "type": "function_call_output",
-                            "call_id": content.id,
-                            "output": content.content,
-                        })
+                        input_items.append(
+                            {
+                                "type": "function_call_output",
+                                "call_id": content.id,
+                                "output": content.content,
+                            }
+                        )
             case UserMessage() | AssistantMessage():
                 role = "user" if isinstance(msg, UserMessage) else "assistant"
                 parts = _content_to_input(msg.contents, role)
@@ -137,12 +168,14 @@ def _messages_to_input(messages: list[LLMMessage]) -> tuple[str, list[dict[str, 
                 # its matching function_call_output (emitted by the ToolMessage).
                 for content in msg.contents:
                     if isinstance(content, ToolCallContent):
-                        input_items.append({
-                            "type": "function_call",
-                            "call_id": content.id,
-                            "name": content.name,
-                            "arguments": json.dumps(content.args),
-                        })
+                        input_items.append(
+                            {
+                                "type": "function_call",
+                                "call_id": content.id,
+                                "name": content.name,
+                                "arguments": json.dumps(content.args),
+                            }
+                        )
 
     return instructions, input_items
 
@@ -163,14 +196,19 @@ def _text_format(response_format: Any | None) -> dict[str, Any] | None:
 
 # ── Request building ──────────────────────────────────────────────────────────
 
+
 def _build_body(
     model: Model,
     instructions: str,
     input_items: list[dict[str, Any]],
     options: LLMOptions,
-    tools: Optional[list[Tool]] = None,
+    tools: list[Tool] | None = None,
 ) -> dict[str, Any]:
-    effort = _THINKING_EFFORT.get(options.thinking_level, "medium") if options.thinking_level else "medium"
+    effort = (
+        _THINKING_EFFORT.get(options.thinking_level, "medium")
+        if options.thinking_level
+        else "medium"
+    )
     body: dict[str, Any] = {
         "model": model.id,
         "store": False,
@@ -215,6 +253,7 @@ def _build_headers(token: str, account_id: str, *, websocket: bool = False) -> d
 
 # ── Codex event normalization ─────────────────────────────────────────────────
 
+
 async def _map_codex_events(
     raw: AsyncIterator[dict[str, Any]],
 ) -> AsyncIterator[dict[str, Any]]:
@@ -239,6 +278,7 @@ async def _map_codex_events(
 
 # ── SSE parsing ───────────────────────────────────────────────────────────────
 
+
 async def _parse_sse(response: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     buffer = ""
     async for chunk in response.aiter_text():
@@ -246,9 +286,7 @@ async def _parse_sse(response: httpx.Response) -> AsyncIterator[dict[str, Any]]:
         while "\n\n" in buffer:
             block, buffer = buffer.split("\n\n", 1)
             data_lines = [
-                line[5:].strip()
-                for line in block.splitlines()
-                if line.startswith("data:")
+                line[5:].strip() for line in block.splitlines() if line.startswith("data:")
             ]
             if not data_lines:
                 continue
@@ -260,7 +298,10 @@ async def _parse_sse(response: httpx.Response) -> AsyncIterator[dict[str, Any]]:
 
 # ── WebSocket parsing ─────────────────────────────────────────────────────────
 
-async def _parse_ws(ws: websockets.asyncio.client.ClientConnection) -> AsyncIterator[dict[str, Any]]:
+
+async def _parse_ws(
+    ws: websockets.asyncio.client.ClientConnection,
+) -> AsyncIterator[dict[str, Any]]:
     saw_completion = False
     async for raw in ws:
         event: dict[str, Any] = json.loads(raw)
@@ -276,11 +317,13 @@ async def _parse_ws(ws: websockets.asyncio.client.ClientConnection) -> AsyncIter
 
 # ── Retry helper ──────────────────────────────────────────────────────────────
 
+
 def _is_retryable(status: int, body: str) -> bool:
     return status in _RETRYABLE_STATUSES or bool(_RETRYABLE_RE.search(body))
 
 
 # ── Event processing ──────────────────────────────────────────────────────────
+
 
 async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerator[LLMEvent, None]:
     # The Responses API gives a function_call output item both an `id`
@@ -319,8 +362,7 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
                 call_id_by_item[item_id] = call_id
                 name_by_item[item_id] = name
                 started_calls.add(call_id)
-                yield ToolCallStartEvent(tool_call=ToolCallContent(id=call_id, name=name)
-                )
+                yield ToolCallStartEvent(tool_call=ToolCallContent(id=call_id, name=name))
 
         elif etype == "response.output_text.delta":
             yield TextDeltaEvent(text=TextContent(content=event.get("delta", "")))
@@ -336,9 +378,8 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
 
         elif etype == "response.function_call_arguments.delta":
             item_id = event.get("item_id", "")
-            yield ToolCallDeltaEvent(tool_call=ToolCallContent(
-                    id=call_id_by_item.get(item_id, item_id)
-                )
+            yield ToolCallDeltaEvent(
+                tool_call=ToolCallContent(id=call_id_by_item.get(item_id, item_id))
             )
 
         elif etype == "response.function_call_arguments.done":
@@ -349,11 +390,8 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
             call_id = call_id_by_item.get(item_id, item_id)
             saw_tool_call = True
             ended_calls.add(call_id)
-            yield ToolCallEndEvent(tool_call=ToolCallContent(
-                    id=call_id,
-                    name=name_by_item.get(item_id, ""),
-                    args=args
-                )
+            yield ToolCallEndEvent(
+                tool_call=ToolCallContent(id=call_id, name=name_by_item.get(item_id, ""), args=args)
             )
 
         elif etype == "response.output_item.done":
@@ -367,13 +405,10 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
                     args = parse_tool_args(args_str)
                     if call_id not in started_calls:
                         started_calls.add(call_id)
-                        yield ToolCallStartEvent(
-                            tool_call=ToolCallContent(id=call_id, name=name)
-                        )
+                        yield ToolCallStartEvent(tool_call=ToolCallContent(id=call_id, name=name))
                     ended_calls.add(call_id)
-                    yield ToolCallEndEvent(tool_call=ToolCallContent(
-                            id=call_id, name=name, args=args
-                        )
+                    yield ToolCallEndEvent(
+                        tool_call=ToolCallContent(id=call_id, name=name, args=args)
                     )
 
         elif etype == "response.completed":
@@ -386,10 +421,16 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
             stop_reason = _STOP_REASON.get(response.get("stop_reason") or "", StopReason.Stop)
             if saw_tool_call and stop_reason == StopReason.Stop:
                 stop_reason = StopReason.ToolCalls
-            yield EndEvent(reason=stop_reason, input_tokens=_input_tokens, output_tokens=_output_tokens, cache_read_tokens=_cache_read_tokens)
+            yield EndEvent(
+                reason=stop_reason,
+                input_tokens=_input_tokens,
+                output_tokens=_output_tokens,
+                cache_read_tokens=_cache_read_tokens,
+            )
 
 
 # ── API class ─────────────────────────────────────────────────────────────────
+
 
 class OpenAICodexResponsesAPI(BaseAPI):
     SUPPORTED_TRANSPORTS = (Transport.HTTP, Transport.WEBSOCKET)
@@ -419,10 +460,15 @@ class OpenAICodexResponsesAPI(BaseAPI):
                     await asyncio.sleep(_BASE_DELAY_S * (2 ** (attempt - 1)))
                 try:
                     async with client.stream(
-                        "POST", self._http_url, content=body_bytes, headers=headers,
+                        "POST",
+                        self._http_url,
+                        content=body_bytes,
+                        headers=headers,
                     ) as response:
                         if self.options.on_response:
-                            self.options.on_response(APIResponse(response.status_code, dict(response.headers)))
+                            self.options.on_response(
+                                APIResponse(response.status_code, dict(response.headers))
+                            )
 
                         if not response.is_success:
                             text = (await response.aread()).decode(errors="replace")
@@ -450,7 +496,9 @@ class OpenAICodexResponsesAPI(BaseAPI):
         body: dict[str, Any],
         headers: dict[str, str],
     ) -> AsyncGenerator[LLMEvent, None]:
-        ws_headers = {k: v for k, v in headers.items() if k.lower() not in ("accept", "content-type")}
+        ws_headers = {
+            k: v for k, v in headers.items() if k.lower() not in ("accept", "content-type")
+        }
         async with websockets.asyncio.client.connect(
             self._ws_url,
             additional_headers=ws_headers,
@@ -463,7 +511,9 @@ class OpenAICodexResponsesAPI(BaseAPI):
         token = self.options.api_key or ""
         account_id = _extract_account_id(token)
         instructions, input_items = _messages_to_input(context.messages)
-        body = _build_body(model, instructions, input_items, self.options, tools=context.tools or None)
+        body = _build_body(
+            model, instructions, input_items, self.options, tools=context.tools or None
+        )
         text_format = _text_format(context.response_format)
         if text_format is not None:
             body["text"] = {**body.get("text", {}), **text_format}

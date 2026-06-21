@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from tau.tui.ansi import visible_width
 from tau.tui.component import Component
@@ -27,10 +28,10 @@ class Box(Component):
         padding_y: int = 0,
         bg_fn: ColorFn | None = None,
     ) -> None:
-        self._render_fn  = render_fn
-        self._padding_x  = max(0, padding_x)
-        self._padding_y  = max(0, padding_y)
-        self._bg_fn      = bg_fn
+        self._render_fn = render_fn
+        self._padding_x = max(0, padding_x)
+        self._padding_y = max(0, padding_y)
+        self._bg_fn = bg_fn
         self._cache: list[str] | None = None
         self._cache_width = 0
 
@@ -65,12 +66,12 @@ class Box(Component):
 
     def _build(self, width: int) -> list[str]:
         inner_w = max(1, width - self._padding_x * 2)
-        raw     = self._render_fn(inner_w)
-        pad_x   = " " * self._padding_x
+        raw = self._render_fn(inner_w)
+        pad_x = " " * self._padding_x
 
         def _apply(line: str) -> str:
             # Pad the visible content to `width` columns, then apply bg.
-            vw   = visible_width(line)
+            vw = visible_width(line)
             fill = max(0, width - vw)
             full = line + " " * fill
             return self._bg_fn(full) if self._bg_fn else full

@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import glob as _glob
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tau.tool.types import (
-    Tool, ToolKind, ToolExecutionMode,
-    ToolInvocation, ToolResult,
-    ToolExecutionUpdateCallback, AbortSignal, ToolContext,
-)
 from tau.tool.render import call_line
+from tau.tool.types import (
+    AbortSignal,
+    Tool,
+    ToolContext,
+    ToolExecutionMode,
+    ToolExecutionUpdateCallback,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 
 def _render_glob_call(args: dict, _streaming: bool) -> list[str]:
     return call_line("glob", args.get("pattern", ""))
+
 
 _MAX_RESULTS = 1000
 _PREVIEW_LINES = 5
@@ -23,9 +29,10 @@ _PREVIEW_LINES = 5
 
 def _render_glob_result(content: str, opts: Any) -> list[str]:
     from tau.tui.ansi import DIM, RESET
+
     metadata = opts.metadata or {}
     match_count = metadata.get("match_count", 0)
-    truncated   = metadata.get("truncated", False)
+    truncated = metadata.get("truncated", False)
 
     if match_count == 0:
         return ["No files matched"]
@@ -35,7 +42,7 @@ def _render_glob_result(content: str, opts: Any) -> list[str]:
     if truncated:
         summary += f"  {DIM}(truncated){RESET}"
 
-    lines = [l for l in content.splitlines() if l and not l.startswith("[")]
+    lines = [line for line in content.splitlines() if line and not line.startswith("[")]
     result = [summary]
 
     show = lines if opts.expanded else lines[:_PREVIEW_LINES]
@@ -52,12 +59,16 @@ def _render_glob_result(content: str, opts: Any) -> list[str]:
 
 class GlobParams(BaseModel):
     """Parameters for the glob tool."""
+
     pattern: str = Field(description="Glob pattern (e.g. 'src/**/*.py').")
-    path: str = Field(default="", description="Base directory to search from. Defaults to the agent's cwd.")
+    path: str = Field(
+        default="", description="Base directory to search from. Defaults to the agent's cwd."
+    )
 
 
 class GlobTool(Tool):
     """Tool for finding files matching glob patterns."""
+
     def __init__(self) -> None:
         super().__init__(
             name="glob",
@@ -81,9 +92,9 @@ class GlobTool(Tool):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         """Execute the glob pattern matching operation."""
         params = GlobParams.model_validate(invocation.params)
@@ -103,7 +114,9 @@ class GlobTool(Tool):
         }
 
         if not matches:
-            return ToolResult.ok(invocation.id, f"No files matched pattern: {params.pattern}", metadata=metadata)
+            return ToolResult.ok(
+                invocation.id, f"No files matched pattern: {params.pattern}", metadata=metadata
+            )
 
         result = "\n".join(matches)
         if truncated:

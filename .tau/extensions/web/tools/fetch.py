@@ -4,12 +4,18 @@ import asyncio
 from typing import Any
 from urllib.parse import urlparse
 
+from engines import BaseSearchEngine
 from pydantic import BaseModel, Field
 
-from tau.tool.types import Tool, ToolContext, ToolExecutionMode, ToolInvocation, ToolKind, ToolResult
 from tau.tool.render import call_line
-
-from engines import BaseSearchEngine
+from tau.tool.types import (
+    Tool,
+    ToolContext,
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 
 def _render_web_fetch_call(args: dict, _streaming: bool) -> list[str]:
@@ -68,8 +74,8 @@ def _render_web_fetch(content: str, opts: Any) -> list[str]:
 
     # Strip the header lines the tool prepends (URL: ... and [External content...])
     body_lines = [
-        l for l in content.splitlines()
-        if not l.startswith("URL: ") and not l.startswith("[External content")
+        ln for ln in content.splitlines()
+        if not ln.startswith("URL: ") and not ln.startswith("[External content")
     ]
 
     if not body_lines:

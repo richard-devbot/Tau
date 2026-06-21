@@ -18,6 +18,7 @@ Usage::
     all_tools = registry.list()
     web_tool   = registry.get("web_search")
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

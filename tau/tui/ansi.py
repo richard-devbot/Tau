@@ -6,11 +6,11 @@ import unicodedata
 # ── Regex to strip all ANSI escape sequences ─────────────────────────────────
 _ANSI_RE = re.compile(
     r"\x1b(?:"
-    r"\[[0-9;:<=>?]*[ -/]*[@-~]"   # CSI sequences
+    r"\[[0-9;:<=>?]*[ -/]*[@-~]"  # CSI sequences
     r"|\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC sequences
-    r"|_[^\x1b]*(?:\x1b\\|\x07)"   # APC sequences
-    r"|[PX^][^\x1b]*\x1b\\"        # DCS / PM / SOS
-    r"|[@-_]"                       # 2-char Fe sequences (ESC @-_)
+    r"|_[^\x1b]*(?:\x1b\\|\x07)"  # APC sequences
+    r"|[PX^][^\x1b]*\x1b\\"  # DCS / PM / SOS
+    r"|[@-_]"  # 2-char Fe sequences (ESC @-_)
     r")"
 )
 
@@ -23,45 +23,45 @@ CURSOR_MARKER = "\x1b_C\x1b\\"
 
 # ── SGR (colour / style) ──────────────────────────────────────────────────────
 
-RESET      = "\x1b[0m"
-BOLD       = "\x1b[1m"
-DIM        = "\x1b[2m"
-ITALIC     = "\x1b[3m"
-UNDERLINE  = "\x1b[4m"
-BLINK      = "\x1b[5m"
-REVERSE    = "\x1b[7m"
-STRIKE     = "\x1b[9m"
+RESET = "\x1b[0m"
+BOLD = "\x1b[1m"
+DIM = "\x1b[2m"
+ITALIC = "\x1b[3m"
+UNDERLINE = "\x1b[4m"
+BLINK = "\x1b[5m"
+REVERSE = "\x1b[7m"
+STRIKE = "\x1b[9m"
 
 # Standard foreground colours
-BLACK   = "\x1b[30m"
-RED     = "\x1b[31m"
-GREEN   = "\x1b[32m"
-YELLOW  = "\x1b[33m"
-BLUE    = "\x1b[34m"
+BLACK = "\x1b[30m"
+RED = "\x1b[31m"
+GREEN = "\x1b[32m"
+YELLOW = "\x1b[33m"
+BLUE = "\x1b[34m"
 MAGENTA = "\x1b[35m"
-CYAN    = "\x1b[36m"
-WHITE   = "\x1b[37m"
+CYAN = "\x1b[36m"
+WHITE = "\x1b[37m"
 DEFAULT = "\x1b[39m"
 
 # Bright foreground colours
-BRIGHT_BLACK   = "\x1b[90m"
-BRIGHT_RED     = "\x1b[91m"
-BRIGHT_GREEN   = "\x1b[92m"
-BRIGHT_YELLOW  = "\x1b[93m"
-BRIGHT_BLUE    = "\x1b[94m"
+BRIGHT_BLACK = "\x1b[90m"
+BRIGHT_RED = "\x1b[91m"
+BRIGHT_GREEN = "\x1b[92m"
+BRIGHT_YELLOW = "\x1b[93m"
+BRIGHT_BLUE = "\x1b[94m"
 BRIGHT_MAGENTA = "\x1b[95m"
-BRIGHT_CYAN    = "\x1b[96m"
-BRIGHT_WHITE   = "\x1b[97m"
+BRIGHT_CYAN = "\x1b[96m"
+BRIGHT_WHITE = "\x1b[97m"
 
 # Standard background colours
-BG_BLACK   = "\x1b[40m"
-BG_RED     = "\x1b[41m"
-BG_GREEN   = "\x1b[42m"
-BG_YELLOW  = "\x1b[43m"
-BG_BLUE    = "\x1b[44m"
+BG_BLACK = "\x1b[40m"
+BG_RED = "\x1b[41m"
+BG_GREEN = "\x1b[42m"
+BG_YELLOW = "\x1b[43m"
+BG_BLUE = "\x1b[44m"
 BG_MAGENTA = "\x1b[45m"
-BG_CYAN    = "\x1b[46m"
-BG_WHITE   = "\x1b[47m"
+BG_CYAN = "\x1b[46m"
+BG_WHITE = "\x1b[47m"
 BG_DEFAULT = "\x1b[49m"
 
 
@@ -92,6 +92,7 @@ def style(text: str, *codes: str) -> str:
 
 # ── Width calculation ─────────────────────────────────────────────────────────
 
+
 def _char_width(ch: str) -> int:
     """Return the terminal column width of a single character."""
     cp = ord(ch)
@@ -101,10 +102,9 @@ def _char_width(ch: str) -> int:
     eaw = unicodedata.east_asian_width(ch)
     if eaw in ("W", "F"):
         return 2
-    if eaw == "Na" or unicodedata.category(ch) in ("Mn", "Me", "Cf"):
+    if (eaw == "Na" or unicodedata.category(ch) in ("Mn", "Me", "Cf")) and unicodedata.category(ch) in ("Mn", "Me", "Cf"):
         # Combining marks and format chars have zero width
-        if unicodedata.category(ch) in ("Mn", "Me", "Cf"):
-            return 0
+        return 0
     return 1
 
 
@@ -119,12 +119,14 @@ def visible_width(text: str) -> int:
 
 # ── Strip ─────────────────────────────────────────────────────────────────────
 
+
 def strip_ansi(text: str) -> str:
     """Remove all ANSI escape sequences from text."""
     return _ANSI_RE.sub("", text)
 
 
 # ── Truncation ────────────────────────────────────────────────────────────────
+
 
 def truncate(text: str, max_width: int, ellipsis: str = "…") -> str:
     """
@@ -157,6 +159,7 @@ def pad(text: str, width: int, char: str = " ", align: str = "left") -> str:
 
 
 # ── Wrapping ──────────────────────────────────────────────────────────────────
+
 
 def wrap(text: str, width: int) -> list[str]:
     """
@@ -243,6 +246,7 @@ def _take_columns(text: str, max_cols: int) -> tuple[str, int]:
 
 # ── ANSI state tracker ────────────────────────────────────────────────────────
 
+
 class _AnsiStateTracker:
     """
     Tracks active SGR (colour/style) state so it can be re-applied after
@@ -291,7 +295,7 @@ class _AnsiStateTracker:
                 self._fg = f"\x1b[38;5;{nums[i + 2]}m"
                 i += 2
             elif n == 38 and i + 4 < len(nums) and nums[i + 1] == 2:
-                self._fg = f"\x1b[38;2;{nums[i+2]};{nums[i+3]};{nums[i+4]}m"
+                self._fg = f"\x1b[38;2;{nums[i + 2]};{nums[i + 3]};{nums[i + 4]}m"
                 i += 4
             elif 40 <= n <= 47 or n == 49 or 100 <= n <= 107:
                 self._bg = f"\x1b[{n}m"
@@ -299,7 +303,7 @@ class _AnsiStateTracker:
                 self._bg = f"\x1b[48;5;{nums[i + 2]}m"
                 i += 2
             elif n == 48 and i + 4 < len(nums) and nums[i + 1] == 2:
-                self._bg = f"\x1b[48;2;{nums[i+2]};{nums[i+3]};{nums[i+4]}m"
+                self._bg = f"\x1b[48;2;{nums[i + 2]};{nums[i + 3]};{nums[i + 4]}m"
                 i += 4
             i += 1
 
@@ -308,8 +312,9 @@ class _AnsiStateTracker:
         self._fg = self._bg = None
 
     def has_state(self) -> bool:
-        return bool(self._bold or self._dim or self._italic or
-                    self._underline or self._fg or self._bg)
+        return bool(
+            self._bold or self._dim or self._italic or self._underline or self._fg or self._bg
+        )
 
     def active_codes(self) -> str:
         if not self.has_state():

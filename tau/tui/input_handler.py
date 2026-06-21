@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from tau.message.types import UserMessage
     from tau.runtime.service import Runtime
     from tau.tui.components.layout import Layout
     from tau.tui.tui import TUI
-    from tau.message.types import UserMessage
 
 
 class InputHandler:
@@ -79,12 +80,16 @@ class InputHandler:
     def _notify(self, message: str, type: str = "info") -> None:  # noqa: A002
         import time
         from typing import cast
-        from tau.message.types import CustomMessage, TextContent, LinesContent, ImageContent
+
+        from tau.message.types import CustomMessage, ImageContent, LinesContent, TextContent
+
         custom_type = "tool" if type == "tool" else "system"
         msg = CustomMessage(
             custom_type=custom_type,
             timestamp=time.time(),
-            contents=cast(list[TextContent | ImageContent | LinesContent], [TextContent(content=message)]),
+            contents=cast(
+                list[TextContent | ImageContent | LinesContent], [TextContent(content=message)]
+            ),
         )
         self._layout.add_message(msg)
         self._tui.request_render()
@@ -127,6 +132,7 @@ class InputHandler:
 
         if agent is not None and (images or audio or video):
             from tau.inference.model.types import Modality
+
             model = getattr(getattr(agent._engine, "llm", None), "model", None)
             if model is not None:
                 if images and Modality.Image not in model.input:
@@ -153,7 +159,9 @@ class InputHandler:
         self._last_user_text = text
         self._turn_has_content = False
         self._tui.request_render()
-        asyncio.ensure_future(self._invoke(self._expand_at_mentions(model_text), images, audio, video))
+        asyncio.ensure_future(
+            self._invoke(self._expand_at_mentions(model_text), images, audio, video)
+        )
 
     def _on_followup(self, text: str) -> None:
         images, _ = self._extract_clipboard_images(text)
@@ -224,11 +232,15 @@ class InputHandler:
             if queue is None:
                 return []
             return [
-                "".join(c.content for c in getattr(msg, "contents", []) if isinstance(c, TextContent))
+                "".join(
+                    c.content for c in getattr(msg, "contents", []) if isinstance(c, TextContent)
+                )
                 for msg in queue.snapshot()
             ]
 
-        all_texts = _extract_texts(engine.state.steering_queue) + _extract_texts(engine.state.follow_up_queue)
+        all_texts = _extract_texts(engine.state.steering_queue) + _extract_texts(
+            engine.state.follow_up_queue
+        )
         all_texts = [t for t in all_texts if t.strip()]
         if not all_texts:
             return []
@@ -335,6 +347,7 @@ class InputHandler:
         self._invoke_task = asyncio.current_task()
         try:
             from tau.agent.types import PromptOptions
+
             if images or audio or video:
                 options = PromptOptions(
                     images=images or [],
@@ -359,13 +372,14 @@ class InputHandler:
         images: list[bytes] | None = None,
         audio: list[bytes] | None = None,
         video: list[bytes] | None = None,
-    ) -> "UserMessage":
+    ) -> UserMessage:
         """Build a UserMessage from text plus any combination of media.
 
         Carries the same media a fresh turn would, so steering and follow-up
         messages match a freshly submitted message.
         """
         from tau.message.types import UserMessage
+
         return UserMessage.with_media(text, images, audio, video)
 
     async def _steer(
@@ -432,8 +446,10 @@ class InputHandler:
 
     def _on_paste(self) -> None:
         import io
+
         try:
             from PIL import ImageGrab
+
             item = ImageGrab.grabclipboard()
             if item is None:
                 return
@@ -452,6 +468,7 @@ class InputHandler:
         if sm is not None:
             return sm.session_dir / "media"
         from tau.settings.paths import CONFIG_DIR_PATH
+
         return CONFIG_DIR_PATH / "sessions" / "global" / "media"
 
     def _find_media_by_uuid(self, uid: str) -> Path | None:
@@ -461,6 +478,7 @@ class InputHandler:
         still be resolvable when re-submitted from a session in project B.
         """
         from tau.settings.paths import get_sessions_dir
+
         try:
             for project_dir in get_sessions_dir().iterdir():
                 if not project_dir.is_dir():
@@ -476,8 +494,10 @@ class InputHandler:
 
     def _store_clipboard_image(self, raw: bytes, suffix: str) -> None:
         import uuid as _uuid
+
         try:
             from tau.utils.image_processing import process_image
+
             sm = self._runtime.settings_manager
             auto_resize = sm.get_image_auto_resize() if sm is not None else True
             result = process_image(raw, auto_resize=auto_resize)
@@ -501,6 +521,7 @@ class InputHandler:
 
     def _store_clipboard_audio(self, raw: bytes, suffix: str) -> None:
         import uuid as _uuid
+
         try:
             media_dir = self._get_media_dir()
             media_dir.mkdir(parents=True, exist_ok=True)
@@ -517,6 +538,7 @@ class InputHandler:
 
     def _store_clipboard_video(self, raw: bytes, suffix: str) -> None:
         import uuid as _uuid
+
         try:
             media_dir = self._get_media_dir()
             media_dir.mkdir(parents=True, exist_ok=True)
@@ -557,10 +579,8 @@ class InputHandler:
             seen_uuids.add(uid)
             p = self._find_media_by_uuid(uid)
             if p is not None:
-                try:
+                with contextlib.suppress(OSError):
                     audio.append(p.read_bytes())
-                except OSError:
-                    pass
         self._clipboard_audio.clear()
         self._clipboard_audio_counter = 0
         return audio
@@ -591,10 +611,8 @@ class InputHandler:
             seen_uuids.add(uid)
             p = self._find_media_by_uuid(uid)
             if p is not None:
-                try:
+                with contextlib.suppress(OSError):
                     video.append(p.read_bytes())
-                except OSError:
-                    pass
         self._clipboard_video.clear()
         self._clipboard_video_counter = 0
         return video
@@ -612,11 +630,12 @@ class InputHandler:
         3. Drop remaining non-printable characters (keep newlines).
         4. Prepend a space when pasting a path right after a word character.
         """
-        def _decode(m: "re.Match[str]") -> str:
+
+        def _decode(m: re.Match[str]) -> str:
             cp = int(m.group(1))
-            if 97 <= cp <= 122:   # ctrl+a..z
+            if 97 <= cp <= 122:  # ctrl+a..z
                 return chr(cp - 96)
-            if 65 <= cp <= 90:    # ctrl+A..Z
+            if 65 <= cp <= 90:  # ctrl+A..Z
                 return chr(cp - 64)
             return m.group(0)
 
@@ -671,6 +690,7 @@ class InputHandler:
         Paste markers are stripped entirely since their content is already expanded into the text
         before this is called (or they reference temp data that won't survive the session).
         """
+
         def _replace_image(m: re.Match) -> str:
             idx = int(m.group(1))
             entry = self._clipboard_images.get(idx)
@@ -735,9 +755,10 @@ class InputHandler:
         self._clipboard_image_counter = 0
         return images, missing
 
-    def _extract_clipboard_image_contents(self, text: str) -> "list[Any]":
+    def _extract_clipboard_image_contents(self, text: str) -> list[Any]:
         """Like _extract_clipboard_images but returns ImageContent with dimension notes."""
         from tau.message.types import ImageContent as _IC
+
         contents = []
         seen: set[int] = set()
         for m in re.finditer(r"\[image #(\d+)\]", text):
@@ -765,10 +786,8 @@ class InputHandler:
             seen_uuids.add(uid)
             p = self._find_media_by_uuid(uid)
             if p is not None:
-                try:
+                with contextlib.suppress(OSError):
                     contents.append(_IC(images=[p.read_bytes()]))
-                except OSError:
-                    pass
         self._clipboard_images.clear()
         self._clipboard_image_notes.clear()
         self._clipboard_image_counter = 0
@@ -797,27 +816,33 @@ class InputHandler:
     # ── Slash message factory ─────────────────────────────────────────────────
 
     def _make_slash_message(self, text: str) -> object:
-        from tau.message.types import UserMessage, TemplateInvocationMessage, SkillInvocationMessage
+        from tau.message.types import SkillInvocationMessage, TemplateInvocationMessage, UserMessage
 
         if text.startswith("/skill:"):
             from tau.skills.registry import skill_registry
+
             skill_part = text[7:].strip().split(None, 1)
             skill_name = skill_part[0].lower() if skill_part else ""
             skill_args = skill_part[1] if len(skill_part) > 1 else ""
             skill = skill_registry.get(skill_name)
             if skill is not None:
-                return SkillInvocationMessage(name=skill_name, args=skill_args, content=skill.content)
+                return SkillInvocationMessage(
+                    name=skill_name, args=skill_args, content=skill.content
+                )
 
         parts = text[1:].strip().split(None, 1)
         name = parts[0].lower() if parts else ""
         args_str = parts[1] if len(parts) > 1 else ""
         if self._runtime.commands.get(name) is None:
             from tau.prompts.registry import prompt_registry
+
             tmpl = prompt_registry.get(name)
             if tmpl is not None:
                 expanded = prompt_registry.expand(name, args_str)
                 if expanded is not None:
-                    return TemplateInvocationMessage(name=name, args=args_str, expanded_content=expanded)
+                    return TemplateInvocationMessage(
+                        name=name, args=args_str, expanded_content=expanded
+                    )
 
         return UserMessage.from_text(text)
 
@@ -862,4 +887,5 @@ class InputHandler:
 
 def _history_path():
     from tau.settings.paths import CONFIG_DIR_PATH
+
     return CONFIG_DIR_PATH / "history"

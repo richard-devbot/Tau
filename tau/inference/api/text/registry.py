@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 import importlib
-from typing import Type, Union
+
 from tau.inference.api.text.base import BaseLLMAPI
 
-_Entry = Union[Type[BaseLLMAPI], str]
+_Entry = type[BaseLLMAPI] | str
 
 
 class LLMAPIRegistry:
@@ -17,10 +18,10 @@ class LLMAPIRegistry:
     def unregister(self, name: str) -> None:
         self._apis.pop(name, None)
 
-    def list(self) -> list[Type[BaseLLMAPI]]:
+    def list(self) -> list[type[BaseLLMAPI]]:
         return [self._resolve(name) for name in list(self._apis)]
 
-    def get(self, name: str) -> Type[BaseLLMAPI] | None:
+    def get(self, name: str) -> type[BaseLLMAPI] | None:
         if name not in self._apis:
             return None
         return self._resolve(name)
@@ -28,7 +29,7 @@ class LLMAPIRegistry:
     def reset(self) -> None:
         self._apis.clear()
 
-    def _resolve(self, name: str) -> Type[BaseLLMAPI]:
+    def _resolve(self, name: str) -> type[BaseLLMAPI]:
         entry = self._apis[name]
         if isinstance(entry, str):
             mod_path, _, cls_name = entry.partition(":")
@@ -40,6 +41,7 @@ class LLMAPIRegistry:
     @classmethod
     def from_builtins(cls) -> LLMAPIRegistry:
         from tau.inference.api.text.builtins import LLM_APIS
+
         instance = cls()
         for name, api in LLM_APIS:
             instance.register(name, api)

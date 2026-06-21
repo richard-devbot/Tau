@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import time
-
 from google import genai
 from google.genai import types as genai_types
 
@@ -24,7 +22,9 @@ class GeminiImageAPI(BaseImageAPI):
             self._client = genai.Client(api_key=options.api_key)
 
     def _get_client(self) -> genai.Client:
-        if self._client is None or self.options.api_key != getattr(self._client._api_client, "api_key", None):
+        if self._client is None or self.options.api_key != getattr(
+            self._client._api_client, "api_key", None
+        ):
             self._client = genai.Client(api_key=self.options.api_key)
         return self._client
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tau.tui.theme import LayoutTheme
@@ -15,5 +15,5 @@ class ThemeLoadError:
 
 @dataclass
 class LoadThemesResult:
-    themes: dict[str, "LayoutTheme"] = field(default_factory=dict)
+    themes: dict[str, LayoutTheme] = field(default_factory=dict)
     errors: list[ThemeLoadError] = field(default_factory=list)

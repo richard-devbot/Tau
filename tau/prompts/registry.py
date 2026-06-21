@@ -6,14 +6,15 @@ Priority (highest wins):
     global   (~/.tau/prompts/*.md)
     builtin  (tau/builtins/prompts/)
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
 from tau.core.registry import Registry
-from tau.prompts.types import PromptLoadError, PromptTemplate
 from tau.prompts.loader import load_templates_from_dir
+from tau.prompts.types import PromptLoadError, PromptTemplate
 
 
 class PromptRegistry(Registry[PromptTemplate, PromptLoadError]):
@@ -22,6 +23,7 @@ class PromptRegistry(Registry[PromptTemplate, PromptLoadError]):
 
     def _get_dir(self, cwd: Path | None = None) -> Path:
         from tau.settings.paths import get_prompts_dir
+
         return get_prompts_dir(cwd)
 
     def _builtins_subdir(self) -> str:
@@ -39,6 +41,7 @@ class PromptRegistry(Registry[PromptTemplate, PromptLoadError]):
         if tmpl is None:
             return None
         from tau.prompts.expand import expand as _expand
+
         return _expand(tmpl.content, args_str)
 
 

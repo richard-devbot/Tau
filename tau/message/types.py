@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
-from typing import Literal, TYPE_CHECKING, Any, Optional, Annotated, Sequence
-from enum import Enum
+from typing import TYPE_CHECKING, Annotated, Any, Literal
+
 from pydantic import Field as PydanticField
+
 from tau.inference.types import StopReason
 from tau.inference.utils import ErrorKind
+from tau.message.utils import audio_to_base64, image_to_base64, video_to_base64
 from tau.tool.types import ToolKind
-from tau.message.utils import image_to_base64, audio_to_base64, video_to_base64
 
 if TYPE_CHECKING:
     from tau.session.types import CustomMessageEntry
@@ -18,8 +21,10 @@ if TYPE_CHECKING:
 
 class _LazyPIL:
     """Defers PIL import until Image.Image is actually accessed (e.g. by Pydantic's get_type_hints)."""
+
     def __getattr__(self, name: str):
         import PIL.Image as _pil
+
         # Cache on the class so subsequent accesses skip __getattr__
         setattr(type(self), name, getattr(_pil, name))
         return getattr(_pil, name)
@@ -31,6 +36,7 @@ Image = _LazyPIL()
 @dataclass
 class TextContent:
     """Plain text content (system/user/assistant messages)."""
+
     type: Literal["text"] = "text"
     content: str = ""
 
@@ -38,6 +44,7 @@ class TextContent:
 @dataclass
 class ImageContent:
     """Image content (PIL images, bytes, URLs, or base64 strings)."""
+
     type: Literal["image"] = "image"
     images: list[str | Image.Image | bytes] = field(default_factory=list)
     dimension_note: str | None = None
@@ -93,6 +100,7 @@ class ImageContent:
 @dataclass
 class AudioContent:
     """Audio content (bytes, base64 strings, or 'file:' paths)."""
+
     type: Literal["audio"] = "audio"
     # Each item is raw bytes, a base64 string, or a file path string prefixed with "file:"
     audio: list[bytes | str] = field(default_factory=list)
@@ -134,6 +142,7 @@ class AudioContent:
 @dataclass
 class VideoContent:
     """Video content (bytes, base64 strings, or 'file:' paths)."""
+
     type: Literal["video"] = "video"
     video: list[bytes | str] = field(default_factory=list)
 
@@ -148,6 +157,7 @@ class VideoContent:
 @dataclass
 class ThinkingContent:
     """Extended thinking content from Claude models with thinking enabled."""
+
     type: Literal["thinking"] = "thinking"
     content: str = ""
     signature: str = ""
@@ -156,10 +166,11 @@ class ThinkingContent:
 @dataclass
 class ToolCallContent:
     """Tool invocation from assistant with args, semantic kind, and call id."""
+
     type: Literal["tool_call"] = "tool_call"
     id: str = ""
     name: str = ""
-    kind: Optional[ToolKind] = None
+    kind: ToolKind | None = None
     args: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -167,6 +178,7 @@ class ToolCallContent:
 @dataclass
 class ToolResultContent:
     """Tool execution result paired with ToolCallContent by id."""
+
     type: Literal["tool_result"] = "tool_result"
     id: str = ""
     content: str = ""
@@ -180,12 +192,21 @@ class ToolResultContent:
 @dataclass
 class LinesContent:
     """Pre-rendered lines for notify(list[str]) — rendered via apply_render_shell."""
+
     type: Literal["lines"] = "lines"
     lines: list[str] = field(default_factory=list)
     notify_type: str = "info"
 
 
-Content = TextContent | ImageContent | AudioContent | VideoContent | ThinkingContent | ToolCallContent | ToolResultContent
+Content = (
+    TextContent
+    | ImageContent
+    | AudioContent
+    | VideoContent
+    | ThinkingContent
+    | ToolCallContent
+    | ToolResultContent
+)
 
 # Per-role content constraints (for type hints and documentation).
 SystemContent = TextContent
@@ -197,6 +218,7 @@ ToolContent = ToolResultContent
 @dataclass
 class UsageCost:
     """Monetized costs in USD for input, output, cache operations, and total."""
+
     input: float = 0.0
     output: float = 0.0
     cache_read: float = 0.0
@@ -207,6 +229,7 @@ class UsageCost:
 @dataclass
 class Usage:
     """Token counts and costs for a single LLM completion."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
@@ -214,8 +237,9 @@ class Usage:
     cost: UsageCost = field(default_factory=UsageCost)
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     """Message roles in the conversation history."""
+
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
@@ -228,10 +252,10 @@ class Role(str, Enum):
     BRANCH_SUMMARY = "branch_summary"
 
 
-
 @dataclass
 class BaseMessage:
     """Common fields for all message types (contents, id, timestamp)."""
+
     contents: list[Content] = field(default_factory=list)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: float = field(default_factory=time.time)
@@ -240,6 +264,7 @@ class BaseMessage:
 @dataclass
 class SystemMessage(BaseMessage):
     """System context and instructions for the LLM."""
+
     role: Literal[Role.SYSTEM] = field(default=Role.SYSTEM, kw_only=True)
 
     @classmethod
@@ -258,6 +283,7 @@ class SystemMessage(BaseMessage):
 @dataclass
 class UserMessage(BaseMessage):
     """User input containing text, images, audio, and/or tool results."""
+
     role: Literal[Role.USER] = field(default=Role.USER, kw_only=True)
 
     @classmethod
@@ -347,14 +373,17 @@ class UserMessage(BaseMessage):
 @dataclass
 class AssistantMessage(BaseMessage):
     """LLM response with text, thinking, tool calls, usage, and stop reason."""
+
     role: Literal[Role.ASSISTANT] = field(default=Role.ASSISTANT, kw_only=True)
     usage: Usage = field(default_factory=Usage)
     stop_reason: StopReason = StopReason.Stop
     error: str = ""
-    error_kind: ErrorKind = ErrorKind.UNKNOWN  # classification of `error`, used to drive recovery (e.g. compaction on overflow)
+    error_kind: ErrorKind = (
+        ErrorKind.UNKNOWN
+    )  # classification of `error`, used to drive recovery (e.g. compaction on overflow)
 
     @classmethod
-    def from_text(cls, content: str) -> 'AssistantMessage':
+    def from_text(cls, content: str) -> AssistantMessage:
         """Create an AssistantMessage with a single TextContent block."""
         return cls(contents=[TextContent(content=content)])
 
@@ -386,6 +415,7 @@ class AssistantMessage(BaseMessage):
 @dataclass
 class ToolMessage(BaseMessage):
     """Tool execution results responding to ToolCallContent."""
+
     role: Literal[Role.TOOL] = field(default=Role.TOOL, kw_only=True)
 
     @classmethod
@@ -419,6 +449,7 @@ LLMMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 @dataclass
 class CustomMessage:
     """Application-defined message with custom type, contents, and details."""
+
     role: Literal[Role.CUSTOM] = field(default=Role.CUSTOM, kw_only=True)
     custom_type: str = ""
     timestamp: float = field(default_factory=time.time)
@@ -438,23 +469,27 @@ class CustomMessage:
         raw = entry.content
         # Normalize content to list of TextContent or ImageContent
         from typing import cast
+
         if isinstance(raw, list):
             contents = cast(list[TextContent | ImageContent | LinesContent], raw)
         elif isinstance(raw, str):
-            contents = cast(list[TextContent | ImageContent | LinesContent], [TextContent(content=raw)])
+            contents = cast(
+                list[TextContent | ImageContent | LinesContent], [TextContent(content=raw)]
+            )
         else:
             contents: list[TextContent | ImageContent | LinesContent] = []
         return cls(
             custom_type=entry.custom_type,
             contents=contents,
             timestamp=entry.timestamp,
-            details=entry.details
+            details=entry.details,
         )
 
 
 @dataclass
 class SkillInvocationMessage:
     """A skill invocation — shown collapsed in the TUI, Ctrl+O to expand."""
+
     role: Literal[Role.SKILL_INVOCATION] = field(default=Role.SKILL_INVOCATION, kw_only=True)
     name: str = ""
     args: str = ""
@@ -466,6 +501,7 @@ class SkillInvocationMessage:
 @dataclass
 class TemplateInvocationMessage:
     """A prompt template invocation — shown collapsed in the TUI, Ctrl+O to expand."""
+
     role: Literal[Role.TEMPLATE_INVOCATION] = field(default=Role.TEMPLATE_INVOCATION, kw_only=True)
     name: str = ""
     args: str = ""
@@ -477,6 +513,7 @@ class TemplateInvocationMessage:
 @dataclass
 class TerminalExecutionMessage:
     """Result of a user-initiated ! shell command, containing both the command and its output."""
+
     role: Literal[Role.BASH_EXECUTION] = field(default=Role.BASH_EXECUTION, kw_only=True)
     command: str = ""
     output: str = ""
@@ -497,13 +534,14 @@ class TerminalExecutionMessage:
             text += "\n\n(command cancelled)"
         elif self.exit_code is not None and self.exit_code != 0:
             text += f"\n\nCommand exited with code {self.exit_code}"
-            
+
         return UserMessage.from_text(text)
 
 
 @dataclass
 class CompactionSummaryMessage:
     """Injected at the start of context after a compaction — represents summarised history."""
+
     role: Literal[Role.COMPACTION_SUMMARY] = field(default=Role.COMPACTION_SUMMARY, kw_only=True)
     summary: str = ""
     tokens_before: int = 0
@@ -513,6 +551,7 @@ class CompactionSummaryMessage:
 @dataclass
 class BranchSummaryMessage:
     """Injected into context when returning from a branch — represents the abandoned path."""
+
     role: Literal[Role.BRANCH_SUMMARY] = field(default=Role.BRANCH_SUMMARY, kw_only=True)
     summary: str = ""
     from_id: str = ""
@@ -525,7 +564,13 @@ SessionMessage = CustomMessage
 # class (and an unknown role fails loudly rather than silently collapsing to the
 # first structurally-compatible member).
 AgentMessage = Annotated[
-    SystemMessage | UserMessage | AssistantMessage | ToolMessage
-    | TerminalExecutionMessage | CustomMessage | CompactionSummaryMessage | BranchSummaryMessage,
+    SystemMessage
+    | UserMessage
+    | AssistantMessage
+    | ToolMessage
+    | TerminalExecutionMessage
+    | CustomMessage
+    | CompactionSummaryMessage
+    | BranchSummaryMessage,
     PydanticField(discriminator="role"),
 ]

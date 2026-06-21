@@ -1,24 +1,34 @@
 from __future__ import annotations
-from asyncio import Queue
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import TYPE_CHECKING, Awaitable, Callable, Optional
+
 import asyncio
+from asyncio import Queue
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tau.inference.api.text.service import TextLLM as LLM
     from tau.inference.types import ThinkingLevel
     from tau.tool.types import Tool
 
-from tau.message.types import LLMMessage, AssistantMessage, ToolCallContent, ToolResultContent
-from tau.tool.types import ToolInvocation, ToolResult, ToolExecutionMode
 from tau.hooks.engine import (
-    AgentStartEvent, AgentEndEvent, AgentErrorEvent,
-    TurnStartEvent, TurnEndEvent,
-    MessageStartEvent, MessageUpdateEvent, MessageEndEvent, MessageRollbackEvent,
-    ToolExecutionStartEvent, ToolExecutionUpdateEvent, ToolExecutionEndEvent,
+    AgentEndEvent,
+    AgentErrorEvent,
+    AgentStartEvent,
+    MessageEndEvent,
+    MessageRollbackEvent,
+    MessageStartEvent,
+    MessageUpdateEvent,
+    ToolExecutionEndEvent,
     ToolExecutionFailureEvent,
+    ToolExecutionStartEvent,
+    ToolExecutionUpdateEvent,
+    TurnEndEvent,
+    TurnStartEvent,
 )
+from tau.message.types import AssistantMessage, LLMMessage, ToolCallContent, ToolResultContent
+from tau.tool.types import ToolExecutionMode, ToolInvocation, ToolResult
 
 
 def _make_set_event() -> asyncio.Event:
@@ -26,23 +36,28 @@ def _make_set_event() -> asyncio.Event:
     e.set()
     return e
 
+
 AbortSignal = asyncio.Event
-EmitEvent = Callable[['AgentEvent'], Awaitable[None]]
+EmitEvent = Callable[["AgentEvent"], Awaitable[None]]
 
-class SteeringMode(str, Enum):
+
+class SteeringMode(StrEnum):
     """Mode for delivering steering messages: one at a time or all at once."""
+
     OneAtATime = "one_at_a_time"
     All = "all"
 
 
-class FollowupMode(str, Enum):
+class FollowupMode(StrEnum):
     """Mode for delivering follow-up messages: one at a time or all at once."""
+
     OneAtATime = "one_at_a_time"
     All = "all"
 
 
-class AgentEventType(str, Enum):
+class AgentEventType(StrEnum):
     """Event type identifiers for agent and engine lifecycle events."""
+
     AgentStart = "agent_start"
     AgentEnd = "agent_end"
     TurnStart = "turn_start"
@@ -54,6 +69,7 @@ class AgentEventType(str, Enum):
     ToolExecutionUpdate = "tool_execution_update"
     ToolExecutionEnd = "tool_execution_end"
     AgentError = "agent_error"
+
 
 AgentEvent = (
     AgentStartEvent
@@ -71,52 +87,59 @@ AgentEvent = (
     | AgentErrorEvent
 )
 
-AfterToolCallCallback = Callable[[ToolInvocation, ToolResult, Optional[AbortSignal]], Awaitable[Optional[ToolResult]]]
-BeforeToolCallCallback = Callable[[ToolInvocation, Optional[AbortSignal]], Awaitable[Optional[ToolInvocation | ToolResultContent]]]
+AfterToolCallCallback = Callable[
+    [ToolInvocation, ToolResult, AbortSignal | None], Awaitable[ToolResult | None]
+]
+BeforeToolCallCallback = Callable[
+    [ToolInvocation, AbortSignal | None], Awaitable[ToolInvocation | ToolResultContent | None]
+]
 GetFollowUpMessagesCallback = Callable[[], list[LLMMessage]]
 GetSteeringMessagesCallback = Callable[[], list[LLMMessage]]
-OnEventCallback = Callable[['AgentEvent'], Awaitable[None]]
+OnEventCallback = Callable[["AgentEvent"], Awaitable[None]]
 ShouldSkipToolCallsCallback = Callable[[ToolCallContent], ToolResultContent]
 ShouldStopAfterTurnCallback = Callable[[AssistantMessage, list[ToolResultContent]], bool]
-TransformContextCallback = Callable[[list[LLMMessage], Optional[AbortSignal]], list[LLMMessage]]
+TransformContextCallback = Callable[[list[LLMMessage], AbortSignal | None], list[LLMMessage]]
 
 
 @dataclass
 class EngineState:
     """Mutable runtime state shared between the Engine loop and external observers."""
-    system_prompt: Optional[str] = None
+
+    system_prompt: str | None = None
     messages: list[LLMMessage] = field(default_factory=list)
     pending_tool_calls: set[str] = field(default_factory=set)
     is_streaming: bool = False
     idle_event: asyncio.Event = field(default_factory=lambda: _make_set_event())
-    llm: Optional[LLM] = None
-    streaming_message: Optional[AssistantMessage] = None
-    thinking_level: Optional[ThinkingLevel] = None
-    error_message: Optional[str] = None
+    llm: LLM | None = None
+    streaming_message: AssistantMessage | None = None
+    thinking_level: ThinkingLevel | None = None
+    error_message: str | None = None
     tools: list[Tool] = field(default_factory=list)
-    follow_up_queue: Optional[FollowupQueue] = None
-    steering_queue: Optional[SteeringQueue] = None
+    follow_up_queue: FollowupQueue | None = None
+    steering_queue: SteeringQueue | None = None
 
 
 @dataclass
 class EngineOptions:
     """Engine behaviour knobs: hooks, execution strategy, and message injection callbacks."""
-    after_tool_call: Optional[AfterToolCallCallback] = None
-    before_tool_call: Optional[BeforeToolCallCallback] = None
-    on_event: Optional[OnEventCallback] = None
-    execution_mode: Optional[ToolExecutionMode] = None
+
+    after_tool_call: AfterToolCallCallback | None = None
+    before_tool_call: BeforeToolCallCallback | None = None
+    on_event: OnEventCallback | None = None
+    execution_mode: ToolExecutionMode | None = None
     steering_mode: SteeringMode = SteeringMode.OneAtATime
     followup_mode: FollowupMode = FollowupMode.OneAtATime
-    get_follow_up_messages: Optional[GetFollowUpMessagesCallback] = None
-    get_steering_messages: Optional[GetSteeringMessagesCallback] = None
-    should_stop_after_turn: Optional[ShouldStopAfterTurnCallback] = None
-    should_skip_tool_calls: Optional[ShouldSkipToolCallsCallback] = None
-    transform_context: Optional[TransformContextCallback] = None
+    get_follow_up_messages: GetFollowUpMessagesCallback | None = None
+    get_steering_messages: GetSteeringMessagesCallback | None = None
+    should_stop_after_turn: ShouldStopAfterTurnCallback | None = None
+    should_skip_tool_calls: ShouldSkipToolCallsCallback | None = None
+    transform_context: TransformContextCallback | None = None
 
 
 @dataclass
 class _MessageQueue:
     """Async FIFO queue for steering/follow-up messages with configurable drain behaviour."""
+
     mode: FollowupMode | SteeringMode
     queue: Queue[LLMMessage] = field(default_factory=Queue)
 
@@ -152,12 +175,12 @@ class _MessageQueue:
 @dataclass
 class FollowupQueue(_MessageQueue):
     """Queue for follow-up messages from external sources."""
+
     mode: FollowupMode  # type: ignore[assignment]
 
 
 @dataclass
 class SteeringQueue(_MessageQueue):
     """Queue for steering messages from external sources."""
+
     mode: SteeringMode  # type: ignore[assignment]
-
-

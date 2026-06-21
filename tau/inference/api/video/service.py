@@ -1,33 +1,35 @@
 from __future__ import annotations
 
 from dataclasses import fields
-from typing import Optional
 
 from tau.auth.manager import AuthManager
 from tau.inference.api.registry import LazyAPI
 from tau.inference.api.video.registry import VideoAPIRegistry
 from tau.inference.model.registry import ModelRegistry
-from tau.inference.provider.registry import VideoProviderRegistry, ProviderRegistry
+from tau.inference.provider.registry import ProviderRegistry, VideoProviderRegistry
 from tau.inference.types import GeneratedVideo, VideoContext, VideoOptions
 
 
 class VideoLLM:
     """Service for video generation using video generation APIs."""
-    _models    = ModelRegistry.from_video_builtins()
+
+    _models = ModelRegistry.from_video_builtins()
     _providers = VideoProviderRegistry.from_builtins()
-    _apis      = VideoAPIRegistry.from_builtins()
-    _auth_manager = AuthManager.create(ProviderRegistry(video=VideoProviderRegistry.from_builtins()))
+    _apis = VideoAPIRegistry.from_builtins()
+    _auth_manager = AuthManager.create(
+        ProviderRegistry(video=VideoProviderRegistry.from_builtins())
+    )
 
     def __init__(
         self,
         model_id: str,
-        provider: Optional[str] = None,
-        options: Optional[VideoOptions] = None,
+        provider: str | None = None,
+        options: VideoOptions | None = None,
         *,
-        models: Optional[ModelRegistry] = None,
-        providers: Optional[VideoProviderRegistry] = None,
-        apis: Optional[VideoAPIRegistry] = None,
-        auth_manager: Optional[AuthManager] = None,
+        models: ModelRegistry | None = None,
+        providers: VideoProviderRegistry | None = None,
+        apis: VideoAPIRegistry | None = None,
+        auth_manager: AuthManager | None = None,
     ) -> None:
         _models = models if models is not None else type(self)._models
         _providers = providers if providers is not None else type(self)._providers
@@ -53,7 +55,7 @@ class VideoLLM:
         # until the first generate() call.
         self.api = LazyAPI(_apis, api_name, self._merge_options(base_opts, options))
 
-    def _merge_options(self, base: VideoOptions, override: Optional[VideoOptions]) -> VideoOptions:
+    def _merge_options(self, base: VideoOptions, override: VideoOptions | None) -> VideoOptions:
         """Merge base options with override options."""
         if override is None:
             return base

@@ -1,13 +1,22 @@
 from __future__ import annotations
-from typing import Generic, TypeVar
-from tau.inference.provider.types import APIProvider, OAuthProvider, ImageProvider, AudioProvider, VideoProvider, AuthType
+
+from typing import TypeVar
+
+from tau.inference.provider.types import (
+    APIProvider,
+    AudioProvider,
+    AuthType,
+    ImageProvider,
+    OAuthProvider,
+    VideoProvider,
+)
 
 TextProvider = APIProvider | OAuthProvider
 
 _T = TypeVar("_T")
 
 
-class _ProviderRegistryBase(Generic[_T]):
+class _ProviderRegistryBase[T]:
     """Internal shared base for all provider sub-registries."""
 
     def __init__(self) -> None:
@@ -65,6 +74,7 @@ class TextProviderRegistry(_ProviderRegistryBase[TextProvider]):
     @classmethod
     def from_builtins(cls) -> TextProviderRegistry:
         from tau.builtins.providers.text import providers
+
         instance = cls()
         for provider in providers:
             instance.register(provider)
@@ -80,6 +90,7 @@ class ImageProviderRegistry(_ProviderRegistryBase[ImageProvider]):
     @classmethod
     def from_builtins(cls) -> ImageProviderRegistry:
         from tau.builtins.providers.image import providers
+
         instance = cls()
         for provider in providers:
             instance.register(provider)
@@ -95,6 +106,7 @@ class AudioProviderRegistry(_ProviderRegistryBase[AudioProvider]):
     @classmethod
     def from_builtins(cls) -> AudioProviderRegistry:
         from tau.builtins.providers.audio import providers
+
         instance = cls()
         for provider in providers:
             instance.register(provider)
@@ -110,6 +122,7 @@ class VideoProviderRegistry(_ProviderRegistryBase[VideoProvider]):
     @classmethod
     def from_builtins(cls) -> VideoProviderRegistry:
         from tau.builtins.providers.video import providers
+
         instance = cls()
         for provider in providers:
             instance.register(provider)

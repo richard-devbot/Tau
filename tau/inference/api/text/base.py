@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator
+
 from tau.inference.model.types import Model
 from tau.inference.types import LLMContext, LLMEvent, LLMOptions, Transport
-from tau.message.types import LLMMessage
 
 
 class BaseLLMAPI(ABC):

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import base64
 import io
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 _PIL_MIME: dict[str, str] = {
     "JPEG": "image/jpeg",
@@ -53,7 +53,7 @@ def detect_audio_mime(data: bytes) -> str:
         The MIME type string (e.g., 'audio/mpeg', 'audio/wav', 'audio/ogg').
     """
     for magic, mime in _AUDIO_MIME.items():
-        if data[:len(magic)] == magic:
+        if data[: len(magic)] == magic:
             # WAV files use RIFF container with WAVE format code
             if magic == b"RIFF" and len(data) >= 12 and data[8:12] == b"WAVE":
                 return "audio/wav"
@@ -84,6 +84,7 @@ def image_to_base64(img: Any) -> tuple[str, str]:
     if not isinstance(img, (str, bytes)):
         # PIL Image — import lazily; only reached when caller passes a PIL object
         from PIL import Image  # noqa: PLC0415
+
         if isinstance(img, Image.Image):
             fmt = (img.format or "PNG").upper()
             buf = io.BytesIO()
@@ -124,7 +125,11 @@ def audio_to_base64(item: bytes | str) -> tuple[str, str]:
 def video_to_base64(item: bytes | str) -> tuple[str, str]:
     """Convert video to (base64_data, mime_type); accepts bytes, base64, or 'file:' paths."""
     if isinstance(item, bytes):
-        mime = "video/mp4" if item[:4] in (b"ftyp", b"\x00\x00\x00\x18", b"\x00\x00\x00\x1c") else "video/mp4"
+        mime = (
+            "video/mp4"
+            if item[:4] in (b"ftyp", b"\x00\x00\x00\x18", b"\x00\x00\x00\x1c")
+            else "video/mp4"
+        )
         return base64.b64encode(item).decode(), mime
     if item.startswith("file:"):
         data = Path(item[5:]).read_bytes()
@@ -144,15 +149,15 @@ def filter_empty_assistant_messages(messages: list) -> list:
     Returns:
         Filtered list with empty assistant messages removed.
     """
-    from tau.message.types import Role, TextContent, ToolCallContent, ThinkingContent
+    from tau.message.types import Role, TextContent, ThinkingContent, ToolCallContent
+
     result = []
     for msg in messages:
-        if getattr(msg, 'role', None) == Role.ASSISTANT:
-            contents = getattr(msg, 'contents', [])
+        if getattr(msg, "role", None) == Role.ASSISTANT:
+            contents = getattr(msg, "contents", [])
             # Check for at least one usable content type
             has_usable = any(
-                isinstance(c, (TextContent, ToolCallContent, ThinkingContent))
-                for c in contents
+                isinstance(c, (TextContent, ToolCallContent, ThinkingContent)) for c in contents
             )
             if not has_usable:
                 continue

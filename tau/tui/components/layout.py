@@ -1,28 +1,34 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from tau.tui.component import Component, Container
 from tau.tui.components.autocomplete_manager import AutocompleteManager
 from tau.tui.components.command_palette import CommandPalette
 from tau.tui.components.file_picker import FilePicker
-from tau.tui.components.model_palette import ModelPalette  # noqa: F401  (kept for compat)
 from tau.tui.components.inline_selector import InlineSelector
-from tau.tui.components.text_prompt import TextPrompt
-from tau.tui.component import Component, Container
-from tau.tui.input import InputEvent, KeyEvent, MouseEvent, PasteEvent  # MouseEvent kept for type narrowing
-from tau.tui.components.message_list import MessageList, MessageBlock
+from tau.tui.components.message_list import MessageBlock, MessageList
+from tau.tui.components.model_palette import ModelPalette  # noqa: F401  (kept for compat)
 from tau.tui.components.select_list import SelectItem, SelectList
 from tau.tui.components.spinner import Spinner
-from tau.tui.components.tree_select_list import TreeRow, TreeSelectList
 from tau.tui.components.text_input import TextInput
+from tau.tui.components.text_prompt import TextPrompt
+from tau.tui.components.tree_select_list import TreeRow, TreeSelectList
+from tau.tui.input import (
+    InputEvent,
+    KeyEvent,
+    MouseEvent,
+    PasteEvent,
+)  # MouseEvent kept for type narrowing
 from tau.tui.theme import LayoutTheme
 
 if TYPE_CHECKING:
     from tau.commands.types import CommandInfo
-    from tau.tui.tui import TUI
-    from tau.tui.overlay import OverlayHandle, CustomOptions
     from tau.tui.autocomplete import AutocompleteRegistration
+    from tau.tui.overlay import CustomOptions, OverlayHandle
+    from tau.tui.tui import TUI
 
 
 class _PendingLines(Component):
@@ -78,7 +84,7 @@ class Layout(Component):
         editor_padding_x: int = 0,
     ) -> None:
         """Initialize layout with TUI instance and default theme."""
-        self._tui   = tui
+        self._tui = tui
         self._theme = theme or LayoutTheme()
         self._picker_max_visible = picker_max_visible
 
@@ -89,7 +95,7 @@ class Layout(Component):
         self.spinner = Spinner(tui, theme=self._theme.spinner)
         self.footer: Container = Container()
         self.palette = CommandPalette()
-        self.input    = TextInput(
+        self.input = TextInput(
             prefix=self._theme.input.prefix,
             placeholder=self._theme.input.placeholder,
             padding_x=editor_padding_x,
@@ -135,9 +141,9 @@ class Layout(Component):
         self._status_map: dict[str, str] = {}
 
         # Cached submit/followup/dequeue callbacks — re-wired after editor replacement
-        self._stored_submit_cb:   Callable[[str], None] | None = None
+        self._stored_submit_cb: Callable[[str], None] | None = None
         self._stored_followup_cb: Callable[[str], None] | None = None
-        self._stored_dequeue_cb:  Callable[[], None] | None = None
+        self._stored_dequeue_cb: Callable[[], None] | None = None
         self._custom_input_factory: Callable[[Any, Any], Any] | None = None
 
         # File picker — shown when user types '@'
@@ -166,7 +172,9 @@ class Layout(Component):
         tui.add_child(self.spinner)
         tui.add_child(self._pending_lines)
         tui.add_child(self.status)
-        tui.add_child(self)          # Layout = EditorZone (status_map + dividers + input + pickers + footer)
+        tui.add_child(
+            self
+        )  # Layout = EditorZone (status_map + dividers + input + pickers + footer)
 
     # -------------------------------------------------------------------------
     # Attach / detach (for full-screen takeovers and TrustScreen)
@@ -197,6 +205,7 @@ class Layout(Component):
         # Status zone — keyed status lines above the editor
         if self._status_map:
             from tau.tui.ansi import DIM, RESET
+
             for text in self._status_map.values():
                 content.append(f"  {DIM}{text}{RESET}")
 
@@ -285,8 +294,8 @@ class Layout(Component):
             # Generic inline selector (model, theme, effort, resume, tree) — modal
             if self._active_selector is not None:
                 sel = self._active_selector
-                tree_sel   = sel.selector if sel.kind == "tree"   else None
-                model_sel  = sel.selector if sel.kind == "model"  else None
+                tree_sel = sel.selector if sel.kind == "tree" else None
+                model_sel = sel.selector if sel.kind == "model" else None
                 simple_sel = sel.selector if sel.kind in ("theme", "effort") else None
 
                 # Tree label-editing sub-mode: route all keys directly
@@ -564,12 +573,12 @@ class Layout(Component):
     def set_cwd(self, cwd: Path) -> None:
         """Update the current working directory for file picker."""
         self.file_picker._root = cwd
-        self.file_picker._cwd  = cwd
+        self.file_picker._cwd = cwd
 
     def set_model_callbacks(
         self,
         commit_cb: Callable[[str, str], None],  # noqa: ARG002
-        current_key_cb: Callable[[], str],       # noqa: ARG002
+        current_key_cb: Callable[[], str],  # noqa: ARG002
     ) -> None:
         pass  # inline model palette removed; /model now opens a modal
 
@@ -577,13 +586,17 @@ class Layout(Component):
         """Show per-placeholder ghost text after the cursor, dropping each token as the user types."""
         import re
         import shlex
+
         if not text.startswith("/") or " " not in text:
             self.input._arg_hint = ""
             return
         space_idx = text.index(" ")
-        cmd_name  = text[1:space_idx]
-        args_part = text[space_idx + 1:]
-        cmd = next((c for c in self._all_commands if c.name == cmd_name or cmd_name in (c.aliases or [])), None)
+        cmd_name = text[1:space_idx]
+        args_part = text[space_idx + 1 :]
+        cmd = next(
+            (c for c in self._all_commands if c.name == cmd_name or cmd_name in (c.aliases or [])),
+            None,
+        )
         if cmd is None or not cmd.argument_hint:
             self.input._arg_hint = ""
             return
@@ -654,7 +667,7 @@ class Layout(Component):
             return None
         if at_pos > 0 and before[at_pos - 1] not in (" ", "\n"):
             return None
-        after_at = before[at_pos + 1:]
+        after_at = before[at_pos + 1 :]
         if " " in after_at or ":" in after_at:
             return None
         return at_pos, after_at
@@ -662,7 +675,7 @@ class Layout(Component):
     def _accept_file_or_descend(self) -> None:
         """Tab pressed while file picker is active."""
         entry = self.file_picker.enter_selected()
-        text   = self.input.text
+        text = self.input.text
         cursor = self.input._cursor
 
         if entry is None:
@@ -739,6 +752,7 @@ class Layout(Component):
             layout.widgets_below.add_child(MyOtherWidget())
         """
         from tau.tui.component import StaticComponent
+
         component = widget if isinstance(widget, Component) else StaticComponent(widget)
         if placement == "below_editor":
             old = self._widgets_below_map.pop(id, None)
@@ -764,7 +778,9 @@ class Layout(Component):
             self.widgets_below.remove_child(below)
         self._tui.request_render()
 
-    def set_footer(self, component_or_factory: "Component | Callable[[], Component] | None") -> None:
+    def set_footer(
+        self, component_or_factory: Component | Callable[[], Component] | None
+    ) -> None:
         """
         Replace the footer contents with a custom component, or clear it.
 
@@ -789,15 +805,17 @@ class Layout(Component):
         self.footer.add_child(replacement)
         self._tui.request_render()
 
-    def set_custom_footer(self, component: "Component | None") -> None:
+    def set_custom_footer(self, component: Component | None) -> None:
         """Backwards-compatible alias for set_footer()."""
         self.set_footer(component)
 
-    def register_autocomplete_provider(self, registration: "AutocompleteRegistration") -> None:
+    def register_autocomplete_provider(self, registration: AutocompleteRegistration) -> None:
         """Wire an extension autocomplete provider into the layout."""
         self._autocomplete.register_provider(registration)
 
-    def set_header(self, component_or_factory: "Component | Callable[[], Component] | None") -> None:
+    def set_header(
+        self, component_or_factory: Component | Callable[[], Component] | None
+    ) -> None:
         """
         Set the header component rendered above the message list.
 
@@ -819,7 +837,7 @@ class Layout(Component):
             self.header.add_child(component_or_factory)  # type: ignore[arg-type]
         self._tui.request_render()
 
-    def set_status(self, key: str, text: "str | None") -> None:
+    def set_status(self, key: str, text: str | None) -> None:
         """
         Set or clear a keyed status line shown above the editor.
 
@@ -842,9 +860,9 @@ class Layout(Component):
 
     async def custom(
         self,
-        factory: "Callable[[TUI, Callable[[Any], None]], Component]",
-        options: "CustomOptions | None" = None,
-    ) -> "Any":
+        factory: Callable[[TUI, Callable[[Any], None]], Component],
+        options: CustomOptions | None = None,
+    ) -> Any:
         """
         Show a custom component with keyboard focus.
 
@@ -867,6 +885,7 @@ class Layout(Component):
             )
         """
         import asyncio
+
         from tau.tui.overlay import CustomOptions as _CustomOptions
 
         opts = options or _CustomOptions()
@@ -916,9 +935,11 @@ class Layout(Component):
     def set_custom_input(self, factory: Callable[[Any, Any], Any] | None) -> None:
         """Replace the input widget with a custom implementation."""
         from tau.tui.keybindings import get_keybindings
+
         self._custom_input_factory = factory
         if factory is None:
             from tau.tui.components.text_input import TextInput
+
             new_input: Any = TextInput(
                 prefix=self._theme.input.prefix,
                 placeholder=self._theme.input.placeholder,
@@ -953,6 +974,7 @@ class Layout(Component):
     def _rebuild_pending(self, dequeue_hint: str = "Alt+↑ to edit queued") -> None:
         """Rebuild the pending-messages display between spinner and input."""
         from tau.tui.ansi import DIM, RESET
+
         lines: list[str] = []
         for label, msgs in (
             ("Steering", self._pending_steering),
@@ -995,7 +1017,9 @@ class Layout(Component):
         self, items: list[SelectItem], current_label: str | None = None
     ) -> SelectList:
         """Build a SelectList with theme/visibility settings and optional initial selection."""
-        selector = SelectList(items, max_visible=self._picker_max_visible, theme=self._theme.select_list)
+        selector = SelectList(
+            items, max_visible=self._picker_max_visible, theme=self._theme.select_list
+        )
         if current_label is not None:
             labels = [item.label for item in items]
             if current_label in labels:
@@ -1011,10 +1035,13 @@ class Layout(Component):
     ) -> None:
         """Open the model selector modal."""
         from tau.tui.components.model_palette import ModelSelectorModal
+
         modal = ModelSelectorModal(models, current_key)
         self._active_selector = InlineSelector(
-            kind="model", selector=modal,
-            on_commit=on_commit, on_cancel=on_cancel,
+            kind="model",
+            selector=modal,
+            on_commit=on_commit,
+            on_cancel=on_cancel,
         )
         self._tui.request_render()
 
@@ -1032,10 +1059,13 @@ class Layout(Component):
     ) -> None:
         """Open a theme selector with live preview support."""
         from tau.tui.components.modal import ListModal
+
         modal = ListModal(names, current, "Theme", "Select color theme", on_preview=on_preview)
         self._active_selector = InlineSelector(
-            kind="theme", selector=modal,
-            on_commit=on_commit, on_cancel=on_cancel,
+            kind="theme",
+            selector=modal,
+            on_commit=on_commit,
+            on_cancel=on_cancel,
         )
         self._tui.request_render()
 
@@ -1048,10 +1078,13 @@ class Layout(Component):
     ) -> None:
         """Open an effort/thinking level selector modal."""
         from tau.tui.components.modal import ListModal
+
         modal = ListModal(levels, current, "Thinking Effort", "Select effort level")
         self._active_selector = InlineSelector(
-            kind="effort", selector=modal,
-            on_commit=on_commit, on_cancel=on_cancel,
+            kind="effort",
+            selector=modal,
+            on_commit=on_commit,
+            on_cancel=on_cancel,
         )
         self._tui.request_render()
 
@@ -1062,8 +1095,10 @@ class Layout(Component):
     ) -> None:
         """Open the interactive settings modal."""
         self._active_selector = InlineSelector(
-            kind="settings", selector=modal,
-            on_commit=lambda _: None, on_cancel=on_cancel,
+            kind="settings",
+            selector=modal,
+            on_commit=lambda _: None,
+            on_cancel=on_cancel,
         )
         self._tui.request_render()
 
@@ -1077,6 +1112,7 @@ class Layout(Component):
     ) -> None:
         """Open the session resume selector with search, scope toggle, and delete."""
         from tau.tui.components.resume_modal import ResumeModal
+
         modal = ResumeModal(
             current_sessions=sessions,
             all_sessions_loader=all_sessions_loader or (lambda: []),
@@ -1084,8 +1120,10 @@ class Layout(Component):
             max_visible=self._picker_max_visible,
         )
         self._active_selector = InlineSelector(
-            kind="resume", selector=modal,
-            on_commit=on_commit, on_cancel=on_cancel,
+            kind="resume",
+            selector=modal,
+            on_commit=on_commit,
+            on_cancel=on_cancel,
         )
         self._tui.request_render()
 
@@ -1097,8 +1135,10 @@ class Layout(Component):
     ) -> None:
         """Open a tree/list selector modal."""
         self._active_selector = InlineSelector(
-            kind="tree", selector=self._make_select_list(items),
-            on_commit=on_commit, on_cancel=on_cancel,
+            kind="tree",
+            selector=self._make_select_list(items),
+            on_commit=on_commit,
+            on_cancel=on_cancel,
         )
         self._tui.request_render()
 
@@ -1133,8 +1173,10 @@ class Layout(Component):
             selected_bg=self._theme.select_list.selected_bg,
         )
         self._active_selector = InlineSelector(
-            kind="tree", selector=selector,
-            on_commit=on_commit, on_cancel=on_cancel,
+            kind="tree",
+            selector=selector,
+            on_commit=on_commit,
+            on_cancel=on_cancel,
             searchable=True,
         )
         self._tui.request_render()

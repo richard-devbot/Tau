@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from tau.inference.model.registry import ModelRegistry
-from tau.inference.model.types import Model, Cost
+from tau.inference.model.types import Cost, Model
 
 
 def _model(id: str, provider: str = "test_provider", name: str | None = None) -> Model:

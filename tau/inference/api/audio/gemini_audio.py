@@ -13,8 +13,8 @@ from tau.inference.types import (
     AudioStopReason,
     STTContext,
     SynthesizedAudio,
-    TTSContext,
     TranscribedAudio,
+    TTSContext,
 )
 
 
@@ -33,7 +33,9 @@ class GeminiAudioAPI(BaseAPI):
             self._client = genai.Client(api_key=options.api_key)
 
     def _get_client(self) -> genai.Client:
-        if self._client is None or self.options.api_key != getattr(self._client._api_client, 'api_key', None):
+        if self._client is None or self.options.api_key != getattr(
+            self._client._api_client, "api_key", None
+        ):
             self._client = genai.Client(api_key=self.options.api_key)
         return self._client
 

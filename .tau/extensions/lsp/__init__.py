@@ -39,7 +39,7 @@ import asyncio
 import re
 from pathlib import Path
 
-from tau.hooks.engine import ToolResultEventResult, ContextEventResult
+from tau.hooks.engine import ContextEventResult, ToolResultEventResult
 from tau.hooks.runtime import InputEventResult
 
 from .core import LSP
@@ -119,7 +119,7 @@ async def _expand_file_line_refs(text: str, service: LSP, cwd: Path) -> str | No
             target_line = start_line - 1  # 0-based for LSP
             best_span = None  # (s_line, e_line) in 0-based LSP coords
 
-            def _walk(syms: list) -> None:
+            def _walk(syms: list, _tgt: int = target_line) -> None:
                 nonlocal best_span
                 for sym in syms:
                     r = sym.get("range") or sym.get("location", {}).get("range")
@@ -127,12 +127,15 @@ async def _expand_file_line_refs(text: str, service: LSP, cwd: Path) -> str | No
                         continue
                     s = r["start"]["line"]
                     e = r["end"]["line"]
-                    if s <= target_line <= e:
+                    if s <= _tgt <= e and (
+                        best_span is None
+                        or s > best_span[0]
+                        or (s == best_span[0] and (e - s) > (best_span[1] - best_span[0]))
+                    ):
                         # Prefer the symbol that starts on or closest before the
                         # target line, breaking ties by largest span (full body).
-                        if best_span is None or s > best_span[0] or (s == best_span[0] and (e - s) > (best_span[1] - best_span[0])):
-                            best_span = (s, e)
-                    _walk(sym.get("children") or [])
+                        best_span = (s, e)
+                    _walk(sym.get("children") or [], _tgt)
 
             _walk(symbols)
             # Only use LSP span if it covers more than one line; a 1-line span
@@ -224,7 +227,7 @@ def _format_diagnostics_plain(diagnostics: list[dict]) -> str:
 
 def _format_diagnostics_xml(file: str, diagnostics: list[dict]) -> str:
     """XML-wrapped for LLM context injection."""
-    inner = "\n".join(f"  {l}" for l in _diag_lines(diagnostics))
+    inner = "\n".join(f"  {line}" for line in _diag_lines(diagnostics))
     return f'<diagnostics file="{file}">\n{inner}\n</diagnostics>'
 
 

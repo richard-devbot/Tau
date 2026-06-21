@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from tau.settings.utils import set_nested, coerce_enum
+from tau.settings.utils import coerce_enum, set_nested
 
 
 class Color(Enum):

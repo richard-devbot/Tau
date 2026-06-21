@@ -2,26 +2,22 @@
 from __future__ import annotations
 
 import base64
-import pytest
 
-from tau.message.utils import (
-    detect_image_mime,
-    detect_audio_mime,
-    image_to_base64,
-    audio_to_base64,
-    filter_empty_assistant_messages,
-    strip_unusable_trailing_assistant,
-)
 from tau.message.types import (
     AssistantMessage,
-    UserMessage,
     TextContent,
     ThinkingContent,
     ToolCallContent,
-    ToolResultContent,
-    Role,
+    UserMessage,
 )
-
+from tau.message.utils import (
+    audio_to_base64,
+    detect_audio_mime,
+    detect_image_mime,
+    filter_empty_assistant_messages,
+    image_to_base64,
+    strip_unusable_trailing_assistant,
+)
 
 # --- JPEG magic bytes: FF D8 FF ---
 JPEG_MAGIC = b"\xff\xd8\xff" + b"\x00" * 20

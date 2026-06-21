@@ -1,13 +1,22 @@
 from __future__ import annotations
-import os
+
+import builtins
 import json
+import os
 from pathlib import Path
-from typing import List
-from tau.inference.provider.registry import ProviderRegistry
-from tau.inference.provider.oauth import OAuthLoginCallbacks
-from tau.settings.paths import get_auth_path
-from tau.auth.types import AuthCredential, AuthStatus, OAuthCredential, APICredential, AuthType, LockResult
+
 from tau.auth.storage import AuthStorage, FileAuthStorage, InMemoryAuthStorage
+from tau.auth.types import (
+    APICredential,
+    AuthCredential,
+    AuthStatus,
+    AuthType,
+    LockResult,
+    OAuthCredential,
+)
+from tau.inference.provider.oauth import OAuthLoginCallbacks
+from tau.inference.provider.registry import ProviderRegistry
+from tau.settings.paths import get_auth_path
 from tau.utils.secrets import resolve_secret
 
 
@@ -27,15 +36,23 @@ def _is_unrecoverable_refresh_error(error: Exception) -> bool:
     provider wrappers raise these as ``RuntimeError("Request failed (<code>): ...")``
     without a status_code attribute, so we match those markers explicitly.
     """
-    from tau.inference.utils import classify_error, ErrorKind
+    from tau.inference.utils import ErrorKind, classify_error
 
     kind = classify_error(error).kind
     if kind in (ErrorKind.AUTH, ErrorKind.AUTH_PERMANENT):
         return True
-    if kind in (ErrorKind.RATE_LIMIT, ErrorKind.OVERLOADED, ErrorKind.SERVER_ERROR, ErrorKind.TIMEOUT):
+    if kind in (
+        ErrorKind.RATE_LIMIT,
+        ErrorKind.OVERLOADED,
+        ErrorKind.SERVER_ERROR,
+        ErrorKind.TIMEOUT,
+    ):
         return False
     text = str(error).lower()
-    return any(m in text for m in ("invalid_grant", "invalid_request", "invalid_token", "(400)", "(401)", "(403)"))
+    return any(
+        m in text
+        for m in ("invalid_grant", "invalid_request", "invalid_token", "(400)", "(401)", "(403)")
+    )
 
 
 class AuthManager:
@@ -50,20 +67,22 @@ class AuthManager:
         self.data: dict[str, AuthCredential] = self._load()
 
     @staticmethod
-    def create(registry: ProviderRegistry, auth_path: Path | None = None) -> "AuthManager":
+    def create(registry: ProviderRegistry, auth_path: Path | None = None) -> AuthManager:
         """Create AuthManager with file storage."""
         path = auth_path or get_auth_path()
         storage = FileAuthStorage(path)
         return AuthManager(registry, storage)
 
     @staticmethod
-    def from_storage(registry: ProviderRegistry, storage: AuthStorage) -> "AuthManager":
+    def from_storage(registry: ProviderRegistry, storage: AuthStorage) -> AuthManager:
         """Create AuthManager with custom storage."""
         return AuthManager(registry, storage)
 
     @staticmethod
-    def in_memory(registry: ProviderRegistry, initial: dict = {}) -> "AuthManager":
+    def in_memory(registry: ProviderRegistry, initial: dict = None) -> AuthManager:
         """Create AuthManager with in-memory storage for testing."""
+        if initial is None:
+            initial = {}
         storage = InMemoryAuthStorage()
         storage.with_lock(lambda _: LockResult(result=None, next=json.dumps(initial, indent=2)))
         return AuthManager.from_storage(registry, storage)
@@ -83,7 +102,11 @@ class AuthManager:
             match cred_type:
                 case AuthType.OAuth:
                     raw_extra = v.get("extra") or {}
-                    extra = {str(ek): str(ev) for ek, ev in raw_extra.items()} if isinstance(raw_extra, dict) else {}
+                    extra = (
+                        {str(ek): str(ev) for ek, ev in raw_extra.items()}
+                        if isinstance(raw_extra, dict)
+                        else {}
+                    )
                     data[k] = OAuthCredential(
                         access=v.get("access", ""),
                         refresh=v.get("refresh", ""),
@@ -183,7 +206,7 @@ class AuthManager:
             return AuthStatus(configured=True, source="env", label=env_key)
         return AuthStatus(configured=False)
 
-    def drain_errors(self) -> List[Exception]:
+    def drain_errors(self) -> builtins.list[Exception]:
         """Return and clear accumulated errors."""
         drained = list(self._errors)
         self._errors.clear()
@@ -208,7 +231,9 @@ class AuthManager:
                     return None
 
                 if oauth_provider.is_expired(credential=credential):
-                    refreshed_credential = await self._refresh_oauth_token_with_lock(provider=provider)
+                    refreshed_credential = await self._refresh_oauth_token_with_lock(
+                        provider=provider
+                    )
                     if refreshed_credential:
                         credential = refreshed_credential
                     else:
@@ -245,7 +270,9 @@ class AuthManager:
                 current_data[provider] = refreshed_credential
                 self.data = current_data
                 serialized = {k: self._serialize_credential(v) for k, v in current_data.items()}
-                return LockResult(result=refreshed_credential, next=json.dumps(serialized, indent=2))
+                return LockResult(
+                    result=refreshed_credential, next=json.dumps(serialized, indent=2)
+                )
             except Exception as e:
                 self._record_error(e)
                 return LockResult(result=None)
@@ -257,7 +284,9 @@ class AuthManager:
         """Return True if the stored credential for a provider is an OAuth credential."""
         return isinstance(self.get(provider), OAuthCredential)
 
-    async def force_refresh(self, provider: str, stale_access: str | None = None) -> OAuthCredential | None:
+    async def force_refresh(
+        self, provider: str, stale_access: str | None = None
+    ) -> OAuthCredential | None:
         """Force-refresh an OAuth credential whose access token was rejected (e.g. a
         mid-request 401) even though it is not yet time-expired.
 
@@ -296,7 +325,9 @@ class AuthManager:
                 current_data[provider] = refreshed_credential
                 self.data = current_data
                 serialized = {k: self._serialize_credential(v) for k, v in current_data.items()}
-                return LockResult(result=refreshed_credential, next=json.dumps(serialized, indent=2))
+                return LockResult(
+                    result=refreshed_credential, next=json.dumps(serialized, indent=2)
+                )
             except Exception as e:
                 self._record_error(e)
                 if _is_unrecoverable_refresh_error(e):
@@ -322,8 +353,10 @@ class AuthManager:
 
     async def logout(self, provider: str):
         """Perform OAuth logout for a provider and remove the stored credential."""
-        if oauth_provider := self.registry.text.get_oauth_provider(provider):
-            if credential := self.get(provider):
-                if isinstance(credential, OAuthCredential):
-                    await oauth_provider.logout(credential=credential)
+        if (
+            (oauth_provider := self.registry.text.get_oauth_provider(provider))
+            and (credential := self.get(provider))
+            and isinstance(credential, OAuthCredential)
+        ):
+            await oauth_provider.logout(credential=credential)
         self.remove(provider)

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
-from tau.tui.ansi import RESET, BOLD, DIM, BRIGHT_BLACK, BRIGHT_WHITE
+from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, DIM, RESET
 
 
 @dataclass
@@ -16,8 +16,8 @@ class SettingItem:
     submenu_items: list[str] = field(default_factory=list)
     submenu_title: str = ""
     text_input: bool = False
-    submenu_settings: list["SettingItem"] = field(default_factory=list)
-    submenu_on_change: "Callable[[str, str], None] | None" = None
+    submenu_settings: list[SettingItem] = field(default_factory=list)
+    submenu_on_change: Callable[[str, str], None] | None = None
 
 
 class SettingsModal:
@@ -110,6 +110,7 @@ class SettingsModal:
             self._submenu_id = item.id
         elif item.submenu_items:
             from tau.tui.components.modal import ListModal
+
             self._submenu = ListModal(
                 item.submenu_items,
                 item.current_value,
@@ -213,7 +214,11 @@ class SettingsModal:
                         f"  {BRIGHT_WHITE}{val_display}{RESET}"
                     )
                 else:
-                    val_display = (item.current_value.replace("_", " ") + " ▸") if has_submenu else item.current_value.replace("_", " ")
+                    val_display = (
+                        (item.current_value.replace("_", " ") + " ▸")
+                        if has_submenu
+                        else item.current_value.replace("_", " ")
+                    )
                     if is_sel:
                         row = (
                             f"  {BOLD}{BRIGHT_WHITE}→ {label_padded}{RESET}"
@@ -237,9 +242,7 @@ class SettingsModal:
         if self._editing:
             lines.append(f"  {DIM}enter confirm  esc cancel{RESET}")
         else:
-            lines.append(
-                f"  {DIM}↑/↓ move  enter/spc toggle  esc cancel  type to search{RESET}"
-            )
+            lines.append(f"  {DIM}↑/↓ move  enter/spc toggle  esc cancel  type to search{RESET}")
 
         return lines
 

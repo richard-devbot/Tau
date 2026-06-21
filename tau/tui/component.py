@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -42,7 +43,7 @@ class Component(ABC):
         """
         return False
 
-    def invalidate(self) -> None:
+    def invalidate(self) -> None:  # noqa: B027
         """
         Clear any cached render state.
 
@@ -51,7 +52,7 @@ class Component(ABC):
         """
 
 
-class Focusable(ABC):
+class Focusable:
     """
     Mixin for components that want explicit keyboard focus.
 
@@ -99,10 +100,8 @@ class Container(Component):
 
     def remove_child(self, component: Component) -> None:
         """Remove a component; no-op if not present."""
-        try:
+        with contextlib.suppress(ValueError):
             self.children.remove(component)
-        except ValueError:
-            pass
 
     def clear(self) -> None:
         """Remove all children."""
@@ -119,10 +118,7 @@ class Container(Component):
         return lines
 
     def handle_input(self, event: InputEvent) -> bool:
-        for child in self.children:
-            if child.handle_input(event):
-                return True
-        return False
+        return any(child.handle_input(event) for child in self.children)
 
     def invalidate(self) -> None:
         for child in self.children:
@@ -164,10 +160,7 @@ class Column(Component):
         return lines
 
     def handle_input(self, event: InputEvent) -> bool:
-        for child in reversed(self.children):
-            if child.handle_input(event):
-                return True
-        return False
+        return any(child.handle_input(event) for child in reversed(self.children))
 
     def invalidate(self) -> None:
         for child in self.children:
@@ -211,11 +204,11 @@ class Row(Component):
         self._slots.append((component, align))
 
     def render(self, width: int) -> list[str]:
-        from tau.tui.ansi import visible_width, truncate
+        from tau.tui.ansi import truncate, visible_width
 
-        left_parts:   list[str] = []
+        left_parts: list[str] = []
         center_parts: list[str] = []
-        right_parts:  list[str] = []
+        right_parts: list[str] = []
 
         for component, align in self._slots:
             lines = component.render(width)
@@ -227,9 +220,9 @@ class Row(Component):
             else:
                 left_parts.append(text)
 
-        left   = "  ".join(left_parts)
+        left = "  ".join(left_parts)
         center = "  ".join(center_parts)
-        right  = "  ".join(right_parts)
+        right = "  ".join(right_parts)
 
         lw = visible_width(left)
         cw = visible_width(center)
@@ -238,7 +231,7 @@ class Row(Component):
         if center:
             # left | center (centered) | right
             center_start = max(lw + 1, (width - cw) // 2)
-            right_start  = width - rw
+            right_start = width - rw
             if center_start + cw > right_start:
                 center_start = max(lw + 1, right_start - cw - 1)
             line = left
@@ -258,10 +251,7 @@ class Row(Component):
         return [line]
 
     def handle_input(self, event: InputEvent) -> bool:
-        for component, _ in self._slots:
-            if component.handle_input(event):
-                return True
-        return False
+        return any(component.handle_input(event) for component, _ in self._slots)
 
     def invalidate(self) -> None:
         for component, _ in self._slots:

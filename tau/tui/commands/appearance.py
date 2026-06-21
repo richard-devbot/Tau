@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 
 from tau.tui.commands.context import CommandContext
@@ -13,7 +14,7 @@ def _headers_to_str(headers: dict | None) -> str:
 
 def open_theme_selector(ctx: CommandContext) -> None:
     """Open the theme selector modal with live preview."""
-    from tau.themes.registry import theme_registry, DEFAULT_THEME
+    from tau.themes.registry import DEFAULT_THEME, theme_registry
 
     names = theme_registry.list()
     sm = ctx.runtime.settings_manager
@@ -21,10 +22,8 @@ def open_theme_selector(ctx: CommandContext) -> None:
 
     def preview(name: str) -> None:
         """Preview the selected theme."""
-        try:
+        with contextlib.suppress(ValueError):
             ctx.layout.set_theme(theme_registry.get(name))
-        except ValueError:
-            pass
 
     def commit(name: str) -> None:
         """Apply the selected theme."""
@@ -39,22 +38,19 @@ def open_theme_selector(ctx: CommandContext) -> None:
 
     def cancel() -> None:
         """Revert to the original theme."""
-        try:
+        with contextlib.suppress(ValueError):
             ctx.layout.set_theme(theme_registry.get(original))
-        except ValueError:
-            pass
         ctx.notify(f"Kept theme {original}")
 
     ctx.layout.open_theme_selector(names, original, preview, commit, cancel)
 
 
-
 def open_settings_panel(ctx: CommandContext) -> None:
     """Open the interactive settings modal."""
+    from tau.engine.types import FollowupMode, SteeringMode
+    from tau.inference.types import ThinkingLevel, Transport
+    from tau.themes.registry import DEFAULT_THEME, theme_registry
     from tau.tui.components.settings_modal import SettingItem, SettingsModal
-    from tau.inference.types import Transport, ThinkingLevel
-    from tau.engine.types import SteeringMode, FollowupMode
-    from tau.themes.registry import theme_registry, DEFAULT_THEME
 
     sm = ctx.runtime.settings_manager
     if sm is None:
@@ -129,7 +125,8 @@ def open_settings_panel(ctx: CommandContext) -> None:
             id="thinking_level",
             label="Thinking level",
             description="Default reasoning depth for thinking-capable models",
-            current_value=getattr(sm.get_thinking_level(), 'value', None) or ThinkingLevel.Off.value,
+            current_value=getattr(sm.get_thinking_level(), "value", None)
+            or ThinkingLevel.Off.value,
             submenu_items=[lv.value for lv in ThinkingLevel],
             submenu_title="Thinking Level",
         ),
@@ -363,15 +360,17 @@ def open_settings_panel(ctx: CommandContext) -> None:
         for ext in ext_runtime._extensions:
             for reg in ext.settings_registrations:
                 row_id = f"_ext_{id(reg)}"
-                items.append(SettingItem(
-                    id=row_id,
-                    label=reg.title,
-                    description=f"Settings for extension: {ext.path}",
-                    current_value=reg.summary or "→",
-                    submenu_title=reg.title,
-                    submenu_settings=reg.items,
-                    submenu_on_change=_ext_on_change(reg, row_id),
-                ))
+                items.append(
+                    SettingItem(
+                        id=row_id,
+                        label=reg.title,
+                        description=f"Settings for extension: {ext.path}",
+                        current_value=reg.summary or "→",
+                        submenu_title=reg.title,
+                        submenu_settings=reg.items,
+                        submenu_on_change=_ext_on_change(reg, row_id),
+                    )
+                )
 
     sm.begin_batch()
 
@@ -409,6 +408,7 @@ def open_settings_panel(ctx: CommandContext) -> None:
         elif item_id == "theme":
             try:
                 from tau.themes.registry import theme_registry as _tr
+
                 ctx.layout.set_theme(_tr.get(value))
                 sm.set_theme(value)
             except ValueError:
@@ -426,7 +426,9 @@ def open_settings_panel(ctx: CommandContext) -> None:
                     if not isinstance(parsed, dict):
                         ctx.notify("Proxy headers must be a JSON object")
                         return
-                    if any(not isinstance(k, str) or not isinstance(v, str) for k, v in parsed.items()):
+                    if any(
+                        not isinstance(k, str) or not isinstance(v, str) for k, v in parsed.items()
+                    ):
                         ctx.notify("Proxy header keys and values must be strings")
                         return
                     sm.set_proxy_headers(parsed)
@@ -453,9 +455,14 @@ def open_settings_panel(ctx: CommandContext) -> None:
         elif item_id == "branch_summary_skip_prompt":
             sm.set_branch_summary_skip_prompt(value == "true")
         elif item_id in (
-            "http_idle_timeout_ms", "picker_max_visible", "autocomplete_max_visible",
-            "editor_padding_x", "retry_max_retries", "retry_base_delay_ms",
-            "compaction_reserve_tokens", "compaction_keep_recent_tokens",
+            "http_idle_timeout_ms",
+            "picker_max_visible",
+            "autocomplete_max_visible",
+            "editor_padding_x",
+            "retry_max_retries",
+            "retry_base_delay_ms",
+            "compaction_reserve_tokens",
+            "compaction_keep_recent_tokens",
             "branch_summary_reserve_tokens",
         ):
             try:

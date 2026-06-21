@@ -1,27 +1,53 @@
 from __future__ import annotations
+
 import json
-from tau.inference.api.text.utils import parse_tool_args, openai_user_content, openai_response_format
-from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Any
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
+
 from mistralai.client import Mistral
-from mistralai.client.models import ThinkChunk, TextChunk
+from mistralai.client.models import TextChunk, ThinkChunk
 from mistralai.client.types import UNSET
+
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
+from tau.inference.api.text.utils import (
+    openai_response_format,
+    openai_user_content,
+    parse_tool_args,
+)
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    LLMContext, LLMEvent, LLMOptions, StopReason, ThinkingLevel,
-    StartEvent, EndEvent, ErrorEvent,
-    TextStartEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingStartEvent, ThinkingDeltaEvent, ThinkingEndEvent,
-    ToolCallStartEvent, ToolCallDeltaEvent, ToolCallEndEvent,
+    EndEvent,
+    ErrorEvent,
+    LLMContext,
+    LLMEvent,
+    LLMOptions,
+    StartEvent,
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    TextStartEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingLevel,
+    ThinkingStartEvent,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
 )
 from tau.message.types import (
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+    AssistantMessage,
+    LLMMessage,
+    SystemMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    UserMessage,
 )
-from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
-    from tau.tool.types import Tool
+    pass
 
 _STOP_REASON: dict[str, StopReason] = {
     "stop": StopReason.Stop,
@@ -34,8 +60,9 @@ _STOP_REASON: dict[str, StopReason] = {
 _MINIMAL_LEVELS = {ThinkingLevel.Low, ThinkingLevel.Minimal}
 
 
-
-def _messages_to_mistral(messages: list[LLMMessage], supports_thinking: bool = True) -> list[dict[str, Any]]:
+def _messages_to_mistral(
+    messages: list[LLMMessage], supports_thinking: bool = True
+) -> list[dict[str, Any]]:
     """Convert a message list to Mistral Chat API format.
 
     When supports_thinking is False, ThinkingContent is merged into the text
@@ -57,16 +84,20 @@ def _messages_to_mistral(messages: list[LLMMessage], supports_thinking: bool = T
                 text_parts: list[str] = []
                 tool_calls: list[dict[str, Any]] = []
                 content_chunks: list[dict[str, Any]] = []
-                has_thinking = supports_thinking and any(isinstance(c, ThinkingContent) for c in msg.contents)
+                has_thinking = supports_thinking and any(
+                    isinstance(c, ThinkingContent) for c in msg.contents
+                )
                 for item in msg.contents:
                     match item:
                         case ThinkingContent():
                             if supports_thinking:
-                                content_chunks.append({
-                                    "type": "thinking",
-                                    "thinking": [{"type": "text", "text": item.content}],
-                                    "signature": item.signature,
-                                })
+                                content_chunks.append(
+                                    {
+                                        "type": "thinking",
+                                        "thinking": [{"type": "text", "text": item.content}],
+                                        "signature": item.signature,
+                                    }
+                                )
                             else:
                                 text_parts.insert(0, item.content)
                         case TextContent():
@@ -75,11 +106,16 @@ def _messages_to_mistral(messages: list[LLMMessage], supports_thinking: bool = T
                             else:
                                 text_parts.append(item.content)
                         case ToolCallContent():
-                            tool_calls.append({
-                                "id": item.id,
-                                "type": "function",
-                                "function": {"name": item.name, "arguments": json.dumps(item.args)},
-                            })
+                            tool_calls.append(
+                                {
+                                    "id": item.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": item.name,
+                                        "arguments": json.dumps(item.args),
+                                    },
+                                }
+                            )
                 entry: dict[str, Any] = {"role": "assistant"}
                 if has_thinking:
                     # When thinking blocks are present, Mistral requires chunked content format.
@@ -94,11 +130,13 @@ def _messages_to_mistral(messages: list[LLMMessage], supports_thinking: bool = T
             case ToolMessage():
                 for content in msg.contents:
                     if isinstance(content, ToolResultContent):
-                        result.append({
-                            "role": "tool",
-                            "tool_call_id": content.id,
-                            "content": content.content,
-                        })
+                        result.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": content.id,
+                                "content": content.content,
+                            }
+                        )
     return result
 
 
@@ -130,9 +168,13 @@ class MistralChatAPI(BaseAPI):
     async def stream(self, context: LLMContext, model: Model) -> AsyncGenerator[LLMEvent, None]:  # type: ignore[override]
         """Stream LLMEvents from the Mistral Chat API."""
         self._sync_client()
-        mistral_messages = _messages_to_mistral(context.messages, supports_thinking=bool(model.thinking))
+        mistral_messages = _messages_to_mistral(
+            context.messages, supports_thinking=bool(model.thinking)
+        )
         if context.system_prompt:
-            mistral_messages = [{"role": "system", "content": context.system_prompt}] + mistral_messages
+            mistral_messages = [
+                {"role": "system", "content": context.system_prompt}
+            ] + mistral_messages
 
         reasoning_effort = None
         if self.options.thinking_level is not None:
@@ -176,7 +218,7 @@ class MistralChatAPI(BaseAPI):
                             "name": tool.name,
                             "description": tool.description,
                             "parameters": tool.schema.model_json_schema(),
-                        }
+                        },
                     }
                     for tool in tools
                 ]
@@ -193,19 +235,19 @@ class MistralChatAPI(BaseAPI):
                         yield ErrorEvent(reason=StopReason.Abort, error="Cancelled")
                         return
                     chunk = event.data
-                    usage_data = getattr(chunk, 'usage', None)
+                    usage_data = getattr(chunk, "usage", None)
                     if usage_data and usage_data != UNSET:
-                        _input_tokens = getattr(usage_data, 'prompt_tokens', 0) or 0
-                        _output_tokens = getattr(usage_data, 'completion_tokens', 0) or 0
-                        _details = getattr(usage_data, 'prompt_tokens_details', None)
-                        _cache_read_tokens = getattr(_details, 'cached_tokens', 0) or 0
+                        _input_tokens = getattr(usage_data, "prompt_tokens", 0) or 0
+                        _output_tokens = getattr(usage_data, "completion_tokens", 0) or 0
+                        _details = getattr(usage_data, "prompt_tokens_details", None)
+                        _cache_read_tokens = getattr(_details, "cached_tokens", 0) or 0
                     if not chunk.choices:
                         continue
                     choice = chunk.choices[0]
                     delta = choice.delta
 
                     content = delta.content
-                    if content and content !=UNSET:
+                    if content and content != UNSET:
                         if isinstance(content, str):
                             if not text_started:
                                 yield TextStartEvent(text=TextContent(content=""))
@@ -216,7 +258,8 @@ class MistralChatAPI(BaseAPI):
                             for chunk_item in content:
                                 if isinstance(chunk_item, ThinkChunk):
                                     thinking_text = "".join(
-                                        t.text for t in chunk_item.thinking
+                                        t.text
+                                        for t in chunk_item.thinking
                                         if isinstance(t, TextChunk)
                                     )
                                     if thinking_text:
@@ -224,13 +267,16 @@ class MistralChatAPI(BaseAPI):
                                             yield ThinkingStartEvent(thinking=None)
                                             thinking_started = True
                                         thinking_buf += thinking_text
-                                        yield ThinkingDeltaEvent(thinking=ThinkingContent(content=thinking_text))
-                                    if chunk_item.closed:
-                                        if thinking_started:
-                                            yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))
-                                            thinking_index += 1
-                                            thinking_started = False
-                                            thinking_buf = ""
+                                        yield ThinkingDeltaEvent(
+                                            thinking=ThinkingContent(content=thinking_text)
+                                        )
+                                    if chunk_item.closed and thinking_started:
+                                        yield ThinkingEndEvent(
+                                            thinking=ThinkingContent(content=thinking_buf)
+                                        )
+                                        thinking_index += 1
+                                        thinking_started = False
+                                        thinking_buf = ""
                                 elif isinstance(chunk_item, TextChunk):
                                     if not text_started:
                                         yield TextStartEvent(text=TextContent(content=""))
@@ -243,18 +289,22 @@ class MistralChatAPI(BaseAPI):
                         for tc in tool_calls:
                             idx = tc.index if tc.index is not None else 0
                             fn = tc.function
-                            args = fn.arguments if isinstance(fn.arguments, str) else json.dumps(fn.arguments)
+                            args = (
+                                fn.arguments
+                                if isinstance(fn.arguments, str)
+                                else json.dumps(fn.arguments)
+                            )
                             tc_id = tc.id or ""
                             if idx not in tool_started:
                                 tool_started[idx] = True
                                 tool_bufs[idx] = ""
                                 tool_meta[idx] = {"id": tc_id, "name": fn.name}
-                                yield ToolCallStartEvent(tool_call=ToolCallContent(id=tc_id, name=fn.name)
+                                yield ToolCallStartEvent(
+                                    tool_call=ToolCallContent(id=tc_id, name=fn.name)
                                 )
                             if args:
                                 tool_bufs[idx] += args
-                                yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=tc_id)
-                                )
+                                yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=tc_id))
 
                     finish = choice.finish_reason
                     if finish and finish != UNSET:
@@ -274,10 +324,9 @@ class MistralChatAPI(BaseAPI):
                             args_str = tool_bufs[idx].strip()
                             args = parse_tool_args(args_str)
 
-                            yield ToolCallEndEvent(tool_call=ToolCallContent(
-                                    id=tool_meta[idx]["id"],
-                                    name=tool_meta[idx]["name"],
-                                    args=args
+                            yield ToolCallEndEvent(
+                                tool_call=ToolCallContent(
+                                    id=tool_meta[idx]["id"], name=tool_meta[idx]["name"], args=args
                                 )
                             )
                         if tool_started:
@@ -287,7 +336,12 @@ class MistralChatAPI(BaseAPI):
                             tool_meta.clear()
 
                         stop_reason = _STOP_REASON.get(str(finish), StopReason.Stop)
-                        yield EndEvent(reason=stop_reason, input_tokens=_input_tokens, output_tokens=_output_tokens, cache_read_tokens=_cache_read_tokens)
+                        yield EndEvent(
+                            reason=stop_reason,
+                            input_tokens=_input_tokens,
+                            output_tokens=_output_tokens,
+                            cache_read_tokens=_cache_read_tokens,
+                        )
 
         except Exception as e:
             yield ErrorEvent(reason=StopReason.Error, error=str(e))

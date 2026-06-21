@@ -1,11 +1,11 @@
 """Tests for tau/tool/registry.py — ToolRegistry."""
 from __future__ import annotations
 
-from tau.tool.registry import ToolRegistry
-from tau.builtins.tools.read import ReadTool
-from tau.builtins.tools.write import WriteTool
 from tau.builtins.tools.edit import EditTool
 from tau.builtins.tools.grep import GrepTool
+from tau.builtins.tools.read import ReadTool
+from tau.builtins.tools.write import WriteTool
+from tau.tool.registry import ToolRegistry
 
 
 def _reg(*tools, source="builtin") -> ToolRegistry:

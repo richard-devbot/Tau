@@ -2,10 +2,25 @@
 from __future__ import annotations
 
 from tau.tui.ansi import (
-    RESET, BOLD, DIM, ITALIC, UNDERLINE, RED, GREEN, BLUE,
-    fg, bg, fg256, bg256, style,
-    strip_ansi, visible_width, truncate, pad, wrap,
-    _char_width, _AnsiStateTracker,
+    BLUE,
+    BOLD,
+    DIM,
+    ITALIC,
+    RED,
+    RESET,
+    UNDERLINE,
+    _AnsiStateTracker,
+    _char_width,
+    bg,
+    bg256,
+    fg,
+    fg256,
+    pad,
+    strip_ansi,
+    style,
+    truncate,
+    visible_width,
+    wrap,
 )
 
 

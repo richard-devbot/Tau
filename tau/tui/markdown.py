@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from mistletoe.base_renderer import BaseRenderer
 from mistletoe.block_token import Document
 
-from tau.tui.ansi import wrap, visible_width, RESET
+from tau.tui.ansi import RESET, visible_width, wrap
 
 if TYPE_CHECKING:
     from tau.tui.theme import MarkdownTheme
@@ -72,6 +72,7 @@ class _MdContext(BaseRenderer):
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 def render_markdown(text: str, width: int, theme: MarkdownTheme) -> list[str]:
     """Render a markdown string to a list of ANSI-coloured terminal lines."""
     with _MdContext():
@@ -83,6 +84,7 @@ def render_markdown(text: str, width: int, theme: MarkdownTheme) -> list[str]:
 
 
 # ── Renderer ──────────────────────────────────────────────────────────────────
+
 
 class _Renderer:
     def __init__(self, width: int, theme: MarkdownTheme) -> None:
@@ -152,7 +154,7 @@ class _Renderer:
                 lines.append("")
 
             elif name == "Quote":
-                border  = self.theme.quote_border("▎ ")
+                border = self.theme.quote_border("▎ ")
                 inner_w = max(1, self.width - visible_width(border))
                 # Render inner content at the reduced width so it wraps to fit
                 # beside the border instead of spilling a 2-char remainder.
@@ -185,16 +187,16 @@ class _Renderer:
 
     def _render_list(self, node: Any, depth: int) -> list[str]:
         lines: list[str] = []
-        indent  = "  " * depth
+        indent = "  " * depth
         ordered = getattr(node, "start", None) is not None
-        num     = node.start if ordered else 1
+        num = node.start if ordered else 1
 
         for item in node.children or []:
-            bullet    = f"{num}." if ordered else "•"
-            marker    = self.theme.list_bullet(bullet)
-            prefix    = indent + marker + " "
+            bullet = f"{num}." if ordered else "•"
+            marker = self.theme.list_bullet(bullet)
+            prefix = indent + marker + " "
             cont_pref = indent + " " * (len(bullet) + 1)
-            inner_w   = max(1, self.width - visible_width(prefix))
+            inner_w = max(1, self.width - visible_width(prefix))
 
             item_lines = self._render_list_item(item, depth, inner_w)
             for j, il in enumerate(item_lines):
@@ -228,7 +230,7 @@ class _Renderer:
 
     def _render_table(self, node: Any) -> list[str]:
         header = getattr(node, "header", None)
-        raw_rows: list[Any] = []   # mistletoe TableRow nodes (each has .children)
+        raw_rows: list[Any] = []  # mistletoe TableRow nodes (each has .children)
         if header is not None:
             raw_rows.append(header)
         raw_rows.extend(node.children or [])
@@ -268,8 +270,8 @@ class _Renderer:
             segs = (fill * (w + 2) for w in col_widths)
             return self.theme.hr(left + mid.join(segs) + right)
 
-        top    = _border("┌", "┬", "┐")
-        mid    = _border("├", "┼", "┤")
+        top = _border("┌", "┬", "┐")
+        mid = _border("├", "┼", "┤")
         bottom = _border("└", "┴", "┘")
 
         def _row(cells: list[str]) -> str:

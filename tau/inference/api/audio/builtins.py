@@ -8,8 +8,8 @@
 # sarvam-audio:     Sarvam AI proprietary REST API — Indian language TTS + STT.
 # elevenlabs-audio: ElevenLabs proprietary REST API — voice_id in URL path, xi-api-key auth.
 AUDIO_APIS = [
-    ("openai-audio",     "tau.inference.api.audio.openai_audio:OpenAIAudioAPI"),
-    ("gemini-audio",     "tau.inference.api.audio.gemini_audio:GeminiAudioAPI"),
-    ("sarvam-audio",     "tau.inference.api.audio.sarvam_audio:SarvamAudioAPI"),
+    ("openai-audio", "tau.inference.api.audio.openai_audio:OpenAIAudioAPI"),
+    ("gemini-audio", "tau.inference.api.audio.gemini_audio:GeminiAudioAPI"),
+    ("sarvam-audio", "tau.inference.api.audio.sarvam_audio:SarvamAudioAPI"),
     ("elevenlabs-audio", "tau.inference.api.audio.elevenlabs_audio:ElevenLabsAudioAPI"),
 ]

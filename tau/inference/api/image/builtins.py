@@ -3,6 +3,6 @@
 # provider is actually used, not at registry construction.
 IMAGE_APIS = [
     ("openrouter-image", "tau.inference.api.image.openrouter:OpenRouterImageAPI"),
-    ("openai-image",     "tau.inference.api.image.openai_image:OpenAIImageAPI"),
-    ("gemini-image",     "tau.inference.api.image.gemini_image:GeminiImageAPI"),
+    ("openai-image", "tau.inference.api.image.openai_image:OpenAIImageAPI"),
+    ("gemini-image", "tau.inference.api.image.gemini_image:GeminiImageAPI"),
 ]

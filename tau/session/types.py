@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 import uuid
-from datetime import datetime
-from pathlib import Path
-from enum import Enum
 from dataclasses import dataclass
-from typing import Any, Literal, Annotated, TYPE_CHECKING, List
+from datetime import datetime
+from enum import StrEnum
+from pathlib import Path
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
 from tau.inference.types import ThinkingLevel
-
 from tau.message.types import AgentMessage, ImageContent, TextContent
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ def _generate_id() -> str:
 SESSION_VERSION = 3
 
 
-class SessionType(str, Enum):
+class SessionType(StrEnum):
     SESSION_HEADER = "session"
     SESSION_MESSAGE = "message"
     THINKING_LEVEL_CHANGE = "thinking_level_change"
@@ -73,7 +74,7 @@ class MessageMeta(BaseModel):
 
 class MessageEntry(BaseSessionEntry):
     type: Literal[SessionType.SESSION_MESSAGE] = SessionType.SESSION_MESSAGE
-    message: "AgentMessage"
+    message: AgentMessage
     meta: MessageMeta | None = None
 
 
@@ -108,7 +109,7 @@ class CustomInfoEntry(BaseSessionEntry):
 class CustomMessageEntry(BaseSessionEntry):
     type: Literal[SessionType.CUSTOM_MESSAGE] = SessionType.CUSTOM_MESSAGE
     custom_type: str
-    content: List["TextContent | ImageContent"]
+    content: list[TextContent | ImageContent]
     display: bool = True
     details: Any | None = None
 
@@ -143,15 +144,9 @@ SessionEntries = (
     | BranchSummaryEntry
 )
 
-SessionEntry = Annotated[
-    SessionEntries,
-    Field(discriminator="type")
-]
+SessionEntry = Annotated[SessionEntries, Field(discriminator="type")]
 
-SessionFileEntry = Annotated[
-    SessionHeader | SessionEntries,
-    Field(discriminator="type")
-]
+SessionFileEntry = Annotated[SessionHeader | SessionEntries, Field(discriminator="type")]
 
 
 class SessionTreeNode(BaseModel):
@@ -164,7 +159,7 @@ class SessionTreeNode(BaseModel):
 
 class SessionContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    messages: list["AgentMessage"]
+    messages: list[AgentMessage]
     thinking_level: ThinkingLevel
     model_id: str | None = None
     provider_id: str | None = None

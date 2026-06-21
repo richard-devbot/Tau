@@ -1,11 +1,10 @@
 """Tests for tau/trust/utils.py — trust path resolution and option building."""
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
-from tau.trust.utils import normalize, find_nearest, get_trust_options
 from tau.trust.types import TrustOption
+from tau.trust.utils import find_nearest, get_trust_options, normalize
 
 
 class TestNormalize:

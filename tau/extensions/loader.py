@@ -12,8 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from tau.extensions.api import (
-    Extension, ExtensionAPI, ExtensionError,
-    LoadExtensionsResult, _RuntimeRef,
+    Extension,
+    ExtensionAPI,
+    ExtensionError,
+    LoadExtensionsResult,
+    _RuntimeRef,
 )
 from tau.extensions.events import EventBus
 
@@ -77,7 +80,9 @@ class ExtensionLoader:
         runtime_ref: _RuntimeRef | None = None,
         events: EventBus | None = None,
     ) -> None:
-        self._builtins_dir: Path | None = builtins_dir if (builtins_dir is not None and builtins_dir.is_dir()) else None
+        self._builtins_dir: Path | None = (
+            builtins_dir if (builtins_dir is not None and builtins_dir.is_dir()) else None
+        )
         self._dirs: list[Path] = []
         self._dir_sources: dict[Path, str] = {}
         self._extra_paths: list[Path] = []
@@ -100,7 +105,7 @@ class ExtensionLoader:
             self._dirs.append(global_dir)
             self._dir_sources[global_dir] = "global"
 
-        for entry in (extra_entries or []):
+        for entry in extra_entries or []:
             resolved = Path(entry.path).expanduser().resolve()
             if resolved.exists():
                 self._extra_paths.append(resolved)
@@ -116,6 +121,7 @@ class ExtensionLoader:
             try:
                 data = json.loads(manifest.read_text(encoding="utf-8"))
                 from tau.settings.paths import get_app_name
+
                 app_data = data.get(get_app_name().lower(), {})
 
                 deps = app_data.get("dependencies", [])
@@ -239,7 +245,9 @@ class ExtensionLoader:
 
         key = str(subdir.resolve())
         if cache.get(key) != digest:
-            logger.info("Installing dependencies for extension %r: %s", subdir.name, ", ".join(deps))
+            logger.info(
+                "Installing dependencies for extension %r: %s", subdir.name, ", ".join(deps)
+            )
             pkg_mgr.install_requirements(deps)
             cache[key] = digest
             cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -293,10 +301,13 @@ class ExtensionLoader:
             module_name = f"_tau_ext_{hashlib.sha1(str(path.resolve()).encode()).hexdigest()[:16]}"
             spec = importlib.util.spec_from_file_location(module_name, path)
             if spec is None or spec.loader is None:
-                errors.append(ExtensionError(
-                    extension_path=str_path, event="load",
-                    error=f"Cannot create module spec for {path}",
-                ))
+                errors.append(
+                    ExtensionError(
+                        extension_path=str_path,
+                        event="load",
+                        error=f"Cannot create module spec for {path}",
+                    )
+                )
                 return None, errors
 
             module = importlib.util.module_from_spec(spec)
@@ -305,10 +316,13 @@ class ExtensionLoader:
 
             register_fn = getattr(module, _ENTRY_POINT, None)
             if register_fn is None or not callable(register_fn):
-                errors.append(ExtensionError(
-                    extension_path=str_path, event="load",
-                    error=f"No '{_ENTRY_POINT}(tau)' function in {path.name}",
-                ))
+                errors.append(
+                    ExtensionError(
+                        extension_path=str_path,
+                        event="load",
+                        error=f"No '{_ENTRY_POINT}(tau)' function in {path.name}",
+                    )
+                )
                 return None, errors
 
             ext = Extension(path=str_path, config=config, source=source)
@@ -331,11 +345,14 @@ class ExtensionLoader:
 
         except Exception:
             tb = traceback.format_exc()
-            errors.append(ExtensionError(
-                extension_path=str_path, event="load",
-                error=tb.strip().splitlines()[-1],
-                stack=tb,
-            ))
+            errors.append(
+                ExtensionError(
+                    extension_path=str_path,
+                    event="load",
+                    error=tb.strip().splitlines()[-1],
+                    stack=tb,
+                )
+            )
             return None, errors
 
     def _attach_manifest_panel(self, ext: Extension, path: Path) -> None:
@@ -378,7 +395,8 @@ class ExtensionLoader:
                     asyncio.ensure_future(reload_all())
 
         reg = build_manifest_panel(
-            schema, ext.config,
+            schema,
+            ext.config,
             default_title=ext_dir.name,
             apply=_apply,
         )

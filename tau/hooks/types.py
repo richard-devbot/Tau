@@ -1,26 +1,58 @@
 """HookEvent union — aggregates all event types from their domain modules."""
+
 from __future__ import annotations
 
-from tau.hooks.session import (
-    SessionStartEvent, SessionBeforeSwitchEvent, SessionBeforeForkEvent,
-    SessionShutdownEvent, SessionBeforeTreeEvent, SessionTreeEvent,
-)
 from tau.hooks.engine import (
-    ContextEvent, BeforeAgentStartEvent, AgentStartEvent, AgentEndEvent, AgentErrorEvent,
-    TurnStartEvent, TurnEndEvent,
-    MessageStartEvent, MessageUpdateEvent, MessageEndEvent, MessageRollbackEvent,
-    ToolExecutionFailureEvent, ToolExecutionStartEvent, ToolExecutionUpdateEvent,
-    ToolExecutionEndEvent, ToolCallEvent, ToolResultEvent,
-    SavePointEvent, SettledEvent, BeforeCompactionEvent, CompactionStartEvent, CompactionEndEvent,
+    AgentEndEvent,
+    AgentErrorEvent,
+    AgentStartEvent,
+    BeforeAgentStartEvent,
+    BeforeCompactionEvent,
+    CompactionEndEvent,
+    CompactionStartEvent,
+    ContextEvent,
+    MessageEndEvent,
+    MessageRollbackEvent,
+    MessageStartEvent,
+    MessageUpdateEvent,
+    SavePointEvent,
+    SettledEvent,
+    ToolCallEvent,
+    ToolExecutionEndEvent,
+    ToolExecutionFailureEvent,
+    ToolExecutionStartEvent,
+    ToolExecutionUpdateEvent,
+    ToolResultEvent,
+    TurnEndEvent,
+    TurnStartEvent,
 )
-from tau.hooks.inference import BeforeProviderRequestEvent, AfterProviderResponseEvent
-from tau.hooks.tui import TuiReadyEvent, TuiStartEvent, TuiExitEvent, ModelSelectEvent, ThinkingLevelSelectEvent, QueueUpdateEvent
+from tau.hooks.inference import AfterProviderResponseEvent, BeforeProviderRequestEvent
 from tau.hooks.runtime import (
-    InputEvent, InputEventResult, UserTerminalEvent, UserTerminalResult,
-    TerminalExecutionEvent, TerminalOutputEvent,
-    ResourcesDiscoverEvent, ResourcesDiscoverResult,
-    ProjectTrustEvent, ProjectTrustResult,
-    RuntimeStartEvent, RuntimeReadyEvent, RuntimeStopEvent,
+    InputEvent,
+    ProjectTrustEvent,
+    ResourcesDiscoverEvent,
+    RuntimeReadyEvent,
+    RuntimeStartEvent,
+    RuntimeStopEvent,
+    TerminalExecutionEvent,
+    TerminalOutputEvent,
+    UserTerminalEvent,
+)
+from tau.hooks.session import (
+    SessionBeforeForkEvent,
+    SessionBeforeSwitchEvent,
+    SessionBeforeTreeEvent,
+    SessionShutdownEvent,
+    SessionStartEvent,
+    SessionTreeEvent,
+)
+from tau.hooks.tui import (
+    ModelSelectEvent,
+    QueueUpdateEvent,
+    ThinkingLevelSelectEvent,
+    TuiExitEvent,
+    TuiReadyEvent,
+    TuiStartEvent,
 )
 
 HookEvent = (

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -9,14 +8,13 @@ from openai import AsyncOpenAI
 from tau.inference.api.audio.base import BaseAudioAPI as BaseAPI
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    AudioFormat,
     AudioOptions,
     AudioStopReason,
-    STTContext,
     SegmentTimestamp,
+    STTContext,
     SynthesizedAudio,
-    TTSContext,
     TranscribedAudio,
+    TTSContext,
     WordTimestamp,
 )
 
@@ -128,8 +126,7 @@ class OpenAIAudioAPI(BaseAPI):
 
             if hasattr(response, "words") and response.words:
                 words = [
-                    WordTimestamp(word=w.word, start=w.start, end=w.end)
-                    for w in response.words
+                    WordTimestamp(word=w.word, start=w.start, end=w.end) for w in response.words
                 ]
             if hasattr(response, "segments") and response.segments:
                 segments = [

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
-import tty
-import termios
 import signal
-from typing import Any, Callable
+import sys
+import termios
+import tty
+from collections.abc import Callable
+from typing import Any
 
 
 class Terminal:
@@ -69,7 +70,9 @@ class Terminal:
         fd = sys.stdin.fileno()
         self._original_termios = termios.tcgetattr(fd)  # Save original settings
         tty.setraw(fd)  # Switch to raw mode (no echo, no buffering)
-        self._prev_sigwinch = signal.signal(signal.SIGWINCH, self._on_resize)  # Detect terminal resize
+        self._prev_sigwinch = signal.signal(
+            signal.SIGWINCH, self._on_resize
+        )  # Detect terminal resize
 
     def exit_raw_mode(self) -> None:
         """

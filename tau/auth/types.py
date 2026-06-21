@@ -1,11 +1,13 @@
-from tau.inference.types import AuthType
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar, Optional, Literal
+from typing import Literal, TypeVar
+
+from tau.inference.types import AuthType
 
 
 @dataclass
 class OAuthCredential:
     """OAuth 2.0 credential with access and refresh tokens."""
+
     type: AuthType = field(default_factory=lambda: AuthType.OAuth, init=False)
     access: str = ""
     refresh: str = ""
@@ -16,6 +18,7 @@ class OAuthCredential:
 @dataclass
 class APICredential:
     """API key credential."""
+
     type: AuthType = field(default_factory=lambda: AuthType.ApiKey, init=False)
     key: str = ""
 
@@ -26,16 +29,18 @@ AuthCredential = OAuthCredential | APICredential
 @dataclass
 class AuthStatus:
     """Authentication status and source information."""
+
     configured: bool
-    source: Optional[Literal["stored", "runtime", "env"]] = None
-    label: Optional[str] = None
+    source: Literal["stored", "runtime", "env"] | None = None
+    label: str | None = None
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
-class LockResult(Generic[T]):
+class LockResult[T]:
     """Result of a locked operation with next continuation."""
+
     result: T
     next: str | None = None

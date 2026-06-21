@@ -1,4 +1,5 @@
 """Model + context-usage badge component."""
+
 from __future__ import annotations
 
 
@@ -49,6 +50,7 @@ class ModelBadge:
 
     def render(self, width: int) -> list[str]:  # noqa: ARG002
         from tau.tui.ansi import DIM, RESET
+
         if not self._provider and not self._model:
             return []
 

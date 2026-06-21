@@ -6,6 +6,7 @@ from dataclasses import dataclass
 @dataclass
 class TrustOption:
     """A single choice presented to the user in the trust prompt."""
+
     label: str
     trusted: bool
     # Absolute path to persist; None means session-only (no disk write)

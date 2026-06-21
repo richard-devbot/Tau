@@ -8,7 +8,13 @@ import httpx
 
 from tau.inference.api.video.base import BaseVideoAPI
 from tau.inference.model.types import Model
-from tau.inference.types import GeneratedVideo, VideoContext, VideoFormat, VideoOptions, VideoStopReason
+from tau.inference.types import (
+    GeneratedVideo,
+    VideoContext,
+    VideoFormat,
+    VideoOptions,
+    VideoStopReason,
+)
 
 _BASE = "https://openrouter.ai/api/v1"
 
@@ -45,7 +51,10 @@ class OpenRouterVideoAPI(BaseVideoAPI):
             payload["resolution"] = context.resolution
         if context.image is not None:
             import base64
-            payload["image_url"] = f"data:image/jpeg;base64,{base64.b64encode(context.image).decode()}"
+
+            payload["image_url"] = (
+                f"data:image/jpeg;base64,{base64.b64encode(context.image).decode()}"
+            )
         return payload
 
     async def generate(self, model: Model, context: VideoContext) -> GeneratedVideo:
@@ -126,7 +135,11 @@ class OpenRouterVideoAPI(BaseVideoAPI):
 
                 if status == "failed":
                     error = result.get("error") or {}
-                    msg = error.get("message", "Job failed") if isinstance(error, dict) else str(error)
+                    msg = (
+                        error.get("message", "Job failed")
+                        if isinstance(error, dict)
+                        else str(error)
+                    )
                     return GeneratedVideo(
                         model_id=model.id,
                         provider="openrouter",

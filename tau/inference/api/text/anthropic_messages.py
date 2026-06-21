@@ -1,23 +1,44 @@
 from __future__ import annotations
-import json
-from tau.inference.api.text.utils import parse_tool_args, anthropic_messages_to_list, anthropic_output_config, anthropic_apply_message_cache
-from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Any
+
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
+
 from anthropic import AsyncAnthropic
+
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
+from tau.inference.api.text.utils import (
+    anthropic_apply_message_cache,
+    anthropic_messages_to_list,
+    anthropic_output_config,
+    parse_tool_args,
+)
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    LLMContext, LLMEvent, LLMOptions, StopReason, ThinkingBudgets, ThinkingLevel,
-    StartEvent, EndEvent, ErrorEvent,
-    TextStartEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingStartEvent, ThinkingDeltaEvent, ThinkingEndEvent,
-    ToolCallStartEvent, ToolCallDeltaEvent, ToolCallEndEvent,
+    EndEvent,
+    ErrorEvent,
+    LLMContext,
+    LLMEvent,
+    LLMOptions,
+    StartEvent,
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    TextStartEvent,
+    ThinkingBudgets,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingLevel,
+    ThinkingStartEvent,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
 )
 from tau.message.types import (
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
 )
-from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from tau.tool.types import Tool
 
@@ -50,7 +71,7 @@ class AnthropicMessagesAPI(BaseAPI):
         model: Model,
         system: str | None,
         messages: list[dict[str, Any]],
-        tools: Optional[list[Tool]] = None,
+        tools: list[Tool] | None = None,
     ) -> dict[str, Any]:
         """Assemble the Anthropic API request payload, including thinking and tool configs."""
         params: dict[str, Any] = {
@@ -60,10 +81,18 @@ class AnthropicMessagesAPI(BaseAPI):
             "temperature": self.options.temperature,
         }
         if system:
-            params["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
-        if self.options.thinking_level is not None and self.options.thinking_level != ThinkingLevel.Off:
+            params["system"] = [
+                {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+            ]
+        if (
+            self.options.thinking_level is not None
+            and self.options.thinking_level != ThinkingLevel.Off
+        ):
             budgets = self.options.thinking_budgets or ThinkingBudgets()
-            params["thinking"] = {"type": "enabled", "budget_tokens": budgets.get(self.options.thinking_level)}
+            params["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": budgets.get(self.options.thinking_level),
+            }
 
         if tools:
             tool_defs = [
@@ -82,7 +111,9 @@ class AnthropicMessagesAPI(BaseAPI):
 
     async def stream(self, context: LLMContext, model: Model) -> AsyncGenerator[LLMEvent, None]:  # type: ignore[override]
         """Stream LLMEvents from the Anthropic Messages API."""
-        system, anthropic_messages = anthropic_messages_to_list(context.messages, supports_thinking=bool(model.thinking))
+        system, anthropic_messages = anthropic_messages_to_list(
+            context.messages, supports_thinking=bool(model.thinking)
+        )
         if context.system_prompt:
             system = context.system_prompt
         params = self._build_params(model, system, anthropic_messages, tools=context.tools or None)
@@ -133,7 +164,9 @@ class AnthropicMessagesAPI(BaseAPI):
                         tool_ids[idx] = getattr(block, "id", "")
                         tool_names[idx] = getattr(block, "name", "")
                         tool_bufs[idx] = ""
-                        yield ToolCallStartEvent(tool_call=ToolCallContent(id=tool_ids[idx], name=tool_names[idx]))
+                        yield ToolCallStartEvent(
+                            tool_call=ToolCallContent(id=tool_ids[idx], name=tool_names[idx])
+                        )
 
                 elif etype == "content_block_delta":
                     idx = getattr(event, "index", 0)
@@ -152,7 +185,9 @@ class AnthropicMessagesAPI(BaseAPI):
                     elif dtype == "input_json_delta":
                         partial = getattr(delta, "partial_json", "")
                         tool_bufs[idx] = tool_bufs.get(idx, "") + partial
-                        yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=tool_ids.get(idx, "")))
+                        yield ToolCallDeltaEvent(
+                            tool_call=ToolCallContent(id=tool_ids.get(idx, ""))
+                        )
 
                 elif etype == "content_block_stop":
                     idx = getattr(event, "index", 0)
@@ -160,30 +195,34 @@ class AnthropicMessagesAPI(BaseAPI):
                     if btype == "text":
                         yield TextEndEvent(text=TextContent(content=text_bufs.get(idx, "")))
                     elif btype == "thinking":
-                        yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_bufs.get(idx, "")))
+                        yield ThinkingEndEvent(
+                            thinking=ThinkingContent(content=thinking_bufs.get(idx, ""))
+                        )
                     elif btype == "tool_use":
                         args_str = tool_bufs.get(idx, "").strip()
                         args = parse_tool_args(args_str)
 
-                        yield ToolCallEndEvent(tool_call=ToolCallContent(
-                                id=tool_ids.get(idx, ""),
-                                name=tool_names.get(idx, ""),
-                                args=args
+                        yield ToolCallEndEvent(
+                            tool_call=ToolCallContent(
+                                id=tool_ids.get(idx, ""), name=tool_names.get(idx, ""), args=args
                             )
                         )
 
                 elif etype == "message_start":
-                    u = getattr(getattr(event, 'message', None), 'usage', None)
+                    u = getattr(getattr(event, "message", None), "usage", None)
                     if u:
-                        _input_tokens = getattr(u, 'input_tokens', 0) or 0
-                        _cache_read_tokens = getattr(u, 'cache_read_input_tokens', 0) or 0
-                        _cache_write_tokens = getattr(u, 'cache_creation_input_tokens', 0) or 0
+                        _input_tokens = getattr(u, "input_tokens", 0) or 0
+                        _cache_read_tokens = getattr(u, "cache_read_input_tokens", 0) or 0
+                        _cache_write_tokens = getattr(u, "cache_creation_input_tokens", 0) or 0
 
                 elif etype == "message_delta":
-                    u = getattr(event, 'usage', None)
+                    u = getattr(event, "usage", None)
                     if u:
-                        _output_tokens = getattr(u, 'output_tokens', 0) or 0
-                    stop_reason = _STOP_REASON.get(getattr(getattr(event, 'delta', None), 'stop_reason', None) or "", StopReason.Stop)
+                        _output_tokens = getattr(u, "output_tokens", 0) or 0
+                    stop_reason = _STOP_REASON.get(
+                        getattr(getattr(event, "delta", None), "stop_reason", None) or "",
+                        StopReason.Stop,
+                    )
                     yield EndEvent(
                         reason=stop_reason,
                         input_tokens=_input_tokens,

@@ -1,12 +1,12 @@
 """Built-in coding-agent tools."""
 
-from tau.builtins.tools.read import ReadTool
-from tau.builtins.tools.write import WriteTool
 from tau.builtins.tools.edit import EditTool
-from tau.builtins.tools.terminal import TerminalTool
 from tau.builtins.tools.glob import GlobTool
 from tau.builtins.tools.grep import GrepTool
 from tau.builtins.tools.ls import LsTool
+from tau.builtins.tools.read import ReadTool
+from tau.builtins.tools.terminal import TerminalTool
+from tau.builtins.tools.write import WriteTool
 
 TOOLS = [
     ReadTool(),

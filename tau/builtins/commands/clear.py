@@ -11,6 +11,7 @@ async def cmd_clear(reg: CommandRegistry, _args: list[str]) -> None:
     if reg.runtime is None:
         return
     from tau.extensions.context import ExtensionContext
+
     ctx = ExtensionContext.from_runtime(reg.runtime)
     if ctx.ui is not None:
         ctx.ui.clear_messages()

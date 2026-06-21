@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Awaitable, Callable, Literal
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from tau.runtime.service import Runtime
@@ -16,9 +17,11 @@ if TYPE_CHECKING:
 # Session method option dataclasses
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class NewSessionOptions:
     """Options for ExtensionContext.new_session()."""
+
     parent_session: str | None = None
     with_session: Callable[[ExtensionContext], Awaitable[None] | None] | None = None
 
@@ -26,6 +29,7 @@ class NewSessionOptions:
 @dataclass
 class ForkOptions:
     """Options for ExtensionContext.fork()."""
+
     position: Literal["before", "at"] = "at"
     with_session: Callable[[ExtensionContext], Awaitable[None] | None] | None = None
 
@@ -33,6 +37,7 @@ class ForkOptions:
 @dataclass
 class NavigateTreeOptions:
     """Options for ExtensionContext.navigate_tree()."""
+
     summarize: bool = False
     custom_instructions: str | None = None
     replace_instructions: bool = False
@@ -42,6 +47,7 @@ class NavigateTreeOptions:
 @dataclass
 class SwitchSessionOptions:
     """Options for ExtensionContext.switch_session()."""
+
     with_session: Callable[[ExtensionContext], Awaitable[None] | None] | None = None
 
 
@@ -169,11 +175,12 @@ class ExtensionContext:
         return self._session_manager.get_branch()
 
     @property
-    def ui(self) -> "UIContext | None":
+    def ui(self) -> UIContext | None:
         """TUI customization API. None when running outside a TUI session."""
         if self._layout is None:
             return None
         from tau.tui.ui_context import UIContext
+
         return UIContext(self._layout, settings=self._settings)  # type: ignore[arg-type]
 
     @property
@@ -206,6 +213,7 @@ class ExtensionContext:
     def shutdown(self) -> None:
         """Gracefully shut down tau and exit."""
         import sys
+
         sys.exit(0)
 
     def get_context_usage(self) -> dict | None:
@@ -229,6 +237,7 @@ class ExtensionContext:
     def compact(self, custom_instructions: str | None = None) -> None:
         """Trigger context compaction without waiting for completion."""
         import asyncio
+
         if self._runtime is None:
             return
         agent = getattr(self._runtime, "agent", None)
@@ -237,6 +246,7 @@ class ExtensionContext:
         compact_fn = getattr(agent, "compact", None)
         if callable(compact_fn):
             import inspect
+
             result = compact_fn(custom_instructions=custom_instructions)
             if inspect.isawaitable(result):
                 asyncio.ensure_future(result)  # type: ignore[arg-type]
@@ -332,7 +342,8 @@ class ExtensionContext:
         engine = getattr(agent, "_engine", None)
         if engine is None:
             return
-        from tau.message.types import UserMessage, TextContent
+        from tau.message.types import TextContent, UserMessage
+
         msg = UserMessage(contents=[TextContent(content=content)])
         await engine.steer(msg)
 
@@ -354,7 +365,8 @@ class ExtensionContext:
         engine = getattr(agent, "_engine", None)
         if engine is None:
             return
-        from tau.message.types import UserMessage, TextContent
+        from tau.message.types import TextContent, UserMessage
+
         msg = UserMessage(contents=[TextContent(content=content)])
         if deliver_as == "follow_up":
             await engine.follow_up(msg)
@@ -375,6 +387,7 @@ class ExtensionContext:
         cwd = str(sm_session.cwd) if sm_session is not None else ""
 
         from tau.hooks.types import ProjectTrustEvent, ProjectTrustResult
+
         results = await self._runtime.hooks.emit(ProjectTrustEvent(project_dir=cwd))
         for r in results:
             if isinstance(r, ProjectTrustResult) and r.trusted is not None:
@@ -398,6 +411,7 @@ class ExtensionContext:
         sm.set_project_trusted(trusted)
         if remember:
             from tau.trust.manager import trust_store
+
             sm_session = getattr(self._runtime, "session_manager", None)
             cwd = sm_session.cwd if sm_session is not None else None
             if cwd is not None:
@@ -428,7 +442,7 @@ class ExtensionContext:
         return False
 
     @property
-    def signal(self) -> "object | None":
+    def signal(self) -> object | None:
         """The current abort signal (``asyncio.Event``) while the agent is streaming.
 
         The event is *set* when the current operation has been aborted.
@@ -450,8 +464,8 @@ class ExtensionContext:
         - ``tools`` — list of tool names registered with the engine
         - ``system_prompt_length`` — character length of the built prompt
         """
-        from tau.skills.registry import skill_registry
         from tau.prompts.registry import prompt_registry
+        from tau.skills.registry import skill_registry
 
         skill_names = [s.name for s in skill_registry.list()]
         prompt_names = [p.name for p in prompt_registry.list()]

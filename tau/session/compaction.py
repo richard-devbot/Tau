@@ -7,25 +7,27 @@ Compaction algorithm:
 - Iterative summary merging (update prompt on subsequent compactions)
 - File operation tracking appended to summary
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from tau.inference.api.text.service import TextLLM
-    from tau.session.types import SessionEntry
 
 
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CompactionSettings:
     """Configuration for context compaction behavior."""
+
     enabled: bool = True
     reserve_tokens: int = 16_384
     keep_recent_tokens: int = 20_000
@@ -41,9 +43,11 @@ ESTIMATED_IMAGE_CHARS = 4_800
 # Result / preparation types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CompactionResult:
     """Result of a compaction operation."""
+
     summary: str
     first_kept_entry_id: str
     tokens_before: int
@@ -53,6 +57,7 @@ class CompactionResult:
 @dataclass
 class CompactionPreparation:
     """Preparation data for a compaction operation."""
+
     first_kept_entry_id: str
     messages_to_summarize: list
     turn_prefix_messages: list
@@ -65,6 +70,7 @@ class CompactionPreparation:
 @dataclass
 class ContextUsageEstimate:
     """Estimate of context token usage."""
+
     tokens: int
     usage_tokens: int
     trailing_tokens: int
@@ -74,6 +80,7 @@ class ContextUsageEstimate:
 @dataclass
 class CutPointResult:
     """Result of finding a context cut point for compaction."""
+
     first_kept_entry_index: int
     is_split_turn: bool = False
     turn_start_index: int = -1
@@ -83,12 +90,22 @@ class CutPointResult:
 # Token estimation
 # ---------------------------------------------------------------------------
 
+
 def estimate_tokens(message: Any) -> int:
     """Estimate token count for any AgentMessage using chars/4 heuristic."""
     from tau.message.types import (
-        UserMessage, AssistantMessage, ToolMessage, TerminalExecutionMessage,
-        CustomMessage, CompactionSummaryMessage, BranchSummaryMessage,
-        TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+        AssistantMessage,
+        BranchSummaryMessage,
+        CompactionSummaryMessage,
+        CustomMessage,
+        ImageContent,
+        TerminalExecutionMessage,
+        TextContent,
+        ThinkingContent,
+        ToolCallContent,
+        ToolMessage,
+        ToolResultContent,
+        UserMessage,
     )
 
     chars = 0
@@ -100,9 +117,7 @@ def estimate_tokens(message: Any) -> int:
                 chars += ESTIMATED_IMAGE_CHARS
     elif isinstance(message, AssistantMessage):
         for c in message.contents:
-            if isinstance(c, TextContent):
-                chars += len(c.content)
-            elif isinstance(c, ThinkingContent):
+            if isinstance(c, (TextContent, ThinkingContent)):
                 chars += len(c.content)
             elif isinstance(c, ToolCallContent):
                 chars += len(c.name) + len(json.dumps(c.args))
@@ -129,22 +144,23 @@ def estimate_context_tokens(messages: list) -> ContextUsageEstimate:
     Uses the Usage object from the last non-aborted/non-error assistant message
     as a precise anchor, then estimates trailing messages with chars/4.
     """
-    from tau.message.types import AssistantMessage
     from tau.inference.types import StopReason
+    from tau.message.types import AssistantMessage
 
     last_usage: int | None = None
     last_usage_idx: int | None = None
 
     for i in range(len(messages) - 1, -1, -1):
         msg = messages[i]
-        if isinstance(msg, AssistantMessage):
-            if msg.stop_reason not in (StopReason.Abort, StopReason.Error):
-                u = msg.usage
-                total = u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_write_tokens
-                if total > 0:
-                    last_usage = total
-                    last_usage_idx = i
-                    break
+        if isinstance(msg, AssistantMessage) and msg.stop_reason not in (StopReason.Abort, StopReason.Error):
+            u = msg.usage
+            total = (
+                u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_write_tokens
+            )
+            if total > 0:
+                last_usage = total
+                last_usage_idx = i
+                break
 
     if last_usage is None:
         estimated = sum(estimate_tokens(m) for m in messages)
@@ -174,11 +190,17 @@ def should_compact(context_tokens: int, context_window: int, settings: Compactio
 # Cut-point detection
 # ---------------------------------------------------------------------------
 
+
 def _is_valid_cut_point(entry: Any) -> bool:
     """Return True if this session entry is a valid place to cut history."""
-    from tau.session.types import MessageEntry, CustomMessageEntry, BranchSummaryEntry
-    from tau.message.types import UserMessage, AssistantMessage, TerminalExecutionMessage, CustomMessage
     from tau.inference.types import StopReason
+    from tau.message.types import (
+        AssistantMessage,
+        CustomMessage,
+        TerminalExecutionMessage,
+        UserMessage,
+    )
+    from tau.session.types import BranchSummaryEntry, CustomMessageEntry, MessageEntry
 
     if isinstance(entry, (CustomMessageEntry, BranchSummaryEntry)):
         return True
@@ -188,16 +210,19 @@ def _is_valid_cut_point(entry: Any) -> bool:
             return True
         if isinstance(msg, AssistantMessage):
             # Skip aborted-empty assistants — they are visual markers only
-            if msg.stop_reason == StopReason.Abort and not msg.contents:
-                return False
-            return True
+            return not (msg.stop_reason == StopReason.Abort and not msg.contents)
     return False
 
 
 def _entry_message(entry: Any) -> Any | None:
     """Extract AgentMessage from a session entry, skipping compaction entries."""
-    from tau.session.types import MessageEntry, CustomMessageEntry, CompactionEntry, BranchSummaryEntry
-    from tau.message.types import CustomMessage, BranchSummaryMessage
+    from tau.message.types import BranchSummaryMessage, CustomMessage
+    from tau.session.types import (
+        BranchSummaryEntry,
+        CompactionEntry,
+        CustomMessageEntry,
+        MessageEntry,
+    )
 
     if isinstance(entry, CompactionEntry):
         return None
@@ -227,8 +252,8 @@ def find_cut_point(
     Valid cut points: user, assistant, terminal, custom messages.
     Never cuts at tool messages (must follow their assistant).
     """
-    from tau.session.types import MessageEntry, CompactionEntry
-    from tau.message.types import UserMessage, TerminalExecutionMessage
+    from tau.message.types import TerminalExecutionMessage, UserMessage
+    from tau.session.types import CompactionEntry, MessageEntry
 
     # Collect valid cut points in [start_idx, end_idx)
     cut_points: list[int] = []
@@ -264,12 +289,12 @@ def find_cut_point(
 
     # Determine whether we're splitting a turn
     cut_entry = entries[cut_index]
-    is_user_start = (
-        isinstance(cut_entry, MessageEntry)
-        and isinstance(cut_entry.message, (UserMessage, TerminalExecutionMessage))
+    is_user_start = isinstance(cut_entry, MessageEntry) and isinstance(
+        cut_entry.message, (UserMessage, TerminalExecutionMessage)
     )
 
-    from tau.session.types import CustomMessageEntry, BranchSummaryEntry
+    from tau.session.types import BranchSummaryEntry, CustomMessageEntry
+
     if is_user_start or isinstance(cut_entry, (CustomMessageEntry, BranchSummaryEntry)):
         return CutPointResult(first_kept_entry_index=cut_index)
 
@@ -277,7 +302,9 @@ def find_cut_point(
     turn_start = -1
     for i in range(cut_index, start_idx - 1, -1):
         e = entries[i]
-        if isinstance(e, MessageEntry) and isinstance(e.message, (UserMessage, TerminalExecutionMessage)):
+        if isinstance(e, MessageEntry) and isinstance(
+            e.message, (UserMessage, TerminalExecutionMessage)
+        ):
             turn_start = i
             break
         if isinstance(e, (CustomMessageEntry, BranchSummaryEntry)):
@@ -295,6 +322,7 @@ def find_cut_point(
 # Serialization (prevents the LLM from continuing the conversation)
 # ---------------------------------------------------------------------------
 
+
 def _truncate(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
@@ -308,9 +336,17 @@ def serialize_conversation(messages: list) -> str:
     Tool results are truncated to keep the prompt compact.
     """
     from tau.message.types import (
-        UserMessage, AssistantMessage, ToolMessage, TerminalExecutionMessage,
-        CustomMessage, CompactionSummaryMessage, BranchSummaryMessage,
-        TextContent, ThinkingContent, ToolCallContent, ToolResultContent,
+        AssistantMessage,
+        BranchSummaryMessage,
+        CompactionSummaryMessage,
+        CustomMessage,
+        TerminalExecutionMessage,
+        TextContent,
+        ThinkingContent,
+        ToolCallContent,
+        ToolMessage,
+        ToolResultContent,
+        UserMessage,
     )
 
     parts: list[str] = []
@@ -323,9 +359,7 @@ def serialize_conversation(messages: list) -> str:
             parts.append(f"[Branch Summary]:\n{msg.summary}")
 
         elif isinstance(msg, UserMessage):
-            text = "".join(
-                c.content for c in msg.contents if isinstance(c, TextContent)
-            )
+            text = "".join(c.content for c in msg.contents if isinstance(c, TextContent))
             if text:
                 parts.append(f"[User]: {text}")
 
@@ -334,7 +368,8 @@ def serialize_conversation(messages: list) -> str:
             text_parts = [c.content for c in msg.contents if isinstance(c, TextContent)]
             tool_calls = [
                 f"{c.name}({', '.join(f'{k}={json.dumps(v)}' for k, v in c.args.items())})"
-                for c in msg.contents if isinstance(c, ToolCallContent)
+                for c in msg.contents
+                if isinstance(c, ToolCallContent)
             ]
             if thinking_parts:
                 parts.append(f"[Assistant thinking]: {' '.join(thinking_parts)}")
@@ -355,9 +390,7 @@ def serialize_conversation(messages: list) -> str:
             parts.append(f"[Terminal]: {text}")
 
         elif isinstance(msg, CustomMessage):
-            text = "".join(
-                c.content for c in msg.contents if isinstance(c, TextContent)
-            )
+            text = "".join(c.content for c in msg.contents if isinstance(c, TextContent))
             if text:
                 parts.append(f"[{msg.custom_type}]: {text}")
 
@@ -468,13 +501,14 @@ Be concise. Focus on what's needed to understand the kept suffix."""
 # Summary generation (LLM call)
 # ---------------------------------------------------------------------------
 
+
 async def _call_llm_for_summary(
     prompt_text: str,
     llm: TextLLM,
     max_chars: int = 0,
 ) -> str:
+    from tau.inference.types import LLMContext, TextDeltaEvent, TextEndEvent
     from tau.message.types import UserMessage
-    from tau.inference.types import LLMContext, TextEndEvent, TextDeltaEvent
 
     context = LLMContext(
         messages=[UserMessage.from_text(prompt_text)],
@@ -487,9 +521,7 @@ async def _call_llm_for_summary(
     if text_end:
         return text_end.text.content
 
-    return "".join(
-        e.text.content for e in events if isinstance(e, TextDeltaEvent)
-    )
+    return "".join(e.text.content for e in events if isinstance(e, TextDeltaEvent))
 
 
 async def generate_summary(
@@ -523,11 +555,12 @@ async def _generate_turn_prefix_summary(messages: list, llm: TextLLM) -> str:
 # Prepare — pure, no I/O
 # ---------------------------------------------------------------------------
 
+
 def prepare_compaction(
     entries: list,
     settings: CompactionSettings,
 ) -> CompactionPreparation | None:
-    from tau.session.types import CompactionEntry, MessageEntry
+    from tau.session.types import CompactionEntry
 
     if not entries:
         return None
@@ -576,14 +609,16 @@ def prepare_compaction(
     history_end = cut.turn_start_index if cut.is_split_turn else cut.first_kept_entry_index
 
     messages_to_summarize = [
-        m for i in range(boundary_start, history_end)
+        m
+        for i in range(boundary_start, history_end)
         if (m := _entry_message(entries[i])) is not None
     ]
 
     turn_prefix_messages: list = []
     if cut.is_split_turn:
         turn_prefix_messages = [
-            m for i in range(cut.turn_start_index, cut.first_kept_entry_index)
+            m
+            for i in range(cut.turn_start_index, cut.first_kept_entry_index)
             if (m := _entry_message(entries[i])) is not None
         ]
 
@@ -601,6 +636,7 @@ def prepare_compaction(
 # ---------------------------------------------------------------------------
 # Main compact() — async, calls LLM
 # ---------------------------------------------------------------------------
+
 
 async def compact(
     preparation: CompactionPreparation,

@@ -8,8 +8,12 @@ import click
 
 @click.command("install")
 @click.argument("source")
-@click.option("--local", is_flag=True, default=False,
-              help="Install to project scope (.tau/venv/) instead of global (~/.tau/venv/).")
+@click.option(
+    "--local",
+    is_flag=True,
+    default=False,
+    help="Install to project scope (.tau/venv/) instead of global (~/.tau/venv/).",
+)
 def install(source: str, local: bool) -> None:
     """Install a package as a tau extension source.
 
@@ -31,7 +35,7 @@ def install(source: str, local: bool) -> None:
     try:
         entry = pkg_manager.install(source)
     except Exception as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
 
     settings = SettingsManager.create(cwd)
     settings.add_package(entry, local=local)
@@ -44,8 +48,9 @@ def install(source: str, local: bool) -> None:
 
 @click.command("remove")
 @click.argument("name")
-@click.option("--local", is_flag=True, default=False,
-              help="Remove from project scope instead of global.")
+@click.option(
+    "--local", is_flag=True, default=False, help="Remove from project scope instead of global."
+)
 def remove(name: str, local: bool) -> None:
     """Remove an installed package by NAME."""
     from tau.packages.manager import PackageManager
@@ -60,7 +65,7 @@ def remove(name: str, local: bool) -> None:
     try:
         pkg_manager.remove(name)
     except Exception as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
 
     settings = SettingsManager.create(cwd)
     settings.remove_package(name, local=local)
@@ -69,12 +74,11 @@ def remove(name: str, local: bool) -> None:
     click.echo(click.style(f"✓ Removed {name}", fg="green"))
 
 
-
 @click.command("list")
-@click.option("--local", is_flag=True, default=False,
-              help="Show project-scoped packages only.")
-@click.option("--all", "show_all", is_flag=True, default=False,
-              help="Show both global and project packages.")
+@click.option("--local", is_flag=True, default=False, help="Show project-scoped packages only.")
+@click.option(
+    "--all", "show_all", is_flag=True, default=False, help="Show both global and project packages."
+)
 def list_packages(local: bool, show_all: bool) -> None:
     """List installed packages."""
     from tau.settings.manager import SettingsManager

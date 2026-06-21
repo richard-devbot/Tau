@@ -4,6 +4,7 @@ from __future__ import annotations
 
 def register(tau: object) -> None:
     from pathlib import Path
+
     from tau.themes.loader import load_themes_from_dir
 
     themes_dir = Path(__file__).parent

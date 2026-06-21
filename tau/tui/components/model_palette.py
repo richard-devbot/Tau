@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tau.tui.ansi import RESET, BOLD, BRIGHT_BLACK, BRIGHT_WHITE, GREEN
+from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, GREEN, RESET
 from tau.tui.component import Component
 from tau.tui.input import InputEvent
 
@@ -32,7 +32,11 @@ class ModelSelectorModal:
         self._current_key = current_key
 
         current_provider = current_key.split("/")[0] if "/" in current_key else ""
-        self._scoped_models = [m for m in models if (m.provider or "") == current_provider] if current_provider else []
+        self._scoped_models = (
+            [m for m in models if (m.provider or "") == current_provider]
+            if current_provider
+            else []
+        )
 
         self._scope: str = "scoped" if self._scoped_models else "all"
         self._active: list = self._scoped_models if self._scope == "scoped" else self._all_models
@@ -97,9 +101,19 @@ class ModelSelectorModal:
 
         # Scope header
         if self._scoped_models:
-            all_t = (BRIGHT_WHITE + BOLD + "all" + RESET) if self._scope == "all" else (BRIGHT_BLACK + "all" + RESET)
-            sc_t  = (BRIGHT_WHITE + BOLD + "scoped" + RESET) if self._scope == "scoped" else (BRIGHT_BLACK + "scoped" + RESET)
-            lines.append(f"  {BRIGHT_BLACK}Scope:{RESET} {all_t}{BRIGHT_BLACK} | {RESET}{sc_t}  {BRIGHT_BLACK}tab: toggle{RESET}")
+            all_t = (
+                (BRIGHT_WHITE + BOLD + "all" + RESET)
+                if self._scope == "all"
+                else (BRIGHT_BLACK + "all" + RESET)
+            )
+            sc_t = (
+                (BRIGHT_WHITE + BOLD + "scoped" + RESET)
+                if self._scope == "scoped"
+                else (BRIGHT_BLACK + "scoped" + RESET)
+            )
+            lines.append(
+                f"  {BRIGHT_BLACK}Scope:{RESET} {all_t}{BRIGHT_BLACK} | {RESET}{sc_t}  {BRIGHT_BLACK}tab: toggle{RESET}"
+            )
         else:
             lines.append(f"  {BRIGHT_BLACK}↑/↓: navigate  enter: select  esc: cancel{RESET}")
 
@@ -114,16 +128,16 @@ class ModelSelectorModal:
             lines.append(f"  {BRIGHT_BLACK}No models match{RESET}")
             return lines
 
-        count   = len(self._filtered)
+        count = len(self._filtered)
         visible = min(VISIBLE_ROWS, count)
-        start   = max(0, min(self._selected - visible // 2, count - visible))
+        start = max(0, min(self._selected - visible // 2, count - visible))
 
         for i in range(start, start + visible):
             m = self._filtered[i]
-            is_sel     = i == self._selected
+            is_sel = i == self._selected
             is_current = f"{m.provider}/{m.id}" == self._current_key
-            check      = f" {GREEN}✓{RESET}" if is_current else ""
-            badge      = f"{BRIGHT_BLACK}[{m.provider}]{RESET}"
+            check = f" {GREEN}✓{RESET}" if is_current else ""
+            badge = f"{BRIGHT_BLACK}[{m.provider}]{RESET}"
 
             if is_sel:
                 lines.append(f"  {BRIGHT_WHITE}{BOLD}→ {m.id}{RESET} {badge}{check}")
@@ -134,7 +148,7 @@ class ModelSelectorModal:
             lines.append(f"  {BRIGHT_BLACK}({self._selected + 1}/{count}){RESET}")
 
         sel_m = self._filtered[self._selected]
-        name  = getattr(sel_m, "name", None) or sel_m.id
+        name = getattr(sel_m, "name", None) or sel_m.id
         lines.append(f"  {BRIGHT_BLACK}Model Name: {name}{RESET}")
 
         return lines
@@ -147,7 +161,8 @@ class ModelSelectorModal:
             self._filtered = list(self._active)
         else:
             self._filtered = [
-                m for m in self._active
+                m
+                for m in self._active
                 if q in (m.id or "").lower()
                 or q in (m.name or "").lower()
                 or q in f"{m.provider}/{m.id}".lower()
@@ -161,6 +176,7 @@ class ModelSelectorModal:
 # ---------------------------------------------------------------------------
 # Legacy inline palette (kept for compat; no longer activated by /model )
 # ---------------------------------------------------------------------------
+
 
 class ModelPalette(Component):
     """Deprecated inline model palette. Kept so existing wiring doesn't break."""

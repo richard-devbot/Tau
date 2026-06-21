@@ -1,23 +1,42 @@
 from __future__ import annotations
-import json
-from tau.inference.api.text.utils import parse_tool_args, openai_user_content, openai_assistant_content, openai_messages_to_chat, openai_response_format
-from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Any
+
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
+
 from openai import AsyncOpenAI
+
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
+from tau.inference.api.text.utils import (
+    openai_messages_to_chat,
+    openai_response_format,
+    parse_tool_args,
+)
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    LLMContext, LLMEvent, LLMOptions, StopReason, ThinkingLevel,
-    StartEvent, EndEvent, ErrorEvent,
-    TextStartEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingStartEvent, ThinkingDeltaEvent, ThinkingEndEvent,
-    ToolCallStartEvent, ToolCallDeltaEvent, ToolCallEndEvent,
+    EndEvent,
+    ErrorEvent,
+    LLMContext,
+    LLMEvent,
+    LLMOptions,
+    StartEvent,
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    TextStartEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingLevel,
+    ThinkingStartEvent,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
 )
 from tau.message.types import (
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
 )
-from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from tau.tool.types import Tool
 
@@ -45,7 +64,9 @@ def _clean_schema(schema: dict[str, Any]) -> dict[str, Any]:
         if k in ("title", "$schema"):
             continue
         if k == "anyOf" and isinstance(v, list):
-            non_null = [_clean_schema(s) if isinstance(s, dict) else s for s in v if s != {"type": "null"}]
+            non_null = [
+                _clean_schema(s) if isinstance(s, dict) else s for s in v if s != {"type": "null"}
+            ]
             if len(non_null) == 1:
                 result.update(non_null[0])
             else:
@@ -57,7 +78,6 @@ def _clean_schema(schema: dict[str, Any]) -> dict[str, Any]:
         else:
             result[k] = v
     return result
-
 
 
 class OpenAICompletionsAPI(BaseAPI):
@@ -74,7 +94,9 @@ class OpenAICompletionsAPI(BaseAPI):
             timeout=options.timeout.total_seconds(),
         )
 
-    def _build_params(self, model: Model, messages: list[dict[str, Any]], tools: Optional[list[Tool]] = None) -> dict[str, Any]:
+    def _build_params(
+        self, model: Model, messages: list[dict[str, Any]], tools: list[Tool] | None = None
+    ) -> dict[str, Any]:
         """Assemble the OpenAI Chat Completions request payload."""
         params: dict[str, Any] = {
             "model": model.id,
@@ -83,7 +105,10 @@ class OpenAICompletionsAPI(BaseAPI):
         }
         if self.options.max_tokens is not None:
             params["max_completion_tokens"] = self.options.max_tokens
-        if self.options.thinking_level is not None and self.options.thinking_level != ThinkingLevel.Off:
+        if (
+            self.options.thinking_level is not None
+            and self.options.thinking_level != ThinkingLevel.Off
+        ):
             params["reasoning_effort"] = _REASONING_EFFORT[self.options.thinking_level]
 
         if tools:
@@ -94,7 +119,7 @@ class OpenAICompletionsAPI(BaseAPI):
                         "name": tool.name,
                         "description": tool.description,
                         "parameters": _clean_schema(tool.schema.model_json_schema()),
-                    }
+                    },
                 }
                 for tool in tools
             ]
@@ -136,17 +161,22 @@ class OpenAICompletionsAPI(BaseAPI):
         # async with closes the SDK stream (and its httpx response) on every
         # exit path — cancellation return or an upstream GeneratorExit — instead
         # of leaving it to the GC asyncgen finalizer.
-        async with await self._client.chat.completions.create(**params, stream=True, stream_options={"include_usage": True}, extra_body=self.options.extra_params or {}) as sdk_stream:
+        async with await self._client.chat.completions.create(
+            **params,
+            stream=True,
+            stream_options={"include_usage": True},
+            extra_body=self.options.extra_params or {},
+        ) as sdk_stream:
             async for chunk in sdk_stream:
                 if self._cancelled():
                     yield ErrorEvent(reason=StopReason.Abort, error="Cancelled")
                     return
-                usage_data = getattr(chunk, 'usage', None)
+                usage_data = getattr(chunk, "usage", None)
                 if usage_data:
-                    _input_tokens = getattr(usage_data, 'prompt_tokens', 0) or 0
-                    _output_tokens = getattr(usage_data, 'completion_tokens', 0) or 0
-                    _details = getattr(usage_data, 'prompt_tokens_details', None)
-                    _cache_read_tokens = getattr(_details, 'cached_tokens', 0) or 0
+                    _input_tokens = getattr(usage_data, "prompt_tokens", 0) or 0
+                    _output_tokens = getattr(usage_data, "completion_tokens", 0) or 0
+                    _details = getattr(usage_data, "prompt_tokens_details", None)
+                    _cache_read_tokens = getattr(_details, "cached_tokens", 0) or 0
                 choice = chunk.choices[0] if chunk.choices else None
                 if choice is None:
                     continue
@@ -154,7 +184,9 @@ class OpenAICompletionsAPI(BaseAPI):
                 delta = choice.delta
 
                 # Handle reasoning/thinking content (often used by NVIDIA and some OpenAI models)
-                reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "thinking", None)
+                reasoning = getattr(delta, "reasoning_content", None) or getattr(
+                    delta, "thinking", None
+                )
                 if reasoning:
                     if not thinking_started:
                         yield ThinkingStartEvent(thinking=ThinkingContent(content=""))
@@ -187,15 +219,20 @@ class OpenAICompletionsAPI(BaseAPI):
                         if idx not in tool_started:
                             tool_started[idx] = True
                             tool_bufs[idx] = ""
-                            tool_meta[idx] = {"id": tc.id or "", "name": tc.function.name or "" if tc.function else ""}
-                            yield ToolCallStartEvent(tool_call=ToolCallContent(
+                            tool_meta[idx] = {
+                                "id": tc.id or "",
+                                "name": tc.function.name or "" if tc.function else "",
+                            }
+                            yield ToolCallStartEvent(
+                                tool_call=ToolCallContent(
                                     id=tool_meta[idx]["id"],
                                     name=tool_meta[idx]["name"],
                                 )
                             )
                         if tc.function and tc.function.arguments:
                             tool_bufs[idx] += tc.function.arguments
-                            yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=tool_meta[idx]["id"])
+                            yield ToolCallDeltaEvent(
+                                tool_call=ToolCallContent(id=tool_meta[idx]["id"])
                             )
 
                 if choice.finish_reason:
@@ -213,7 +250,8 @@ class OpenAICompletionsAPI(BaseAPI):
                         args_str = tool_bufs[idx].strip()
                         args = parse_tool_args(args_str)
 
-                        yield ToolCallEndEvent(tool_call=ToolCallContent(
+                        yield ToolCallEndEvent(
+                            tool_call=ToolCallContent(
                                 id=tool_meta[idx]["id"],
                                 name=tool_meta[idx]["name"],
                                 args=args,
@@ -224,4 +262,9 @@ class OpenAICompletionsAPI(BaseAPI):
                     tool_meta.clear()
 
                     stop_reason = _STOP_REASON.get(choice.finish_reason, StopReason.Stop)
-                    yield EndEvent(reason=stop_reason, input_tokens=_input_tokens, output_tokens=_output_tokens, cache_read_tokens=_cache_read_tokens)
+                    yield EndEvent(
+                        reason=stop_reason,
+                        input_tokens=_input_tokens,
+                        output_tokens=_output_tokens,
+                        cache_read_tokens=_cache_read_tokens,
+                    )

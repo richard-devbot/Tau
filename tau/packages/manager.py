@@ -6,9 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tau.packages.types import ParsedSource
-from tau.packages.utils import parse_source, extensions_from_pyproject
+from tau.packages.utils import extensions_from_pyproject, parse_source
 from tau.settings.paths import get_app_name
+from tau.settings.types import PackageEntry
 
 
 class PackageManager:
@@ -47,7 +47,8 @@ class PackageManager:
         else:
             subprocess.run(
                 [sys.executable, "-m", "venv", str(self.venv_dir)],
-                check=True, capture_output=True,
+                check=True,
+                capture_output=True,
             )
 
     def site_packages(self) -> Path | None:
@@ -56,7 +57,8 @@ class PackageManager:
             return None
         result = subprocess.run(
             [str(self._python), "-c", "import site; print(site.getsitepackages()[0])"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode == 0 and result.stdout.strip():
             return Path(result.stdout.strip())
@@ -64,9 +66,8 @@ class PackageManager:
 
     # ── Package operations ────────────────────────────────────────────────────
 
-    def install(self, source: str) -> "PackageEntry":
+    def install(self, source: str) -> PackageEntry:
         """Install a package and return a PackageEntry with metadata."""
-        from tau.settings.types import PackageEntry
         parsed = parse_source(source)
         self.ensure_venv()
 
@@ -124,10 +125,7 @@ class PackageManager:
           2. pyproject.toml with [tool.{get_app_name_lower()}] extensions list
           3. __init__.py that defines register()
         """
-        if installed_path:
-            pkg_dir = Path(installed_path)
-        else:
-            pkg_dir = self._find_package_dir(name)
+        pkg_dir = Path(installed_path) if installed_path else self._find_package_dir(name)
 
         if not pkg_dir or not pkg_dir.is_dir():
             return []
@@ -170,9 +168,13 @@ class PackageManager:
             return None
         for n in [name.replace("-", "_").lower(), name.lower()]:
             result = subprocess.run(
-                [str(self._python), "-c",
-                 f"import importlib.metadata; print(importlib.metadata.version({n!r}))"],
-                capture_output=True, text=True,
+                [
+                    str(self._python),
+                    "-c",
+                    f"import importlib.metadata; print(importlib.metadata.version({n!r}))",
+                ],
+                capture_output=True,
+                text=True,
             )
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()

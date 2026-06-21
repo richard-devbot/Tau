@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import traceback
 from collections import defaultdict
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from tau.hooks.types import HookEvent
 
@@ -48,10 +50,8 @@ class Hooks:
 
     def unregister(self, event_type: str, handler: Handler) -> None:
         """Remove a previously registered handler. No-op if not found."""
-        try:
+        with contextlib.suppress(ValueError):
             self._handlers[event_type].remove(handler)
-        except ValueError:
-            pass
 
     def subscribe(self, listener: Handler) -> Unsubscribe:
         """Register a catch-all listener that receives every emitted event."""
@@ -60,6 +60,7 @@ class Hooks:
 
     def on(self, event_type: str) -> Callable[[Handler], Handler]:
         """Decorator for registering a handler for an event type."""
+
         def decorator(fn: Handler) -> Handler:
             self.register(event_type, fn)
             return fn
@@ -83,7 +84,7 @@ class Hooks:
             except Exception:
                 logger.error(
                     "Hook handler %r raised on event %r:\n%s",
-                    getattr(handler, '__name__', handler),
+                    getattr(handler, "__name__", handler),
                     event_type,
                     traceback.format_exc(),
                 )
@@ -96,7 +97,7 @@ class Hooks:
             except Exception:
                 logger.error(
                     "Hook subscriber %r raised on event %r:\n%s",
-                    getattr(subscriber, '__name__', subscriber),
+                    getattr(subscriber, "__name__", subscriber),
                     event_type,
                     traceback.format_exc(),
                 )

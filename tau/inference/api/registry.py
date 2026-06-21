@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 import importlib
-from typing import Generic, Type, TypeVar, Union
+from typing import TypeVar
 
 T = TypeVar("T")
 
-_Entry = Union[Type[T], str]
+_Entry = type[T] | str
 
 
-class BaseAPIRegistry(Generic[T]):
+class BaseAPIRegistry[T]:
     """Shared dict-backed registry for API implementation classes.
 
     Entries may be either a class or a lazy ``"module:ClassName"`` import path,
@@ -24,10 +25,10 @@ class BaseAPIRegistry(Generic[T]):
     def unregister(self, name: str) -> None:
         self._apis.pop(name, None)
 
-    def list(self) -> list[Type[T]]:
+    def list(self) -> list[type[T]]:
         return [self._resolve(name) for name in list(self._apis)]
 
-    def get(self, name: str) -> Type[T] | None:
+    def get(self, name: str) -> type[T] | None:
         if name not in self._apis:
             return None
         return self._resolve(name)
@@ -35,7 +36,7 @@ class BaseAPIRegistry(Generic[T]):
     def reset(self) -> None:
         self._apis.clear()
 
-    def _resolve(self, name: str) -> Type[T]:
+    def _resolve(self, name: str) -> type[T]:
         entry = self._apis[name]
         if isinstance(entry, str):
             mod_path, _, cls_name = entry.partition(":")

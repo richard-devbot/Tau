@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tau.tool.types import (
-    Tool, ToolKind, ToolExecutionMode,
-    ToolInvocation, ToolResult,
-    ToolExecutionUpdateCallback, AbortSignal, ToolContext,
-)
 from tau.tool.render import call_line
+from tau.tool.types import (
+    AbortSignal,
+    Tool,
+    ToolContext,
+    ToolExecutionMode,
+    ToolExecutionUpdateCallback,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 
 def _render_read_call(args: dict, _streaming: bool) -> list[str]:
@@ -19,6 +24,7 @@ def _render_read_call(args: dict, _streaming: bool) -> list[str]:
 
 class ReadParams(BaseModel):
     """Parameters for the read tool."""
+
     path: str = Field(description="Absolute path to the file to read.")
     offset: int = Field(default=0, ge=0, description="Line number to start reading from (0-based).")
     limit: int = Field(default=2000, ge=1, description="Maximum number of lines to read.")
@@ -29,6 +35,7 @@ _PREVIEW_LINES = 5
 
 def _render_read_result(content: str, opts: Any) -> list[str]:
     from tau.tui.ansi import DIM, RESET
+
     metadata = opts.metadata or {}
     lines_returned = metadata.get("lines_returned", 0)
     truncated = metadata.get("truncated", False)
@@ -59,6 +66,7 @@ def _render_read_result(content: str, opts: Any) -> list[str]:
 
 class ReadTool(Tool):
     """Tool for reading file contents with line numbers."""
+
     def __init__(self) -> None:
         super().__init__(
             name="read",
@@ -82,9 +90,9 @@ class ReadTool(Tool):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         """Execute the file read operation."""
         params = ReadParams.model_validate(invocation.params)
@@ -110,7 +118,9 @@ class ReadTool(Tool):
         footer = ""
         truncated = end < total
         if truncated:
-            footer = f"\n\n[Showing lines {start + 1}–{end} of {total}. Use offset={end} to read more.]"
+            footer = (
+                f"\n\n[Showing lines {start + 1}–{end} of {total}. Use offset={end} to read more.]"
+            )
 
         metadata = {
             "file_path": str(path),

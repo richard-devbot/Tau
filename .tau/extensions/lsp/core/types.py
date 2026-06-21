@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any, Callable, Coroutine
-from typing import NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 # ── Server configuration types ────────────────────────────────────────────────
 

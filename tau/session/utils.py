@@ -1,27 +1,37 @@
+import contextlib
 import re
 import uuid
-from uuid_extensions import uuid7str as _uuid7str
-from typing import Any, Callable
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from pydantic import TypeAdapter, ValidationError
+from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+from uuid_extensions import uuid7str as _uuid7str
+
+from tau.message.types import AgentMessage, ImageContent, LLMMessage, Role, TextContent
 from tau.session.types import (
-    SessionEntry, SessionHeader, SessionInfo, MessageEntry, SessionFileEntry, SessionType
+    MessageEntry,
+    SessionEntry,
+    SessionFileEntry,
+    SessionHeader,
+    SessionInfo,
+    SessionType,
 )
-from tau.message.types import AgentMessage, LLMMessage, Role, TextContent, ImageContent
 from tau.settings.paths import get_sessions_dir
+
 
 def create_session_id() -> str:
     """Create a new session ID using UUIDv7."""
     return _uuid7str()
 
+
 def generate_id(by_id: Any) -> str:
     """
     Generate a unique short ID (8 hex chars, collision-checked).
-    
+
     Args:
-        by_id: A container (like a set or dict) that supports the 'in' operator 
+        by_id: A container (like a set or dict) that supports the 'in' operator
                to check for existing IDs.
     """
     for _ in range(100):
@@ -32,20 +42,27 @@ def generate_id(by_id: Any) -> str:
     # Fallback to full UUID if somehow we have collisions
     return str(uuid.uuid4())
 
+
 def generate_timestamp() -> float:
     """Generate a Unix timestamp for the current moment."""
     now = datetime.now()
     return now.timestamp()
+
 
 def get_default_session_dir(cwd: str | Path, sessions_dir: Path | None = None) -> Path:
     """Return the per-project session directory under ~/.tau/sessions/<encoded-cwd>/."""
     base = sessions_dir if sessions_dir is not None else get_sessions_dir()
     resolved = str(Path(cwd).resolve())
     # Encode the absolute path into a safe directory name: --home-user-project--
-    safe = "--" + re.sub(r"^[/\\]", "", resolved).replace("/", "-").replace("\\", "-").replace(":", "-") + "--"
+    safe = (
+        "--"
+        + re.sub(r"^[/\\]", "", resolved).replace("/", "-").replace("\\", "-").replace(":", "-")
+        + "--"
+    )
     session_dir = base / safe
     session_dir.mkdir(parents=True, exist_ok=True)
     return session_dir
+
 
 def read_session_file(session_file: Path) -> list[SessionFileEntry]:
     """Load and parse a session file, returning a list of entries."""
@@ -76,6 +93,7 @@ def read_session_file(session_file: Path) -> list[SessionFileEntry]:
 
     return entries
 
+
 def is_valid_session_file(session_file: Path | str) -> bool:
     """Check if a file is a valid session file by validating its header."""
     try:
@@ -94,6 +112,7 @@ def is_valid_session_file(session_file: Path | str) -> bool:
     except (OSError, ValidationError, ValueError):
         return False
 
+
 def find_most_recent_session(session_dir: Path | str) -> Path | None:
     """Find the most recently modified session file in a directory."""
     session_dir = Path(session_dir)
@@ -108,6 +127,7 @@ def find_most_recent_session(session_dir: Path | str) -> Path | None:
     most_recent = max(candidate_sessions, key=lambda x: x.stat().st_mtime)
     return most_recent
 
+
 def is_message_with_contents(message: AgentMessage) -> bool:
     """Check if a message is an LLM message with user or assistant role and content."""
     if not isinstance(message, LLMMessage):
@@ -115,6 +135,7 @@ def is_message_with_contents(message: AgentMessage) -> bool:
     if message.role not in (Role.USER, Role.ASSISTANT):
         return False
     return any(isinstance(c, (TextContent, ImageContent)) for c in message.contents)
+
 
 def get_last_activity_time(entries: list[SessionEntry]) -> float | None:
     """Extract the most recent message timestamp from a list of session entries."""
@@ -126,7 +147,7 @@ def get_last_activity_time(entries: list[SessionEntry]) -> float | None:
 
         if not is_message_with_contents(entry.message):
             continue
-        
+
         message_timestamp = getattr(entry.message, "timestamp", None)
         if message_timestamp is None:
             timestamp = entry.timestamp
@@ -139,13 +160,17 @@ def get_last_activity_time(entries: list[SessionEntry]) -> float | None:
 
     return last_activity_time
 
-def get_session_modified_date(entries: list[SessionEntry], header: SessionHeader | None = None) -> datetime:
+
+def get_session_modified_date(
+    entries: list[SessionEntry], header: SessionHeader | None = None
+) -> datetime:
     """Get the modified timestamp of a session, based on last activity or header creation time."""
     if last_activity_time := get_last_activity_time(entries=entries):
         return datetime.fromtimestamp(last_activity_time)
 
     header = header or entries[0]
     return datetime.fromtimestamp(header.timestamp)
+
 
 def build_session_info(file: Path) -> SessionInfo | None:
     """Parse a session file and extract metadata into a SessionInfo object."""
@@ -158,10 +183,8 @@ def build_session_info(file: Path) -> SessionInfo | None:
     for line in lines:
         if not line.strip():
             continue
-        try:
+        with contextlib.suppress(Exception):
             file_entries.append(adapter.validate_json(line))
-        except Exception:
-            pass
 
     if len(file_entries) == 0:
         return None
@@ -179,7 +202,7 @@ def build_session_info(file: Path) -> SessionInfo | None:
 
     if header is None:
         return None
-    
+
     cwd = header.cwd
     parent_session = header.parent_session
     created = datetime.fromtimestamp(header.timestamp)
@@ -192,14 +215,15 @@ def build_session_info(file: Path) -> SessionInfo | None:
         parent_session=parent_session,
         created=created,
         modified=modified,
-        message_count=message_count
+        message_count=message_count,
     )
+
 
 def list_sessions_from_dir(
     dir_path: Path | str,
     on_progress: Callable[[int, int], None] | None = None,
     progress_offset: int = 0,
-    progress_total: int | None = None
+    progress_total: int | None = None,
 ) -> list[SessionInfo]:
     """
     Read all .jsonl session files in a directory and return a list of SessionInfo objects.
@@ -207,26 +231,23 @@ def list_sessions_from_dir(
     """
     sessions: list[SessionInfo] = []
     dir_path = Path(dir_path)
-    
+
     if not dir_path.exists() or not dir_path.is_dir():
         return sessions
 
     try:
         files = list(dir_path.glob("*.jsonl"))
         total = progress_total if progress_total is not None else len(files)
-        loaded = 0
-
         # We process files sequentially since Python I/O blocking is usually fine here,
         # but could be updated to use ThreadPoolExecutor if concurrency is strictly needed.
-        for file in files:
+        for loaded, file in enumerate(files, 1):
             info = build_session_info(file)
-            loaded += 1
             if on_progress:
                 on_progress(progress_offset + loaded, total)
-            
+
             if info is not None:
                 sessions.append(info)
-                
+
     except Exception:
         pass  # Return what we have on error, or an empty list if early
 

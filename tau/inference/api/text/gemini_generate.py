@@ -1,24 +1,48 @@
 from __future__ import annotations
+
 import json
-from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Any
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
+
 from google import genai
 from google.genai import types as genai_types
+
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
 from tau.inference.model.types import Model
 from tau.inference.types import (
-    LLMContext, LLMEvent, LLMOptions, StopReason, ThinkingBudgets, ThinkingLevel,
-    StartEvent, EndEvent, ErrorEvent,
-    TextStartEvent, TextDeltaEvent, TextEndEvent,
-    ThinkingStartEvent, ThinkingDeltaEvent, ThinkingEndEvent,
-    ToolCallStartEvent, ToolCallDeltaEvent, ToolCallEndEvent,
+    EndEvent,
+    ErrorEvent,
+    LLMContext,
+    LLMEvent,
+    LLMOptions,
+    StartEvent,
+    StopReason,
+    TextDeltaEvent,
+    TextEndEvent,
+    TextStartEvent,
+    ThinkingBudgets,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingLevel,
+    ThinkingStartEvent,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
     normalize_structured_response_format,
 )
 from tau.message.types import (
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
+    AssistantMessage,
+    ImageContent,
+    LLMMessage,
+    SystemMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    UserMessage,
 )
-from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from tau.tool.types import Tool
 
@@ -48,9 +72,13 @@ def _messages_to_gemini(
                             parts.append(genai_types.Part(text=item.content))
                         case ImageContent():
                             for b64, mime in item.to_base64():
-                                parts.append(genai_types.Part(
-                                    inline_data=genai_types.Blob(mime_type=mime or "image/png", data=b64),
-                                ))
+                                parts.append(
+                                    genai_types.Part(
+                                        inline_data=genai_types.Blob(
+                                            mime_type=mime or "image/png", data=b64
+                                        ),
+                                    )
+                                )
                 if parts:
                     contents.append(genai_types.Content(role="user", parts=parts))
             case AssistantMessage():
@@ -60,24 +88,28 @@ def _messages_to_gemini(
                         case TextContent():
                             parts.append(genai_types.Part(text=item.content))
                         case ToolCallContent():
-                            parts.append(genai_types.Part(
-                                function_call=genai_types.FunctionCall(
-                                    name=item.name,
-                                    args=item.args,
-                                ),
-                            ))
+                            parts.append(
+                                genai_types.Part(
+                                    function_call=genai_types.FunctionCall(
+                                        name=item.name,
+                                        args=item.args,
+                                    ),
+                                )
+                            )
                 if parts:
                     contents.append(genai_types.Content(role="model", parts=parts))
             case ToolMessage():
                 parts = []
                 for content in msg.contents:
                     if isinstance(content, ToolResultContent):
-                        parts.append(genai_types.Part(
-                            function_response=genai_types.FunctionResponse(
-                                name=content.id,
-                                response={"result": content.content},
-                            ),
-                        ))
+                        parts.append(
+                            genai_types.Part(
+                                function_response=genai_types.FunctionResponse(
+                                    name=content.id,
+                                    response={"result": content.content},
+                                ),
+                            )
+                        )
                 if parts:
                     contents.append(genai_types.Content(role="user", parts=parts))
 
@@ -96,7 +128,7 @@ class GeminiGenerateAPI(BaseAPI):
 
     def _build_config(
         self,
-        tools: Optional[list[Tool]] = None,
+        tools: list[Tool] | None = None,
         response_format: Any | None = None,
     ) -> genai_types.GenerateContentConfig:
         params: dict[str, Any] = {
@@ -110,7 +142,10 @@ class GeminiGenerateAPI(BaseAPI):
             params["response_schema"] = schema
 
         budget = None
-        if self.options.thinking_level is not None and self.options.thinking_level != ThinkingLevel.Off:
+        if (
+            self.options.thinking_level is not None
+            and self.options.thinking_level != ThinkingLevel.Off
+        ):
             budgets = self.options.thinking_budgets or ThinkingBudgets()
             budget = budgets.get(self.options.thinking_level)
         if budget is not None:
@@ -118,7 +153,7 @@ class GeminiGenerateAPI(BaseAPI):
                 thinking_budget=budget,
                 include_thoughts=True,
             )
-        
+
         if tools:
             params["tools"] = [
                 genai_types.Tool(
@@ -152,7 +187,6 @@ class GeminiGenerateAPI(BaseAPI):
                 config = modified.get("config", config)
                 contents = modified.get("contents", contents)
 
-        text_index = 0
         thinking_index = 0
         tool_index = 0
         text_started = False
@@ -174,11 +208,11 @@ class GeminiGenerateAPI(BaseAPI):
                 if self._cancelled():
                     yield ErrorEvent(reason=StopReason.Abort, error="Cancelled")
                     return
-                um = getattr(chunk, 'usage_metadata', None)
+                um = getattr(chunk, "usage_metadata", None)
                 if um:
-                    _input_tokens = getattr(um, 'prompt_token_count', 0) or 0
-                    _output_tokens = getattr(um, 'candidates_token_count', 0) or 0
-                    _cache_read_tokens = getattr(um, 'cached_content_token_count', 0) or 0
+                    _input_tokens = getattr(um, "prompt_token_count", 0) or 0
+                    _output_tokens = getattr(um, "candidates_token_count", 0) or 0
+                    _cache_read_tokens = getattr(um, "cached_content_token_count", 0) or 0
 
                 if not chunk.candidates:
                     continue
@@ -194,7 +228,9 @@ class GeminiGenerateAPI(BaseAPI):
                             yield ThinkingDeltaEvent(thinking=ThinkingContent(content=part.text))
                         elif part.text:
                             if thinking_started:
-                                yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))
+                                yield ThinkingEndEvent(
+                                    thinking=ThinkingContent(content=thinking_buf)
+                                )
                                 thinking_started = False
                                 thinking_index += 1
                                 thinking_buf = ""
@@ -207,9 +243,17 @@ class GeminiGenerateAPI(BaseAPI):
                             fc = part.function_call
                             tool_id = fc.name
                             args_str = json.dumps(dict(fc.args)) if fc.args else ""
-                            yield ToolCallStartEvent(tool_call=ToolCallContent(id=tool_id, name=fc.name))
+                            yield ToolCallStartEvent(
+                                tool_call=ToolCallContent(id=tool_id, name=fc.name)
+                            )
                             yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=tool_id))
-                            yield ToolCallEndEvent(tool_call=ToolCallContent(id=tool_id, name=fc.name, args=json.loads(args_str) if args_str else {}))
+                            yield ToolCallEndEvent(
+                                tool_call=ToolCallContent(
+                                    id=tool_id,
+                                    name=fc.name,
+                                    args=json.loads(args_str) if args_str else {},
+                                )
+                            )
                             tool_index += 1
 
                 finish_reason = getattr(candidate, "finish_reason", None)
@@ -218,9 +262,20 @@ class GeminiGenerateAPI(BaseAPI):
                         yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))
                     if text_started:
                         yield TextEndEvent(text=TextContent(content=text_buf))
-                    reason_str = finish_reason.name if hasattr(finish_reason, "name") else str(finish_reason)
-                    stop = StopReason.ToolCalls if tool_index > 0 else _STOP_REASON.get(reason_str, StopReason.Stop)
-                    yield EndEvent(reason=stop, input_tokens=_input_tokens, output_tokens=_output_tokens, cache_read_tokens=_cache_read_tokens)
+                    reason_str = (
+                        finish_reason.name if hasattr(finish_reason, "name") else str(finish_reason)
+                    )
+                    stop = (
+                        StopReason.ToolCalls
+                        if tool_index > 0
+                        else _STOP_REASON.get(reason_str, StopReason.Stop)
+                    )
+                    yield EndEvent(
+                        reason=stop,
+                        input_tokens=_input_tokens,
+                        output_tokens=_output_tokens,
+                        cache_read_tokens=_cache_read_tokens,
+                    )
                     return
 
         except Exception as exc:
@@ -231,4 +286,9 @@ class GeminiGenerateAPI(BaseAPI):
             yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))
         if text_started:
             yield TextEndEvent(text=TextContent(content=text_buf))
-        yield EndEvent(reason=StopReason.Stop, input_tokens=_input_tokens, output_tokens=_output_tokens, cache_read_tokens=_cache_read_tokens)
+        yield EndEvent(
+            reason=StopReason.Stop,
+            input_tokens=_input_tokens,
+            output_tokens=_output_tokens,
+            cache_read_tokens=_cache_read_tokens,
+        )

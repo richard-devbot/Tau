@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from tau.inference.types import (
+    StructuredResponseFormat,
     ThinkingBudgets,
     ThinkingLevel,
-    StructuredResponseFormat,
     normalize_structured_response_format,
 )
 

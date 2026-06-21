@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tau.tool.types import (
-    Tool, ToolKind, ToolExecutionMode,
-    ToolInvocation, ToolResult,
-    ToolExecutionUpdateCallback, AbortSignal, ToolContext,
-)
 from tau.tool.render import call_line
+from tau.tool.types import (
+    AbortSignal,
+    Tool,
+    ToolContext,
+    ToolExecutionUpdateCallback,
+    ToolInvocation,
+    ToolKind,
+    ToolResult,
+)
 
 
 def _render_write_call(args: dict, _streaming: bool) -> list[str]:
@@ -19,6 +23,7 @@ def _render_write_call(args: dict, _streaming: bool) -> list[str]:
 
 class WriteParams(BaseModel):
     """Parameters for the write tool."""
+
     path: str = Field(description="Absolute path to the file to write.")
     content: str = Field(description="Content to write to the file.")
 
@@ -28,6 +33,7 @@ _PREVIEW_LINES = 5
 
 def _render_write_result(content: str, opts: Any) -> list[str]:
     from tau.tui.ansi import DIM, GREEN, RESET
+
     metadata = opts.metadata or {}
     total_lines = metadata.get("total_lines", 0)
     created = metadata.get("created", False)
@@ -54,6 +60,7 @@ def _render_write_result(content: str, opts: Any) -> list[str]:
 
 class WriteTool(Tool):
     """Tool for writing content to files."""
+
     def __init__(self) -> None:
         super().__init__(
             name="write",
@@ -76,9 +83,9 @@ class WriteTool(Tool):
     async def execute(
         self,
         invocation: ToolInvocation,
-        tool_execution_update_callback: Optional[ToolExecutionUpdateCallback] = None,
-        signal: Optional[AbortSignal] = None,
-        context: Optional[ToolContext] = None,
+        tool_execution_update_callback: ToolExecutionUpdateCallback | None = None,
+        signal: AbortSignal | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         """Execute the file write operation."""
         params = WriteParams.model_validate(invocation.params)
@@ -102,4 +109,6 @@ class WriteTool(Tool):
             "created": created,
             "lines": content_lines,
         }
-        return ToolResult.ok(invocation.id, f"Written {bytes_written} bytes to {params.path}", metadata=metadata)
+        return ToolResult.ok(
+            invocation.id, f"Written {bytes_written} bytes to {params.path}", metadata=metadata
+        )

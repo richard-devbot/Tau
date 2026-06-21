@@ -1,14 +1,23 @@
 """Tests for tau/message/types.py — message type construction and methods."""
 from __future__ import annotations
 
-from tau.message.types import (
-    TextContent, ImageContent, AudioContent, VideoContent,
-    ThinkingContent, ToolCallContent, ToolResultContent,
-    SystemMessage, UserMessage, AssistantMessage, ToolMessage,
-    TerminalExecutionMessage, Role,
-    Usage, UsageCost,
-)
 from tau.inference.types import StopReason
+from tau.message.types import (
+    AssistantMessage,
+    AudioContent,
+    ImageContent,
+    Role,
+    SystemMessage,
+    TerminalExecutionMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCallContent,
+    ToolMessage,
+    ToolResultContent,
+    Usage,
+    UserMessage,
+    VideoContent,
+)
 
 
 class TestTextContent:

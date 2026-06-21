@@ -14,6 +14,7 @@ hot path (per-request headers, proxy config) never re-run the command.
 Failed resolutions (empty result) are *not* cached, so fixing the environment or
 the command and reloading re-resolves rather than being stuck on the empty value.
 """
+
 from __future__ import annotations
 
 import os
@@ -48,10 +49,7 @@ def resolve_secrets(values: dict[str, str] | None) -> dict[str, str]:
     """Resolve every string value in a mapping (e.g. a header dict)."""
     if not values:
         return {}
-    return {
-        k: resolve_secret(v) if isinstance(v, str) else v
-        for k, v in values.items()
-    }
+    return {k: resolve_secret(v) if isinstance(v, str) else v for k, v in values.items()}
 
 
 def clear_cache() -> None:

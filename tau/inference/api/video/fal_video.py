@@ -7,7 +7,13 @@ import httpx
 
 from tau.inference.api.video.base import BaseVideoAPI
 from tau.inference.model.types import Model
-from tau.inference.types import GeneratedVideo, VideoContext, VideoFormat, VideoOptions, VideoStopReason
+from tau.inference.types import (
+    GeneratedVideo,
+    VideoContext,
+    VideoFormat,
+    VideoOptions,
+    VideoStopReason,
+)
 
 _BASE = "https://queue.fal.run"
 
@@ -40,7 +46,10 @@ class FalVideoAPI(BaseVideoAPI):
             payload["resolution"] = context.resolution
         if context.image is not None:
             import base64
-            payload["image_url"] = f"data:image/jpeg;base64,{base64.b64encode(context.image).decode()}"
+
+            payload["image_url"] = (
+                f"data:image/jpeg;base64,{base64.b64encode(context.image).decode()}"
+            )
         return payload
 
     def _extract_video_url(self, result: dict) -> str | None:
@@ -103,7 +112,11 @@ class FalVideoAPI(BaseVideoAPI):
 
                 if status == "FAILED":
                     error_info = status_data.get("error") or {}
-                    msg = error_info.get("message", "Job failed") if isinstance(error_info, dict) else str(error_info)
+                    msg = (
+                        error_info.get("message", "Job failed")
+                        if isinstance(error_info, dict)
+                        else str(error_info)
+                    )
                     return GeneratedVideo(
                         model_id=model.id,
                         provider="fal",

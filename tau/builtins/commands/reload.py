@@ -13,6 +13,7 @@ async def cmd_reload(reg: CommandRegistry, _args: list[str]) -> None:
     result = await reg.runtime.reload_extensions()
 
     from tau.extensions.context import ExtensionContext
+
     ctx = ExtensionContext.from_runtime(reg.runtime)
     if ctx.ui is None:
         return
