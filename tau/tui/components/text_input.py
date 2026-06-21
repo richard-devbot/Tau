@@ -6,7 +6,7 @@ from typing import Callable
 
 from tau.tui.ansi import CURSOR_MARKER, visible_width, RESET, DIM, BOLD
 from tau.tui.component import Component
-from tau.tui.input import InputEvent, KeyEvent, PasteEvent
+from tau.tui.input import InputEvent, Key, KeyEvent, PasteEvent
 
 # Matches any atomic input token at end-of-string (for backspace) or start-of-string (for delete-forward).
 # Session-scoped (#N) and persistent (:{uuid}) variants for image/audio/video, plus paste markers.
@@ -165,70 +165,69 @@ class TextInput(Component):
         if not isinstance(event, KeyEvent):
             return False
 
-        key = str(event)
-
-        match key:
-            case "enter":
-                if self._text.endswith("\\"):
-                    # Replace trailing backslash with a real newline
-                    self._checkpoint("newline")
-                    self._last_edit = None
-                    self._text = self._text[:-1] + "\n"
-                    self._cursor = len(self._text)
-                    self._line_scrolls = {}
-                else:
-                    self._submit()
-            case "alt+enter":
-                self._submit_followup()
-            case "alt+up":
-                if self._on_dequeue:
-                    self._on_dequeue()
-            case "ctrl+v":
-                if self.on_paste:
-                    self.on_paste()
-                    return True
-            case "backspace":
-                self._backspace()
-            case "delete" | "ctrl+d":
-                self._delete_forward()
-            case "left":
-                self._move_left()
-            case "right":
-                self._move_right()
-            case "home" | "ctrl+a":
-                self._cursor = self._line_start()
+        # Modified combos are listed before their bare counterparts; matching is
+        # exact on modifiers, so order is for readability, not correctness.
+        if event.matches(Key.ENTER):
+            if self._text.endswith("\\"):
+                # Replace trailing backslash with a real newline
+                self._checkpoint("newline")
                 self._last_edit = None
-            case "end" | "ctrl+e":
-                self._cursor = self._line_end()
+                self._text = self._text[:-1] + "\n"
+                self._cursor = len(self._text)
+                self._line_scrolls = {}
+            else:
+                self._submit()
+        elif event.matches(Key.alt(Key.ENTER)):
+            self._submit_followup()
+        elif event.matches(Key.alt(Key.UP)):
+            if self._on_dequeue:
+                self._on_dequeue()
+        elif event.matches(Key.ctrl("v")):
+            if self.on_paste:
+                self.on_paste()
+                return True
+        elif event.matches(Key.BACKSPACE):
+            self._backspace()
+        elif event.matches(Key.DELETE, Key.ctrl("d")):
+            self._delete_forward()
+        elif event.matches(Key.LEFT):
+            self._move_left()
+        elif event.matches(Key.RIGHT):
+            self._move_right()
+        elif event.matches(Key.HOME, Key.ctrl("a")):
+            self._cursor = self._line_start()
+            self._last_edit = None
+        elif event.matches(Key.END, Key.ctrl("e")):
+            self._cursor = self._line_end()
+            self._last_edit = None
+        elif event.matches(Key.ctrl("k")):
+            if self._cursor < len(self._text):
+                self._checkpoint("kill")
                 self._last_edit = None
-            case "ctrl+k":
-                if self._cursor < len(self._text):
-                    self._checkpoint("kill")
-                    self._last_edit = None
-                    self._text = self._text[: self._cursor]
-                    self._line_scrolls = {}
-            case "ctrl+u":
-                if self._cursor > 0:
-                    self._checkpoint("kill")
-                    self._last_edit = None
-                    self._text = self._text[self._cursor :]
-                    self._cursor = 0
-                    self._line_scrolls = {}
-            case "ctrl+w":
-                self._delete_word_back()
-            case "ctrl+z":
-                self._undo_op()
-            case "ctrl+y":
-                self._redo_op()
-            case "up":
-                self._move_up()
-            case "down":
-                self._move_down()
-            case _:
-                if event.char and not event.ctrl and not event.alt:
-                    self._insert(event.char)
-                else:
-                    return False
+                self._text = self._text[: self._cursor]
+                self._line_scrolls = {}
+        elif event.matches(Key.ctrl("u")):
+            if self._cursor > 0:
+                self._checkpoint("kill")
+                self._last_edit = None
+                self._text = self._text[self._cursor :]
+                self._cursor = 0
+                self._line_scrolls = {}
+        elif event.matches(Key.ctrl("w")):
+            self._delete_word_back()
+        elif event.matches(Key.ctrl("z")):
+            self._undo_op()
+        elif event.matches(Key.ctrl("y")):
+            self._redo_op()
+        elif event.matches(Key.UP):
+            self._move_up()
+        elif event.matches(Key.DOWN):
+            self._move_down()
+        else:
+            if event.char and not event.ctrl and not event.alt:
+                self._insert(event.char)
+            else:
+                return False
 
         return True
 

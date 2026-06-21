@@ -50,10 +50,13 @@ class KeybindingsManager:
                 self._map[action] = list(keys)
 
     def matches(self, event: KeyEvent, action: str) -> bool:
-        """Return True if `event` triggers the named action."""
+        """Return True if `event` triggers the named action.
+
+        Uses KeyEvent.matches so user-supplied combos are modifier-order- and
+        alias-independent ('shift+ctrl+x' == 'ctrl+shift+x' == 'control+shift+x').
+        """
         combos = self._map.get(action, [])
-        s = str(event)
-        return s in combos or event.key in combos
+        return event.matches(*combos)
 
     def keys_for(self, action: str) -> list[str]:
         """Return the key combo strings registered for `action`."""

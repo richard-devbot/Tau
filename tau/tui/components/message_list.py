@@ -5,7 +5,7 @@ from typing import Any, Callable, TYPE_CHECKING
 from tau.tui.ansi import visible_width, wrap, RESET, BOLD, DIM
 from tau.tui.component import Component
 from tau.tui.diff import _is_diff
-from tau.tui.input import InputEvent, KeyEvent
+from tau.tui.input import InputEvent, Key, KeyEvent
 from tau.tui.markdown import render_markdown
 from tau.tui.theme import MessageTheme
 
@@ -660,14 +660,20 @@ class MessageList(Component):
     def handle_input(self, event: InputEvent) -> bool:
         if not self._focused or not isinstance(event, KeyEvent):
             return False
-        match str(event):
-            case "page_up" | "b":      self.scroll_up(self._height)
-            case "page_down" | "space": self.scroll_down(self._height)
-            case "up" | "k":           self.scroll_up(1)
-            case "down" | "j":         self.scroll_down(1)
-            case "end" | "shift+g":    self.scroll_to_bottom()
-            case "home" | "g":         self.scroll_to_top()
-            case _:                    return False
+        if event.matches(Key.PAGE_UP, "b"):
+            self.scroll_up(self._height)
+        elif event.matches(Key.PAGE_DOWN, Key.SPACE):
+            self.scroll_down(self._height)
+        elif event.matches(Key.UP, "k"):
+            self.scroll_up(1)
+        elif event.matches(Key.DOWN, "j"):
+            self.scroll_down(1)
+        elif event.matches(Key.END, Key.shift("g")):
+            self.scroll_to_bottom()
+        elif event.matches(Key.HOME, "g"):
+            self.scroll_to_top()
+        else:
+            return False
         return True
 
     def invalidate(self) -> None:

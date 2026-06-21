@@ -3,7 +3,7 @@ from __future__ import annotations
 from tau.tui.ansi import RESET, BOLD, BRIGHT_BLACK, BRIGHT_WHITE
 from tau.tui.component import Component
 from tau.tui.fuzzy import fuzzy_filter
-from tau.tui.input import InputEvent, KeyEvent
+from tau.tui.input import InputEvent, Key, KeyEvent
 
 if True:  # avoid circular at runtime
     from typing import TYPE_CHECKING
@@ -115,11 +115,10 @@ class CommandPalette(Component):
     def handle_input(self, event: InputEvent) -> bool:
         if not isinstance(event, KeyEvent):
             return False
-        key = str(event)
-        if key in ("up", "ctrl+p"):
+        if event.matches(Key.UP, Key.ctrl("p")):
             self.move_up()
             return True
-        if key in ("down", "ctrl+n"):
+        if event.matches(Key.DOWN, Key.ctrl("n")):
             self.move_down()
             return True
         return False

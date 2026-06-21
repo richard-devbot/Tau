@@ -19,6 +19,7 @@ _KEY_ALIASES = {
     "esc": "escape", "return": "enter", "del": "delete",
     "spacebar": "space", " ": "space",
     "pgup": "pageup", "pgdn": "pagedown", "pagedown": "pagedown", "pageup": "pageup",
+    "page_up": "pageup", "page_down": "pagedown",   # parser emits the underscore form
 }
 
 
@@ -77,19 +78,12 @@ class KeyEvent:
     def matches(self, *keys: str) -> bool:
         """True if this event matches any of the given key combos.
 
-        Matching is modifier-order- and alias-independent: 'ctrl+shift+p',
-        'shift+ctrl+p' and 'control+shift+p' all match the same event. A bare
-        base name (e.g. 'up') matches the key regardless of modifiers, preserving
-        the historical loose-match behaviour.
+        Matching is exact on modifiers (so 'escape' does NOT match 'alt+escape')
+        but modifier-order- and alias-independent: 'ctrl+shift+p', 'shift+ctrl+p'
+        and 'control+shift+p' all match the same event.
         """
         sig = self._signature()
-        for k in keys:
-            if _normalize_keyid(k) == sig:
-                return True
-            # Bare key name (no '+') matches regardless of held modifiers.
-            if "+" not in k and _KEY_ALIASES.get(k.lower(), k.lower()) == sig[1]:
-                return True
-        return False
+        return any(_normalize_keyid(k) == sig for k in keys)
 
 
 def matches_key(event: "KeyEvent", *keys: str) -> bool:
