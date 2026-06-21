@@ -6,12 +6,12 @@ _TEXT_IMAGE_VIDEO = [Modality.Text, Modality.Image, Modality.Video]
 
 models = [
     # OpenAI Codex (OAuth)
-    Model(id="gpt-5.5",              name="GPT-5.5",              provider="openai-codex", cost=Cost(), thinking=True, context_window=400_000, input=_TEXT_IMAGE, output=_TEXT),
-    Model(id="gpt-5.4",              name="GPT-5.4",              provider="openai-codex", cost=Cost(), thinking=True, context_window=400_000, input=_TEXT_IMAGE, output=_TEXT),
-    Model(id="gpt-5.4-mini",         name="GPT-5.4 Mini",         provider="openai-codex", cost=Cost(), thinking=True, context_window=400_000, input=_TEXT_IMAGE, output=_TEXT),
-    Model(id="gpt-5.3-codex",        name="GPT-5.3 Codex",        provider="openai-codex", cost=Cost(), thinking=True, context_window=400_000, input=_TEXT_IMAGE, output=_TEXT),
-    Model(id="gpt-5.3-codex-spark",  name="GPT-5.3 Codex Spark",  provider="openai-codex", cost=Cost(), thinking=True, context_window=400_000, input=_TEXT_IMAGE, output=_TEXT),
-    Model(id="gpt-5.2",              name="GPT-5.2",              provider="openai-codex", cost=Cost(), thinking=True, context_window=400_000, input=_TEXT_IMAGE, output=_TEXT),
+    Model(id="gpt-5.5",              name="GPT-5.5",              provider="openai-codex", cost=Cost(), thinking=True, context_window=272_000, input=_TEXT_IMAGE, output=_TEXT),
+    Model(id="gpt-5.4",              name="GPT-5.4",              provider="openai-codex", cost=Cost(), thinking=True, context_window=272_000, input=_TEXT_IMAGE, output=_TEXT),
+    Model(id="gpt-5.4-mini",         name="GPT-5.4 Mini",         provider="openai-codex", cost=Cost(), thinking=True, context_window=272_000, input=_TEXT_IMAGE, output=_TEXT),
+    Model(id="gpt-5.3-codex",        name="GPT-5.3 Codex",        provider="openai-codex", cost=Cost(), thinking=True, context_window=272_000, input=_TEXT_IMAGE, output=_TEXT),
+    Model(id="gpt-5.3-codex-spark",  name="GPT-5.3 Codex Spark",  provider="openai-codex", cost=Cost(), thinking=True, context_window=272_000, input=_TEXT_IMAGE, output=_TEXT),
+    Model(id="gpt-5.2",              name="GPT-5.2",              provider="openai-codex", cost=Cost(), thinking=True, context_window=272_000, input=_TEXT_IMAGE, output=_TEXT),
     # Anthropic Claude Code (OAuth)
     Model(id="claude-opus-4-7",           name="Claude Opus 4.7",   provider="anthropic-claude-code", cost=Cost(), thinking=True, context_window=200_000, input=_TEXT_IMAGE, output=_TEXT),
     Model(id="claude-sonnet-4-6",         name="Claude Sonnet 4.6", provider="anthropic-claude-code", cost=Cost(), thinking=True, context_window=200_000, input=_TEXT_IMAGE, output=_TEXT),
