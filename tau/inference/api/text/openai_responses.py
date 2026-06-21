@@ -39,8 +39,12 @@ _STOP_REASON: dict[str, StopReason] = {
 }
 
 
-def _content_to_openai(content_items: list) -> list[dict[str, Any]]:
-    """Convert typed message content items to OpenAI Responses API content parts."""
+def _content_to_openai(content_items: list, supports_thinking: bool = True) -> list[dict[str, Any]]:
+    """Convert typed message content items to OpenAI Responses API content parts.
+
+    When supports_thinking is False, ThinkingContent blocks are stripped so
+    non-reasoning models don't receive reasoning input they can't accept.
+    """
     parts: list[dict[str, Any]] = []
     for item in content_items:
         match item:
@@ -51,11 +55,12 @@ def _content_to_openai(content_items: list) -> list[dict[str, Any]]:
                     url = b64 if b64.startswith("http") else f"data:{mime or 'image/png'};base64,{b64}"
                     parts.append({"type": "input_image", "image_url": url})
             case ThinkingContent():
-                parts.append({
-                    "type": "thinking",
-                    "thinking": item.content,
-                    "signature": item.signature,
-                })
+                if supports_thinking:
+                    parts.append({
+                        "type": "thinking",
+                        "thinking": item.content,
+                        "signature": item.signature,
+                    })
             case ToolCallContent():
                 parts.append({
                     "type": "function_call",
@@ -68,6 +73,7 @@ def _content_to_openai(content_items: list) -> list[dict[str, Any]]:
 
 def _messages_to_input(
     messages: list[LLMMessage],
+    supports_thinking: bool = True,
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """Convert a message list to OpenAI Responses API input items, extracting system as instructions."""
     instructions: str | None = None
@@ -88,7 +94,7 @@ def _messages_to_input(
                         })
             case UserMessage() | AssistantMessage():
                 role = "user" if isinstance(msg, UserMessage) else "assistant"
-                parts = _content_to_openai(msg.contents)
+                parts = _content_to_openai(msg.contents, supports_thinking=supports_thinking)
                 if parts:
                     input_items.append({"role": role, "content": parts})
 
@@ -155,7 +161,7 @@ class OpenAIResponsesAPI(BaseAPI):
         """Stream LLMEvents from the OpenAI Responses API."""
         if self.options.api_key:
             self._client.api_key = self.options.api_key
-        instructions, input_items = _messages_to_input(context.messages)
+        instructions, input_items = _messages_to_input(context.messages, supports_thinking=bool(model.thinking))
         params = self._build_params(model, instructions, input_items, tools=context.tools or None)
         text_format = _text_format(context.response_format)
         if text_format is not None:

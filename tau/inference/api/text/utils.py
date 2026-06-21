@@ -158,8 +158,12 @@ def openai_messages_to_chat(messages: list) -> list[dict[str, Any]]:
     return result
 
 
-def anthropic_messages_to_list(messages: list) -> tuple[str | None, list[dict[str, Any]]]:
-    """Convert a message list to Anthropic Messages API format."""
+def anthropic_messages_to_list(messages: list, supports_thinking: bool = True) -> tuple[str | None, list[dict[str, Any]]]:
+    """Convert a message list to Anthropic Messages API format.
+
+    When supports_thinking is False, ThinkingContent blocks are stripped so
+    non-extended-thinking models don't receive reasoning input they can't accept.
+    """
     from tau.message.types import (
         SystemMessage, UserMessage, AssistantMessage, ToolMessage,
         TextContent, ImageContent, ThinkingContent, ToolCallContent, ToolResultContent,
@@ -200,7 +204,8 @@ def anthropic_messages_to_list(messages: list) -> tuple[str | None, list[dict[st
                         case TextContent():
                             parts.append({"type": "text", "text": item.content})
                         case ThinkingContent():
-                            parts.append({"type": "thinking", "thinking": item.content, "signature": item.signature})
+                            if supports_thinking:
+                                parts.append({"type": "thinking", "thinking": item.content, "signature": item.signature})
                         case ToolCallContent():
                             parts.append({"type": "tool_use", "id": item.id, "name": item.name, "input": item.args})
                 result.append({"role": "assistant", "content": parts})

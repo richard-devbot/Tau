@@ -109,7 +109,7 @@ class AnthropicClaudeCodeAPI(BaseAPI):
     async def stream(self, context: LLMContext, model: Model) -> AsyncGenerator[LLMEvent, None]:  # type: ignore[override]
         """Stream LLMEvents from the Anthropic Messages API using an OAuth token."""
         self._sync_client()
-        system, anthropic_messages = anthropic_messages_to_list(context.messages)
+        system, anthropic_messages = anthropic_messages_to_list(context.messages, supports_thinking=bool(model.thinking))
         if context.system_prompt:
             system = context.system_prompt
         params = self._build_params(model, system, anthropic_messages, tools=context.tools or None)
