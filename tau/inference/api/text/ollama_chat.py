@@ -31,8 +31,12 @@ _STOP_REASON: dict[str, StopReason] = {
 }
 
 
-def _messages_to_ollama(messages: list[LLMMessage]) -> list[dict[str, Any]]:
-    """Convert a message list to Ollama Chat API format, placing images in a separate field."""
+def _messages_to_ollama(messages: list[LLMMessage], supports_thinking: bool = True) -> list[dict[str, Any]]:
+    """Convert a message list to Ollama Chat API format, placing images in a separate field.
+
+    When supports_thinking is False, ThinkingContent blocks are stripped so
+    non-thinking Ollama models don't receive a thinking field they can't use.
+    """
     result: list[dict[str, Any]] = []
     for msg in messages:
         match msg:
@@ -63,7 +67,8 @@ def _messages_to_ollama(messages: list[LLMMessage]) -> list[dict[str, Any]]:
                         case TextContent():
                             text_parts.append(item.content)
                         case ThinkingContent():
-                            thinking_parts.append(item.content)
+                            if supports_thinking:
+                                thinking_parts.append(item.content)
                         case ToolCallContent():
                             tool_calls.append({
                                 "function": {"name": item.name, "arguments": item.args}
@@ -109,7 +114,7 @@ class OllamaChatAPI(BaseAPI):
 
     async def stream(self, context: LLMContext, model: Model) -> AsyncGenerator[LLMEvent, None]:  # type: ignore[override]
         """Stream LLMEvents from the local Ollama Chat endpoint."""
-        ollama_messages = _messages_to_ollama(context.messages)
+        ollama_messages = _messages_to_ollama(context.messages, supports_thinking=bool(model.thinking))
         if context.system_prompt:
             ollama_messages = [{"role": "system", "content": context.system_prompt}] + ollama_messages
 
