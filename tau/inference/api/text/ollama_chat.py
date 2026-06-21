@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json
+from uuid import uuid4
 from tau.inference.api.text.utils import parse_tool_args
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any
@@ -21,6 +21,7 @@ from tau.message.types import (
 from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from tau.tool.types import Tool
+    from tau.message.types import LLMMessage
 
 _MINIMAL_LEVELS = {ThinkingLevel.Low, ThinkingLevel.Minimal}
 
@@ -122,6 +123,7 @@ class OllamaChatAPI(BaseAPI):
         thinking_buf = ""
         _input_tokens = 0
         _output_tokens = 0
+        tool_calls_seen = False
 
         yield StartEvent()
 
@@ -178,13 +180,19 @@ class OllamaChatAPI(BaseAPI):
 
                 # Ollama sends all tool calls in the final chunk, not incrementally.
                 if msg.tool_calls:
-                    for i, tc in enumerate(msg.tool_calls):
+                    tool_calls_seen = True
+                    for tc in msg.tool_calls:
                         fn = tc.function
                         args_raw = fn.arguments
                         args = parse_tool_args(args_raw)
 
-                        yield ToolCallStartEvent(tool_call=ToolCallContent(name=fn.name))
-                        yield ToolCallEndEvent(tool_call=ToolCallContent(name=fn.name, args=args))
+                        # Ollama doesn't supply tool-call ids; synthesize one so
+                        # the engine can pair each result back to its call (and
+                        # keep parallel calls distinct).
+                        tc_id = getattr(tc, "id", None) or f"call_{uuid4().hex}"
+
+                        yield ToolCallStartEvent(tool_call=ToolCallContent(id=tc_id, name=fn.name))
+                        yield ToolCallEndEvent(tool_call=ToolCallContent(id=tc_id, name=fn.name, args=args))
 
                 if chunk.done:
                     _input_tokens = getattr(chunk, 'prompt_eval_count', 0) or 0
@@ -193,7 +201,14 @@ class OllamaChatAPI(BaseAPI):
                         yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))
                     if text_started:
                         yield TextEndEvent(text=TextContent(content=text_buf))
-                    stop_reason = _STOP_REASON.get(chunk.done_reason or "", StopReason.Stop)
+                    # Ollama reports done_reason="stop" even when the response
+                    # contains tool calls, so it never maps to StopReason.ToolCalls
+                    # on its own. Override here so the engine dispatches the tools
+                    # instead of ending the turn with a dangling, unexecuted call.
+                    if tool_calls_seen:
+                        stop_reason = StopReason.ToolCalls
+                    else:
+                        stop_reason = _STOP_REASON.get(chunk.done_reason or "", StopReason.Stop)
                     yield EndEvent(reason=stop_reason, input_tokens=_input_tokens, output_tokens=_output_tokens)
 
         except Exception as e:
