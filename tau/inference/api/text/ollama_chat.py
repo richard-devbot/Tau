@@ -34,8 +34,10 @@ _STOP_REASON: dict[str, StopReason] = {
 def _messages_to_ollama(messages: list[LLMMessage], supports_thinking: bool = True) -> list[dict[str, Any]]:
     """Convert a message list to Ollama Chat API format, placing images in a separate field.
 
-    When supports_thinking is False, ThinkingContent blocks are stripped so
-    non-thinking Ollama models don't receive a thinking field they can't use.
+    When supports_thinking is False, ThinkingContent is merged into the text
+    content (thinking first, then text) so non-thinking models receive full
+    context without a thinking field they cannot use.
+    This merge is in-memory only; the session file is not affected.
     """
     result: list[dict[str, Any]] = []
     for msg in messages:
@@ -67,15 +69,20 @@ def _messages_to_ollama(messages: list[LLMMessage], supports_thinking: bool = Tr
                         case TextContent():
                             text_parts.append(item.content)
                         case ThinkingContent():
-                            if supports_thinking:
-                                thinking_parts.append(item.content)
+                            thinking_parts.append(item.content)
                         case ToolCallContent():
                             tool_calls.append({
                                 "function": {"name": item.name, "arguments": item.args}
                             })
-                entry = {"role": "assistant", "content": "\n".join(text_parts)}
-                if thinking_parts:
-                    entry["thinking"] = "\n".join(thinking_parts)
+                if supports_thinking:
+                    content = "\n".join(text_parts)
+                    entry = {"role": "assistant", "content": content}
+                    if thinking_parts:
+                        entry["thinking"] = "\n".join(thinking_parts)
+                else:
+                    # Merge thinking before text so context is preserved.
+                    content = "\n".join(thinking_parts + text_parts)
+                    entry = {"role": "assistant", "content": content}
                 if tool_calls:
                     entry["tool_calls"] = tool_calls
                 result.append(entry)

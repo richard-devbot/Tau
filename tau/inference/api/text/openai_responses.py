@@ -42,10 +42,40 @@ _STOP_REASON: dict[str, StopReason] = {
 def _content_to_openai(content_items: list, supports_thinking: bool = True) -> list[dict[str, Any]]:
     """Convert typed message content items to OpenAI Responses API content parts.
 
-    When supports_thinking is False, ThinkingContent blocks are stripped so
-    non-reasoning models don't receive reasoning input they can't accept.
+    When supports_thinking is False, ThinkingContent is merged into the text
+    content (thinking first, then text) so non-reasoning models receive full
+    context without structured reasoning blocks they cannot accept.
+    This merge is in-memory only; the session file is not affected.
     """
-    parts: list[dict[str, Any]] = []
+    if not supports_thinking:
+        thinking_parts: list[str] = []
+        text_parts: list[str] = []
+        other_parts: list[dict[str, Any]] = []
+        for item in content_items:
+            match item:
+                case ThinkingContent():
+                    thinking_parts.append(item.content)
+                case TextContent():
+                    text_parts.append(item.content)
+                case ImageContent():
+                    for b64, mime in item.to_base64():
+                        url = b64 if b64.startswith("http") else f"data:{mime or 'image/png'};base64,{b64}"
+                        other_parts.append({"type": "input_image", "image_url": url})
+                case ToolCallContent():
+                    other_parts.append({
+                        "type": "function_call",
+                        "call_id": item.id,
+                        "name": item.name,
+                        "arguments": json.dumps(item.args),
+                    })
+        parts: list[dict[str, Any]] = []
+        if thinking_parts or text_parts:
+            merged = "\n".join(thinking_parts + text_parts)
+            parts.append({"type": "input_text", "text": merged})
+        parts.extend(other_parts)
+        return parts
+
+    parts = []
     for item in content_items:
         match item:
             case TextContent():
@@ -55,12 +85,11 @@ def _content_to_openai(content_items: list, supports_thinking: bool = True) -> l
                     url = b64 if b64.startswith("http") else f"data:{mime or 'image/png'};base64,{b64}"
                     parts.append({"type": "input_image", "image_url": url})
             case ThinkingContent():
-                if supports_thinking:
-                    parts.append({
-                        "type": "thinking",
-                        "thinking": item.content,
-                        "signature": item.signature,
-                    })
+                parts.append({
+                    "type": "thinking",
+                    "thinking": item.content,
+                    "signature": item.signature,
+                })
             case ToolCallContent():
                 parts.append({
                     "type": "function_call",

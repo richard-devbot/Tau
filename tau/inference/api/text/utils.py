@@ -199,15 +199,25 @@ def anthropic_messages_to_list(messages: list, supports_thinking: bool = True) -
                 result.append({"role": "user", "content": parts})
             case AssistantMessage():
                 parts = []
+                thinking_parts: list[str] = []
+                text_parts_asst: list[str] = []
                 for item in msg.contents:
                     match item:
                         case TextContent():
-                            parts.append({"type": "text", "text": item.content})
+                            if supports_thinking:
+                                parts.append({"type": "text", "text": item.content})
+                            else:
+                                text_parts_asst.append(item.content)
                         case ThinkingContent():
                             if supports_thinking:
                                 parts.append({"type": "thinking", "thinking": item.content, "signature": item.signature})
+                            else:
+                                thinking_parts.append(item.content)
                         case ToolCallContent():
                             parts.append({"type": "tool_use", "id": item.id, "name": item.name, "input": item.args})
+                if not supports_thinking and (thinking_parts or text_parts_asst):
+                    merged = "\n".join(thinking_parts + text_parts_asst)
+                    parts.insert(0, {"type": "text", "text": merged})
                 result.append({"role": "assistant", "content": parts})
             case ToolMessage():
                 tool_results = []

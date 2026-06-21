@@ -38,9 +38,10 @@ _MINIMAL_LEVELS = {ThinkingLevel.Low, ThinkingLevel.Minimal}
 def _messages_to_mistral(messages: list[LLMMessage], supports_thinking: bool = True) -> list[dict[str, Any]]:
     """Convert a message list to Mistral Chat API format.
 
-    When supports_thinking is False, ThinkingContent blocks are stripped from
-    assistant messages so non-reasoning models (e.g. devstral) don't receive
-    reasoning input they cannot accept.
+    When supports_thinking is False, ThinkingContent is merged into the text
+    content (thinking first, then text) so non-reasoning models receive full
+    context without being sent structured reasoning blocks they cannot accept.
+    This merge is in-memory only; the session file is not affected.
     """
     result: list[dict[str, Any]] = []
     for msg in messages:
@@ -66,6 +67,8 @@ def _messages_to_mistral(messages: list[LLMMessage], supports_thinking: bool = T
                                     "thinking": [{"type": "text", "text": item.content}],
                                     "signature": item.signature,
                                 })
+                            else:
+                                text_parts.insert(0, item.content)
                         case TextContent():
                             if has_thinking:
                                 content_chunks.append({"type": "text", "text": item.content})
@@ -82,7 +85,7 @@ def _messages_to_mistral(messages: list[LLMMessage], supports_thinking: bool = T
                     # When thinking blocks are present, Mistral requires chunked content format.
                     entry["content"] = content_chunks
                 else:
-                    text = "".join(text_parts) or None
+                    text = "\n".join(text_parts) or None
                     if text is not None:
                         entry["content"] = text
                 if tool_calls:
