@@ -145,7 +145,7 @@ class RuntimeContext:
         else:
             llm.api.options.max_retries = 0
         if llm.model.thinking:
-            llm.api.options.thinking_level = settings_manager.get_thinking_level() or llm.model.default_thinking_level
+            llm.api.options.thinking_level = settings_manager.get_thinking_level() or llm.model.thinking_level
 
         # ── Session manager ───────────────────────────────────────────────────
         if config.resume and not config.session_file and config.persist_session:

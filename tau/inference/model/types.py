@@ -32,7 +32,7 @@ class Model:
     provider: str
     cost: Cost = field(default_factory=Cost)
     thinking: bool = False
-    default_thinking_level: ThinkingLevel | None = None
+    thinking_level: ThinkingLevel | None = None
     context_window: int = 0
     max_input_tokens: int | None = None
     max_output_tokens: int = 16384

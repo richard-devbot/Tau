@@ -194,7 +194,7 @@ class Runtime:
         old_model = agent._engine.llm.model
         new_llm = TextLLM(model_id=model_id, provider=provider)
         if new_llm.model.thinking:
-            new_llm.api.options.thinking_level = new_llm.model.default_thinking_level
+            new_llm.api.options.thinking_level = new_llm.model.thinking_level
         agent._engine.set_llm(new_llm)
         agent._context_window = new_llm.model.input_limit or 128_000
         await self._context.hooks.emit(
