@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from tau.tui.input import KeyEvent, InputEvent
+from tau.extensions import ExtensionContext
+from tau.tui.agent_hooks import AgentHookHandler
+from tau.tui.commands.context import CommandContext
 from tau.tui.components.layout import Layout
+from tau.tui.input import InputEvent, KeyEvent
+from tau.tui.input_handler import InputHandler
 from tau.tui.keybindings import KeyMap, configure_keybindings
 from tau.tui.theme import LayoutTheme
 from tau.tui.tui import TUI
-from tau.tui.commands.context import CommandContext
-from tau.tui.agent_hooks import AgentHookHandler
-from tau.tui.input_handler import InputHandler
-from tau.extensions import ExtensionContext
 
 if TYPE_CHECKING:
     from tau.runtime.service import Runtime
@@ -40,7 +41,9 @@ class App:
         self._layout = layout
         self._input = InputHandler(runtime, layout, tui)
         self._hooks = AgentHookHandler(
-            runtime, layout, tui,
+            runtime,
+            layout,
+            tui,
             on_palette_refresh=self.refresh_palette,
             on_turn_content=self._input.mark_turn_content,
             on_settled=self._input.on_settled,
@@ -62,12 +65,13 @@ class App:
         keybindings: KeyMap | None = None,
     ) -> App:
         """Build the TUI around an already-constructed Runtime."""
-        from tau.themes.registry import theme_registry, DEFAULT_THEME
+        from tau.themes.registry import DEFAULT_THEME, theme_registry
 
         cwd = runtime.session_manager.cwd if runtime.session_manager is not None else None
         theme_registry.load_external(cwd=cwd)
 
         from tau.prompts.registry import prompt_registry
+
         prompt_registry.load_external(cwd=cwd)
 
         resolved_theme: LayoutTheme | None
@@ -93,9 +97,9 @@ class App:
         picker_max_visible = 8
         autocomplete_max_visible = 5
         if sm is not None:
-            resolved_theme.message.show_thinking   = sm.get_show_thinking()
+            resolved_theme.message.show_thinking = sm.get_show_thinking()
             resolved_theme.message.show_tool_calls = sm.get_show_tool_calls()
-            resolved_theme.message.show_images     = sm.get_show_images()
+            resolved_theme.message.show_images = sm.get_show_images()
             picker_max_visible = sm.get_picker_max_visible()
             autocomplete_max_visible = sm.get_autocomplete_max_visible()
 
@@ -121,9 +125,7 @@ class App:
 
         # ESC clears the editor only while idle; mid-stream it must fall through
         # to the global key handler so it can abort the run.
-        layout.set_busy_check(
-            lambda: (a := runtime.agent) is not None and not a.is_idle()
-        )
+        layout.set_busy_check(lambda: (a := runtime.agent) is not None and not a.is_idle())
 
         runtime.set_layout(layout)
 
@@ -134,6 +136,7 @@ class App:
         ext = runtime.extension_runtime
         if ext is not None:
             from tau.tui.message_renderers import message_renderer_registry
+
             for ctype, fn in ext.get_message_renderers().items():
                 message_renderer_registry.register(ctype, fn)
             for provider in ext.get_autocomplete_providers():
@@ -149,6 +152,7 @@ class App:
     ) -> App:
         """Convenience: build Runtime from config then attach the TUI."""
         from tau.runtime.service import Runtime
+
         runtime = await Runtime.create(config)
         return await cls.create(runtime, theme=theme, keybindings=keybindings)
 
@@ -176,8 +180,12 @@ class App:
 
     def _on_model_palette_commit(self, model_id: str, provider: str) -> None:
         import asyncio
+
         from tau.tui.commands import model as cmd_model
-        self._track_task(asyncio.ensure_future(cmd_model._apply_model(self._ctx(), model_id, provider)))
+
+        self._track_task(
+            asyncio.ensure_future(cmd_model._apply_model(self._ctx(), model_id, provider))
+        )
 
     def _track_task(self, task: asyncio.Task) -> None:
         self._pending_tasks.add(task)
@@ -189,42 +197,80 @@ class App:
 
     def _register_ui_commands(self) -> None:
         from tau.commands.types import CommandInfo
-        from tau.tui.commands import model as cmd_model
         from tau.tui.commands import appearance as cmd_appearance
-        from tau.tui.commands import session as cmd_session
         from tau.tui.commands import auth as cmd_auth
         from tau.tui.commands import misc as cmd_misc
+        from tau.tui.commands import model as cmd_model
+        from tau.tui.commands import session as cmd_session
 
         reg = [
-            CommandInfo(name="model",    description="Switch the active model (interactive picker).",
-                        call=lambda _r, _a: cmd_model.open_model_selector(self._ctx()),
-                        ),
-            CommandInfo(name="effort",   description="Set the thinking effort level for the current model.",
-                        call=lambda _r, _a: cmd_model.open_effort_selector(self._ctx())),
-            CommandInfo(name="theme",    description="Change the UI theme (interactive picker).",
-                        call=lambda _r, _a: cmd_appearance.open_theme_selector(self._ctx())),
-            CommandInfo(name="settings", description="Show current settings.",
-                        call=lambda _r, _a: cmd_appearance.open_settings_panel(self._ctx())),
-            CommandInfo(name="resume",   description="Browse and resume a past session interactively.",
-                        call=lambda _r, _a: cmd_session.open_resume_selector(self._ctx())),
-            CommandInfo(name="tree",     description="Navigate the session tree and switch to a different branch.",
-                        call=lambda _r, _a: cmd_session.open_tree_selector(self._ctx())),
-            CommandInfo(name="clone",    description="Duplicate the current session at the current position.",
-                        call=lambda _r, _a: cmd_session.cmd_clone(self._ctx())),
-            CommandInfo(name="session",  description="Show session info and stats.",
-                        call=lambda _r, _a: cmd_session.cmd_session(self._ctx())),
-            CommandInfo(name="login",    description="Save an API key for a provider.",
-                        call=lambda _r, _a: cmd_auth.open_login_selector(self._ctx())),
-            CommandInfo(name="logout",   description="Remove stored credentials for a provider.",
-                        call=lambda _r, _a: cmd_auth.open_logout_selector(self._ctx())),
-            CommandInfo(name="copy",     description="Copy the last assistant message to the clipboard.",
-                        call=lambda _r, _a: cmd_misc.cmd_copy(self._ctx())),
-            CommandInfo(name="help",     description="List all commands and keyboard shortcuts.",
-                        call=lambda _r, _a: cmd_misc.show_help(self._ctx()),
-                        aliases=["?"]),
-            CommandInfo(name="quit",     description="Exit tau.",
-                        call=lambda _r, _a: self._tui.stop(),
-                        aliases=["q", "exit"]),
+            CommandInfo(
+                name="model",
+                description="Switch the active model (interactive picker).",
+                call=lambda _r, _a: cmd_model.open_model_selector(self._ctx()),
+            ),
+            CommandInfo(
+                name="effort",
+                description="Set the thinking effort level for the current model.",
+                call=lambda _r, _a: cmd_model.open_effort_selector(self._ctx()),
+            ),
+            CommandInfo(
+                name="theme",
+                description="Change the UI theme (interactive picker).",
+                call=lambda _r, _a: cmd_appearance.open_theme_selector(self._ctx()),
+            ),
+            CommandInfo(
+                name="settings",
+                description="Show current settings.",
+                call=lambda _r, _a: cmd_appearance.open_settings_panel(self._ctx()),
+            ),
+            CommandInfo(
+                name="resume",
+                description="Browse and resume a past session interactively.",
+                call=lambda _r, _a: cmd_session.open_resume_selector(self._ctx()),
+            ),
+            CommandInfo(
+                name="tree",
+                description="Navigate the session tree and switch to a different branch.",
+                call=lambda _r, _a: cmd_session.open_tree_selector(self._ctx()),
+            ),
+            CommandInfo(
+                name="clone",
+                description="Duplicate the current session at the current position.",
+                call=lambda _r, _a: cmd_session.cmd_clone(self._ctx()),
+            ),
+            CommandInfo(
+                name="session",
+                description="Show session info and stats.",
+                call=lambda _r, _a: cmd_session.cmd_session(self._ctx()),
+            ),
+            CommandInfo(
+                name="login",
+                description="Save an API key for a provider.",
+                call=lambda _r, _a: cmd_auth.open_login_selector(self._ctx()),
+            ),
+            CommandInfo(
+                name="logout",
+                description="Remove stored credentials for a provider.",
+                call=lambda _r, _a: cmd_auth.open_logout_selector(self._ctx()),
+            ),
+            CommandInfo(
+                name="copy",
+                description="Copy the last assistant message to the clipboard.",
+                call=lambda _r, _a: cmd_misc.cmd_copy(self._ctx()),
+            ),
+            CommandInfo(
+                name="help",
+                description="List all commands and keyboard shortcuts.",
+                call=lambda _r, _a: cmd_misc.show_help(self._ctx()),
+                aliases=["?"],
+            ),
+            CommandInfo(
+                name="quit",
+                description="Exit tau.",
+                call=lambda _r, _a: self._tui.stop(),
+                aliases=["q", "exit"],
+            ),
         ]
         for info in reg:
             self._runtime.commands.register(info)
@@ -246,14 +292,18 @@ class App:
         """
         import logging
         import sys
-        from tau.settings.paths import get_logs_dir
+
         from tau.session.utils import create_session_id
+        from tau.settings.paths import get_logs_dir
 
         root = logging.getLogger()
         # Drop any handler that writes to the live terminal (e.g. --debug's
         # basicConfig stderr handler) — it would corrupt the renderer.
         for h in list(root.handlers):
-            if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (sys.stdout, sys.stderr):
+            if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (
+                sys.stdout,
+                sys.stderr,
+            ):
                 root.removeHandler(h)
         # Unconfigured loggers must never fall back to the stderr last-resort.
         logging.lastResort = logging.NullHandler()
@@ -302,12 +352,13 @@ class App:
 
         # Fire tui_ready so extensions can run initial UI setup now that the
         # layout exists (session_start fires earlier, before the layout is set).
-        from tau.hooks.tui import TuiReadyEvent, TuiStartEvent, TuiExitEvent
+        from tau.hooks.tui import TuiExitEvent, TuiReadyEvent, TuiStartEvent
+
         await self._runtime.hooks.emit(TuiReadyEvent())
 
         # If the project needs a trust decision, replace the root with TrustScreen
         # before the loop starts so the layout never renders until the user acts.
-        trust_needed = self._setup_trust_screen_if_needed()
+        self._setup_trust_screen_if_needed()
 
         self._track_task(asyncio.ensure_future(self._announce_update()))
 
@@ -337,7 +388,13 @@ class App:
             return False
         cwd = session_mgr.cwd
 
-        from tau.trust.manager import has_project_trust_inputs, get_trust_options, trust_store, TrustOption
+        from tau.trust.manager import (
+            TrustOption,
+            get_trust_options,
+            has_project_trust_inputs,
+            trust_store,
+        )
+
         if not has_project_trust_inputs(cwd):
             return False
 
@@ -361,11 +418,14 @@ class App:
 
             # Reload extensions so project config takes effect
             import asyncio as _asyncio
+
             async def _reload() -> None:
                 await self._runtime.reload_extensions()
+
             self._track_task(_asyncio.ensure_future(_reload()))
 
         from tau.tui.components.trust_screen import TrustScreen
+
         screen = TrustScreen(str(cwd), options, _on_commit)
         self._layout.detach(self._tui)
         self._tui.add_child(screen)
@@ -382,6 +442,7 @@ class App:
 
         if event.matches("escape"):
             import time
+
             agent = self._runtime.agent
             if agent is not None and not agent.is_idle():
                 self._input.escape_abort()
@@ -400,6 +461,7 @@ class App:
 
         if event.matches("ctrl+c"):
             import time
+
             agent = self._runtime.agent
             if agent is not None and not agent.is_idle():
                 agent.abort()
@@ -428,7 +490,7 @@ class App:
 
     def _do_double_escape(self) -> None:
         """Execute the action configured for double-Escape on an empty editor."""
-        import asyncio
+
         sm = self._runtime.settings_manager
         action = sm.get_double_escape_action() if sm is not None else "fork"
         match action:
@@ -436,9 +498,11 @@ class App:
                 return
             case "tree":
                 from tau.tui.commands import session as cmd_session
+
                 cmd_session.open_tree_selector(self._ctx())
             case "fork" | _:
                 from tau.tui.commands import session as cmd_session
+
                 cmd_session.cmd_clone(self._ctx())
 
     # -------------------------------------------------------------------------
@@ -459,6 +523,7 @@ class App:
                     result = h(ctx)
                     if asyncio.iscoroutine(result):
                         self._track_task(asyncio.ensure_future(result))  # type: ignore[arg-type]
+
                 return on_input
 
             self._unsubs.append(self._tui.on_input(_make_handler(key, handler)))
@@ -470,6 +535,7 @@ class App:
     def _build_palette_entries(self):
         from tau.commands.types import CommandInfo
         from tau.prompts.registry import prompt_registry
+        from tau.skills.registry import skill_registry
 
         # Commands whose feature is currently switched off are hidden from the
         # palette (and treated as unavailable) for this session.
@@ -485,22 +551,41 @@ class App:
                 continue
             if cmd.name in overrides:
                 from dataclasses import replace
+
                 entries.append(replace(cmd, description=overrides[cmd.name]))
             else:
                 entries.append(cmd)
         for tmpl in prompt_registry.list():
             hint = f"  {tmpl.argument_hint}" if tmpl.argument_hint else ""
-            entries.append(CommandInfo(
-                name=tmpl.name,
-                description=tmpl.description + hint,
-                call=lambda _r, _a: None,
-                argument_hint=tmpl.argument_hint,
-            ))
+            entries.append(
+                CommandInfo(
+                    name=tmpl.name,
+                    description=tmpl.description + hint,
+                    call=lambda _r, _a: None,
+                    argument_hint=tmpl.argument_hint,
+                )
+            )
+        registered = {cmd.name for cmd in entries}
+        for skill in skill_registry.list_user_invocable():
+            for name in [skill.name, *skill.commands]:
+                if name in registered:
+                    continue
+                registered.add(name)
+                entries.append(
+                    CommandInfo(
+                        name=name,
+                        description=skill.description,
+                        call=lambda _r, _a: None,
+                        aliases=skill.aliases if name == skill.name else [],
+                        argument_hint=skill.argument_hint,
+                    )
+                )
         return entries
 
     def _palette_dynamic_descriptions(self) -> dict[str, str]:
-        from tau.tui.commands import model as cmd_model
         from tau.tui.commands import auth as cmd_auth
+        from tau.tui.commands import model as cmd_model
+
         overrides = cmd_model.get_palette_overrides(self._runtime.agent)
         overrides.update(cmd_auth.get_palette_overrides())
         return overrides
@@ -530,15 +615,20 @@ class App:
         from tau.tui.ansi import BOLD, BRIGHT_YELLOW, DIM, RESET
         from tau.tui.component import Column, StaticComponent
         from tau.tui.components.dynamic_border import DynamicBorder
+
         color = lambda s: BRIGHT_YELLOW + s + RESET  # noqa: E731
-        banner = Column([
-            DynamicBorder(color),
-            StaticComponent([
-                f"  {BRIGHT_YELLOW}⚡{RESET} Update available: {BOLD}v{latest}{RESET}"
-                f"{DIM}  ·  run: tau update{RESET}",
-            ]),
-            DynamicBorder(color),
-        ])
+        banner = Column(
+            [
+                DynamicBorder(color),
+                StaticComponent(
+                    [
+                        f"  {BRIGHT_YELLOW}⚡{RESET} Update available: {BOLD}v{latest}{RESET}"
+                        f"{DIM}  ·  run: tau update{RESET}",
+                    ]
+                ),
+                DynamicBorder(color),
+            ]
+        )
         self._layout.set_widget("version_update", banner, placement="above_editor")
 
     async def _cleanup(self) -> None:

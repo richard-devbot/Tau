@@ -62,7 +62,7 @@ Type `/` to open the command palette. Commands are fuzzy-searchable — type a f
 | `/help` or `/?` | List all commands and keyboard shortcuts |
 | `/quit` or `/q` or `/exit` | Exit tau |
 
-Extensions and prompts also appear in the command palette. Type `/` and browse to see everything available.
+Extensions, prompts, and user-invocable skills also appear in the command palette. Type `/` and browse to see everything available. Skills can be invoked either as `/skill-name`, through the legacy `/skill:skill-name` form, or through any extra command names declared in the skill frontmatter.
 
 ---
 

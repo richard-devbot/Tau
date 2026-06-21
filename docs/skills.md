@@ -78,6 +78,10 @@ description: Refactor Python code for clarity, following project conventions
 | `name` | No | Skill name (defaults to filename stem or directory name) |
 | `description` | **Yes** | One-line description shown to the model — this determines when the skill is loaded |
 | `disable-model-invocation` | No | Set to `true` to hide from the model (skill still loads but isn't listed in the prompt) |
+| `user-invocable` | No | Set to `false` to hide the skill from slash-command discovery |
+| `commands` | No | Extra slash command names that invoke this skill, as a YAML list or comma/space-separated string |
+| `aliases` | No | Alias names for each generated skill command |
+| `argument-hint` | No | Hint shown by the command palette for expected arguments |
 
 The `description` field is critical — write it so the model can match it against user intent:
 
@@ -89,14 +93,42 @@ description: Deploy the application to staging or production environments
 
 ## Invoking a Skill Explicitly
 
-You can invoke a skill directly by name, bypassing the model's matching:
+Every user-invocable skill is registered as a slash command using its skill name:
+
+```text
+/refactor
+/deploy staging
+```
+
+The legacy explicit form also works:
 
 ```text
 /skill:refactor
 /skill:deploy staging
 ```
 
-Arguments after the skill name are available inside the skill as `$1`, `$2`, `$@` — the same substitution syntax as [Prompt Templates](prompts.md#argument-substitution).
+Arguments after the skill name are appended to the expanded skill prompt. Skills can also define friendlier command names and aliases:
+
+```markdown
+---
+name: youtube-video-understanding
+description: Understand and summarize YouTube videos
+commands:
+  - youtube
+aliases:
+  - yt
+argument-hint: "<youtube-url-or-video-id> [request]"
+---
+```
+
+This exposes all of these commands:
+
+```text
+/youtube-video-understanding <args>
+/youtube <args>
+/yt <args>
+```
+
 
 ## Skill Discovery
 

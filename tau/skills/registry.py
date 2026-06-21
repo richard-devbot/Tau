@@ -10,14 +10,16 @@ Skills are listed in the system prompt as <available_skills> XML so the model
 can load them on demand via the read tool, or invoked explicitly with
 /skill:name [args].
 """
+
 from __future__ import annotations
 
+import builtins
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from tau.core.registry import Registry
-from tau.skills.types import Skill, SkillLoadError
 from tau.skills.loader import load_skills_from_dir
+from tau.skills.types import Skill, SkillLoadError
 
 
 class SkillRegistry(Registry[Skill, SkillLoadError]):
@@ -26,6 +28,7 @@ class SkillRegistry(Registry[Skill, SkillLoadError]):
 
     def _get_dir(self, cwd: Path | None = None) -> Path:
         from tau.settings.paths import get_skills_dir
+
         return get_skills_dir(cwd)
 
     def _builtins_subdir(self) -> str:
@@ -42,12 +45,17 @@ class SkillRegistry(Registry[Skill, SkillLoadError]):
         self._ensure_builtins()
         return [s for s in self._registry.values() if not s.disable_model_invocation]
 
-    def list_all(self) -> List[Skill]:
+    def list_all(self) -> builtins.list[Skill]:
         """Return all registered skills, including disabled ones."""
         self._ensure_builtins()
         return list(self._registry.values())
 
-    def format_for_system_prompt(self, skills: List[Skill]) -> str:
+    def list_user_invocable(self) -> builtins.list[Skill]:
+        """Return all skills that should appear as slash commands."""
+        self._ensure_builtins()
+        return [s for s in self._registry.values() if s.user_invocable]
+
+    def format_for_system_prompt(self, skills: builtins.list[Skill]) -> str:
         """Format a skill list as XML for inclusion in the system prompt."""
         if not skills:
             return ""
@@ -63,7 +71,10 @@ class SkillRegistry(Registry[Skill, SkillLoadError]):
             lines.append("  </skill>")
         lines.append("</available_skills>")
         lines.append("")
-        lines.append("When a task matches a skill's description, use the read tool to load the skill file and follow its instructions.")
+        lines.append(
+            "When a task matches a skill's description, use the read tool to load "
+            "the skill file and follow its instructions."
+        )
         return "\n".join(lines)
 
 

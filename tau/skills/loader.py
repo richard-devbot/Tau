@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from tau.skills.types import LoadSkillsResult, Skill, SkillLoadError
 
 
-def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
+def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Parse YAML frontmatter from skill markdown text."""
     text = text.lstrip("\n")
     if not text.startswith("---"):
@@ -14,16 +17,41 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     if end == -1:
         return {}, text
     fm_text = text[3:end].strip()
-    body = text[end + 4:].lstrip("\n")
-    meta: dict[str, str] = {}
-    for line in fm_text.splitlines():
-        if ":" in line:
-            key, _, val = line.partition(":")
-            meta[key.strip().lower()] = val.strip()
+    body = text[end + 4 :].lstrip("\n")
+    raw = yaml.safe_load(fm_text) if fm_text else {}
+    if not isinstance(raw, dict):
+        return {}, body
+    meta = {str(key).strip().lower(): value for key, value in raw.items()}
     return meta, body
 
 
-def load_skill_from_file(path: Path, name_hint: str | None = None) -> tuple[Skill | None, str | None]:
+def _as_bool(value: Any, *, default: bool = False) -> bool:
+    """Return a frontmatter value as a boolean."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"true", "1", "yes", "on"}
+
+
+def _as_string_list(value: Any) -> list[str]:
+    """Return a frontmatter scalar or YAML list as a list of strings."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip().lower() for item in value if str(item).strip()]
+    text = str(value).strip()
+    if not text:
+        return []
+    if "," in text:
+        return [item.strip().lower() for item in text.split(",") if item.strip()]
+    return [item.strip().lower() for item in text.split() if item.strip()]
+
+
+def load_skill_from_file(
+    path: Path,
+    name_hint: str | None = None,
+) -> tuple[Skill | None, str | None]:
     """Load a skill from a markdown file."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -35,20 +63,29 @@ def load_skill_from_file(path: Path, name_hint: str | None = None) -> tuple[Skil
     if not body:
         return None, "skill body is empty"
 
-    name = meta.get("name") or name_hint or path.stem.lower()
-    description = meta.get("description", "")
+    name = str(meta.get("name") or name_hint or path.stem.lower()).strip().lower()
+    description = str(meta.get("description", "")).strip()
     if not description:
         return None, "missing 'description' field"
 
-    disable = meta.get("disable-model-invocation", "").lower() in ("true", "1", "yes")
+    disable = _as_bool(meta.get("disable-model-invocation"))
+    user_invocable = _as_bool(meta.get("user-invocable"), default=True)
+    commands = _as_string_list(meta.get("commands"))
+    aliases = _as_string_list(meta.get("aliases"))
+    argument_hint_value = meta.get("argument-hint") or meta.get("argument_hint")
+    argument_hint = str(argument_hint_value).strip() if argument_hint_value else None
 
     return Skill(
-        name=name.lower(),
+        name=name,
         description=description,
         content=body,
         file_path=str(path),
         base_dir=str(path.parent),
         disable_model_invocation=disable,
+        user_invocable=user_invocable,
+        commands=commands,
+        aliases=aliases,
+        argument_hint=argument_hint,
     ), None
 
 

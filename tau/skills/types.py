@@ -11,6 +11,10 @@ class Skill:
     file_path: str
     base_dir: str
     disable_model_invocation: bool = False
+    user_invocable: bool = True
+    commands: list[str] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
+    argument_hint: str | None = None
 
 
 @dataclass
