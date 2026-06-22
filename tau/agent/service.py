@@ -22,6 +22,17 @@ from tau.tool.types import ToolInvocation, ToolResult
 
 _log = logging.getLogger(__name__)
 
+_TOOL_CAP_BYTES = 50 * 1024  # 50 KB — DEFAULT_MAX_BYTES
+_TOOL_CAP_LINES = 2000        # DEFAULT_MAX_LINES
+
+
+def _fmt_size(n: int) -> str:
+    if n < 1024:
+        return f"{n}B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f}KB"
+    return f"{n / (1024 * 1024):.1f}MB"
+
 if TYPE_CHECKING:
     from tau.engine.service import Engine
     from tau.runtime.service import Runtime
@@ -90,6 +101,7 @@ class Agent:
         self._overflow_recovery_attempted: bool = False
         self._engine.options.before_tool_call = self._before_tool_call
         self._engine.options.after_tool_call = self._after_tool_call
+        self._engine.options.transform_context = self._transform_context
 
     # -------------------------------------------------------------------------
     # Public interface
@@ -182,7 +194,62 @@ class Agent:
         result: ToolResult,
         signal: asyncio.Event | None,
     ) -> ToolResult | None:
-        return result
+        """Cap oversized tool output before it enters the context window.
+
+        Hard cap on tool output size 50 KB / 2000-line 
+        Head-truncation keeps the first N lines/bytes; a trailing marker
+        reports how much was omitted and the total size.
+        """
+        content = result.content
+        raw = content.encode("utf-8", errors="replace")
+        total_bytes = len(raw)
+        lines = content.split("\n")
+        total_lines = len(lines)
+
+        if total_bytes <= _TOOL_CAP_BYTES and total_lines <= _TOOL_CAP_LINES:
+            return result
+
+        kept: list[str] = []
+        byte_count = 0
+        for i, line in enumerate(lines):
+            if i >= _TOOL_CAP_LINES:
+                break
+            enc = len(line.encode("utf-8", errors="replace")) + (1 if i > 0 else 0)
+            if byte_count + enc > _TOOL_CAP_BYTES:
+                break
+            kept.append(line)
+            byte_count += enc
+
+        omitted = total_bytes - byte_count
+        kept.append(
+            f"[truncated: {_fmt_size(omitted)} omitted"
+            f" — {_fmt_size(total_bytes)} total, showing first {len(kept)} lines / {_fmt_size(byte_count)}]"
+        )
+        return ToolResult(
+            id=result.id,
+            content="\n".join(kept),
+            is_error=result.is_error,
+            metadata=result.metadata,
+            terminate=result.terminate,
+            terminate_message=result.terminate_message,
+        )
+
+    async def _transform_context(
+        self,
+        messages: list[LLMMessage],
+        signal: asyncio.Event | None,
+    ) -> list[LLMMessage]:
+        """Called before every LLM inference in the engine loop.
+
+        Runs a compaction check so it can fire between tool iterations
+        (not only at invoke() boundaries), then rebuilds the message list
+        from the current session so the engine always sees up-to-date
+        compacted history.
+        """
+        await self._check_compaction()
+        session_ctx = self._session_manager.build_session_context()
+        new_messages = _to_llm_messages(session_ctx.messages)
+        return strip_unusable_trailing_assistant(new_messages, self._session_manager)
 
     # -------------------------------------------------------------------------
     # Internal helpers

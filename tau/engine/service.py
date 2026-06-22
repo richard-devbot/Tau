@@ -558,15 +558,17 @@ class Engine:
             while True:
                 _log.debug("turn start: messages=%d", len(messages))
                 await emit(TurnStartEvent())
+
+                # ── Mid-turn compaction / context refresh ──────────────────────
+                # Called before every LLM inference so compaction can fire
+                # between tool iterations, not only at invoke() boundaries.
+                if self.options.transform_context is not None:
+                    messages = await self.options.transform_context(messages, signal)
+
                 message = AssistantMessage()
                 tool_calls.clear()
 
                 ctx_messages = list(messages)
-
-                if self.options.transform_context is not None:
-                    # Allows callers (e.g. Agent) to inject compaction
-                    # or strip unusable trailing messages.
-                    ctx_messages = self.options.transform_context(ctx_messages, signal)
 
                 if signal.is_set():
                     closing = AssistantMessage(stop_reason=StopReason.Abort)
