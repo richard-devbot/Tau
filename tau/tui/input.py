@@ -399,6 +399,11 @@ def _is_complete(buf: str) -> bool | None:
     if second == "[":
         if len(buf) < 3:
             return None
+        # Bracketed paste: ESC [ 2 0 0 ~ ... ESC [ 2 0 1 ~
+        # Must be checked first because ~ is a valid CSI final byte and the
+        # generic scan below would fire on \x1b[200~ before the content arrives.
+        if buf.startswith("\x1b[200~"):
+            return True if "\x1b[201~" in buf else None
         # Basic mouse: ESC [ M <button> <col> <row> — exactly 6 bytes.
         # Must be checked before the generic final-byte scan because 'M' is a
         # valid CSI final byte and would otherwise terminate prematurely,
