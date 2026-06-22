@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 from tau.packages.types import ParsedSource, SourceType
 from tau.settings.paths import get_app_name
+
+
+def add_site_packages_path(path: Path | None) -> None:
+    """Add an extension package directory without shadowing Tau dependencies."""
+    if path is None:
+        return
+    value = str(path)
+    if value not in sys.path:
+        sys.path.append(value)
 
 
 def parse_source(source: str) -> ParsedSource:

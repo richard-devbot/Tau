@@ -1,10 +1,33 @@
 """Tests for tau/packages/utils.py — package source parsing."""
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from tau.packages.types import SourceType
-from tau.packages.utils import parse_source
+from tau.packages.utils import add_site_packages_path, parse_source
+
+
+def test_add_site_packages_path_appends_without_shadowing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    runtime_path = "/runtime/site-packages"
+    extension_path = tmp_path / "site-packages"
+    monkeypatch.setattr(sys, "path", [runtime_path])
+
+    add_site_packages_path(extension_path)
+    add_site_packages_path(extension_path)
+
+    assert sys.path == [runtime_path, str(extension_path)]
+
+
+def test_add_site_packages_path_ignores_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "path", ["/runtime/site-packages"])
+
+    add_site_packages_path(None)
+
+    assert sys.path == ["/runtime/site-packages"]
 
 
 class TestParseSource:

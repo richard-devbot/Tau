@@ -6,7 +6,6 @@ import importlib.util
 import inspect
 import json
 import logging
-import sys
 import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,6 +18,7 @@ from tau.extensions.api import (
     _RuntimeRef,
 )
 from tau.extensions.events import EventBus
+from tau.packages.utils import add_site_packages_path
 
 if TYPE_CHECKING:
     from tau.inference.api.text.service import TextLLM
@@ -253,9 +253,7 @@ class ExtensionLoader:
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             cache_file.write_text(json.dumps(cache, indent=2), encoding="utf-8")
 
-        site = pkg_mgr.site_packages()
-        if site and str(site) not in sys.path:
-            sys.path.insert(0, str(site))
+        add_site_packages_path(pkg_mgr.site_packages())
 
     # ── Loading ────────────────────────────────────────────────────────────────
 

@@ -30,9 +30,11 @@ A subdirectory under `extensions/` is loaded if it has either:
 
 Before the entry file is executed, these specs are installed into the project or
 global packages venv (`uv pip install`, falling back to `pip` when `uv` isn't on
-PATH) and the venv's site-packages directory is added to `sys.path`. The install
-only runs once — a hash of the dependency list is cached, so unchanged manifests
-are a no-op on subsequent launches.
+PATH) and the venv's site-packages directory is appended to `sys.path`. Tau's
+runtime environment keeps precedence, so an extension cannot replace Tau's own
+dependencies with incompatible versions. The install only runs once — a hash of
+the dependency list is cached, so unchanged manifests are a no-op on subsequent
+launches.
 
 ## Entry point
 

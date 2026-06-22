@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -17,6 +16,7 @@ from tau.extensions.loader import ExtensionLoader
 from tau.extensions.runtime import ExtensionRuntime
 from tau.hooks.service import Hooks
 from tau.inference.api.text.service import TextLLM as LLM
+from tau.packages.utils import add_site_packages_path
 from tau.session.manager import SessionManager
 from tau.settings.manager import SettingsManager
 from tau.settings.paths import get_config_dir, get_extensions_dir
@@ -204,9 +204,7 @@ class RuntimeContext:
                     for _scope_local in (False, True):
                         _venv_dir = get_packages_venv(cwd if _scope_local else None)
                         _pkg_mgr = PackageManager(_venv_dir)
-                        _site = _pkg_mgr.site_packages()
-                        if _site and str(_site) not in sys.path:
-                            sys.path.insert(0, str(_site))
+                        add_site_packages_path(_pkg_mgr.site_packages())
                     for pkg in pkg_entries:
                         if not pkg.enabled:
                             continue
