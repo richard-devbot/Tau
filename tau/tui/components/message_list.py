@@ -78,6 +78,10 @@ class MessageBlock:
         self._expanded = not self._expanded
         self.invalidate()
 
+    def is_expanded(self) -> bool:
+        """Return whether this block is in expanded view."""
+        return self._expanded
+
     def set_streaming(self, value: bool) -> None:
         if self._streaming != value:
             self._streaming = value
@@ -243,7 +247,6 @@ class MessageBlock:
 
         t = self._theme
         inner_width = max(1, width - 2)
-        max(1, width - len(_TOOL_INDENT) - 2)
         lines: list[str] = []
 
         has_content = any(
@@ -359,15 +362,13 @@ class MessageBlock:
 
     def _render_template_invocation(self, msg: Any, width: int) -> list[str]:
         from tau.message.types import TemplateInvocationMessage
-        from tau.tui.ansi import BOLD, RESET
 
         if not isinstance(msg, TemplateInvocationMessage):
             return []
         t = self._theme
-        label = BOLD + t.tool_arrow("[template]") + RESET
         if msg.expanded:
-            lines = [f"  {label}"]
-            header = f"  {BOLD}{msg.name}{RESET}"
+            lines = [""]
+            header = f"  {BOLD}/{msg.name}{RESET}"
             if msg.args:
                 header += t.dim(f"  {msg.args}")
             lines.append(header)
@@ -376,9 +377,9 @@ class MessageBlock:
                 lines.append(f"  {t.dim(line) if line.strip() == '' else line}")
             lines.append("")
         else:
+            name_args = f"/{msg.name}" + (f"  {msg.args}" if msg.args else "")
             hint = t.dim("  (ctrl+o to expand)")
-            name_args = msg.name + (f"  {msg.args}" if msg.args else "")
-            lines = [f"  {label} {name_args}{hint}"]
+            lines = [f"  {name_args}", f"  {hint}", ""]
         return lines
 
     def _render_skill_invocation(self, msg: Any, width: int) -> list[str]:
@@ -388,10 +389,9 @@ class MessageBlock:
         if not isinstance(msg, SkillInvocationMessage):
             return []
         t = self._theme
-        label = BOLD + t.tool_arrow("[skill]") + RESET
         if msg.expanded:
-            lines = [f"  {label}"]
-            header = f"  {BOLD}{msg.name}{RESET}"
+            lines = [""]
+            header = f"  {BOLD}/{msg.name}{RESET}"
             if msg.args:
                 header += t.dim(f"  {msg.args}")
             lines.append(header)
@@ -400,9 +400,9 @@ class MessageBlock:
                 lines.append(f"  {line}")
             lines.append("")
         else:
+            name_args = f"/{msg.name}" + (f"  {msg.args}" if msg.args else "")
             hint = t.dim("  (ctrl+o to expand)")
-            name_args = msg.name + (f"  {msg.args}" if msg.args else "")
-            lines = [f"  {label} {name_args}{hint}"]
+            lines = [f"  {name_args}", f"  {hint}", ""]
         return lines
 
     def _render_tool_message(self, msg: Any, width: int) -> list[str]:
@@ -455,7 +455,7 @@ class MessageBlock:
 
         t = self._theme
         color_fn = t.tool_result_err if item.is_error else t.tool_result_ok
-        content = item.content.strip() if item.content else ""
+        content = str(item.content).strip() if item.content else ""
         all_lines = content.split("\n") if content else []
         if not all_lines:
             rendered = [color_fn("(no output)")]
@@ -553,7 +553,7 @@ class MessageList(Component):
         ]
         if not targets:
             return
-        new_state = not targets[-1]._expanded  # type: ignore[union-attr]
+        new_state = not targets[-1].is_expanded()
         for b in targets:
             b._expanded = new_state
             b.invalidate()
@@ -569,10 +569,13 @@ class MessageList(Component):
         ]
         if not targets:
             return
-        new_state = not targets[-1].message.expanded  # type: ignore[union-attr]
-        for b in targets:
-            b.message.expanded = new_state  # type: ignore[union-attr]
-            b.invalidate()
+        last_msg = targets[-1].message
+        if isinstance(last_msg, (TemplateInvocationMessage, SkillInvocationMessage)):
+            new_state = not last_msg.expanded
+            for b in targets:
+                if isinstance(b.message, (TemplateInvocationMessage, SkillInvocationMessage)):
+                    b.message.expanded = new_state
+                    b.invalidate()
 
     def add_block(self, block: MessageBlock) -> None:
         self._blocks.append(block)
