@@ -102,10 +102,7 @@ and follow the existing style and conventions of the project.
 
 _GENERAL_GUIDELINES = [
     "If a task is ambiguous, ask a precise, clarifying question before proceeding.",
-    (
-        "Do only what the task asks; don't add features, refactors, or abstractions "
-        "beyond scope."
-    ),
+    ("Do only what the task asks; don't add features, refactors, or abstractions beyond scope."),
     "Write comments when the *why* is non-obvious — well-named code explains itself.",
     "Keep responses short, concise, and direct; don't summarize what you just did.",
     (
