@@ -68,6 +68,9 @@ tau = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[project.optional-dependencies]
+tools = ["ripgrep>=14.0.0"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -122,29 +124,62 @@ class GrepTool(Tool):
         signal: AbortSignal | None = None,
         context: ToolContext | None = None,
     ) -> ToolResult:
-        """Execute the regex pattern search operation."""
         params = GrepParams.model_validate(invocation.params)
+        target = Path(params.path or invocation.cwd or ".").resolve()
+        if not target.exists():
+            return ToolResult.error(invocation.id, f"Path not found: {target}")
 
+        result = await self._rg(params, target) or await self._python(params, target)
+        return ToolResult.ok(invocation.id, result["output"], metadata=result["metadata"]) \
+            if result["matches"] \
+            else ToolResult.ok(invocation.id, f"No matches for pattern: {params.pattern}", metadata=result["metadata"])
+
+    async def _rg(self, params: GrepParams, target: Path) -> dict | None:
+        cmd = ["rg", "--line-number", "--no-heading", "--with-filename"]
+        if not params.case_sensitive:
+            cmd.append("--ignore-case")
+        if params.include:
+            cmd += ["--glob", params.include]
+        cmd += [params.pattern, str(target)]
+        try:
+            proc = await asyncio.to_thread(
+                subprocess.run, cmd, capture_output=True, text=True, errors="replace"
+            )
+        except FileNotFoundError:
+            return None
+        if proc.returncode not in (0, 1):
+            return None
+        lines = [l for l in proc.stdout.splitlines() if l]
+        truncated = len(lines) > _MAX_MATCHES
+        lines = lines[:_MAX_MATCHES]
+        files_with_matches = len({l.split(":")[0] for l in lines})
+        metadata = {
+            "pattern": params.pattern,
+            "files_searched": files_with_matches,
+            "match_count": len(lines),
+            "truncated": truncated,
+        }
+        output = "\n".join(lines)
+        if truncated:
+            output += f"\n\n[Results truncated at {_MAX_MATCHES} matches.]"
+        return {"matches": lines, "output": output, "metadata": metadata}
+
+    async def _python(self, params: GrepParams, target: Path) -> dict:
         flags = 0 if params.case_sensitive else re.IGNORECASE
         try:
             regex = re.compile(params.pattern, flags)
         except re.error as e:
-            return ToolResult.error(invocation.id, f"Invalid regex pattern: {e}")
+            return {"matches": [], "output": f"Invalid regex pattern: {e}", "metadata": {}}
 
-        target = Path(params.path or invocation.cwd or ".").resolve()
         files: list[Path] = []
-
         if target.is_file():
             files = [target]
-        elif target.is_dir():
+        else:
             glob_pat = f"**/{params.include}" if params.include else "**/*"
             files = [p for p in target.glob(glob_pat) if p.is_file()]
-        else:
-            return ToolResult.error(invocation.id, f"Path not found: {target}")
 
         matches: list[str] = []
         truncated = False
-
         for file in sorted(files):
             if truncated:
                 break
@@ -166,14 +201,7 @@ class GrepTool(Tool):
             "match_count": len(matches),
             "truncated": truncated,
         }
-
-        if not matches:
-            return ToolResult.ok(
-                invocation.id, f"No matches for pattern: {params.pattern}", metadata=metadata
-            )
-
-        result = "\n".join(matches)
+        output = "\n".join(matches)
         if truncated:
-            result += f"\n\n[Results truncated at {_MAX_MATCHES} matches.]"
-
-        return ToolResult.ok(invocation.id, result, metadata=metadata)
+            output += f"\n\n[Results truncated at {_MAX_MATCHES} matches.]"
+        return {"matches": matches, "output": output, "metadata": metadata}

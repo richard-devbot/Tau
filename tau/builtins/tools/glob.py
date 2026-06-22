@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import glob as _glob
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -101,16 +103,18 @@ class GlobTool(Tool):
         signal: AbortSignal | None = None,
         context: ToolContext | None = None,
     ) -> ToolResult:
-        """Execute the glob pattern matching operation."""
         params = GlobParams.model_validate(invocation.params)
         base = Path(params.path or invocation.cwd or ".").resolve()
 
         if not base.is_dir():
             return ToolResult.error(invocation.id, f"Base path is not a directory: {base}")
 
-        matches = sorted(_glob.glob(str(base / params.pattern), recursive=True))
+        matches = await self._rg_files(params.pattern, base)
+        if matches is None:
+            matches = self._python_glob(params.pattern, base)
+
         truncated = len(matches) > _MAX_RESULTS
-        matches = matches[:_MAX_RESULTS]
+        matches = sorted(matches[:_MAX_RESULTS])
 
         metadata = {
             "pattern": params.pattern,
@@ -128,3 +132,18 @@ class GlobTool(Tool):
             result += f"\n\n[Results truncated at {_MAX_RESULTS}. Narrow your pattern.]"
 
         return ToolResult.ok(invocation.id, result, metadata=metadata)
+
+    async def _rg_files(self, pattern: str, base: Path) -> list[str] | None:
+        cmd = ["rg", "--files", "--glob", pattern, str(base)]
+        try:
+            proc = await asyncio.to_thread(
+                subprocess.run, cmd, capture_output=True, text=True
+            )
+        except FileNotFoundError:
+            return None
+        if proc.returncode not in (0, 1):
+            return None
+        return [l for l in proc.stdout.splitlines() if l]
+
+    def _python_glob(self, pattern: str, base: Path) -> list[str]:
+        return sorted(_glob.glob(str(base / pattern), recursive=True))
