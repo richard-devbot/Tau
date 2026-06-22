@@ -373,7 +373,7 @@ class TextInput(Component):
             else:
                 # Delete the whole grapheme cluster at the cursor.
                 cluster = next(iter(grapheme.graphemes(after)), "")
-                self._text = self._text[: self._cursor] + after[len(cluster) :]
+                self._text = self._text[: self._cursor] + after[len(cluster) :]  # type: ignore[arg-type]
             self._line_scrolls = {}
 
     def _move_left(self) -> None:
@@ -397,7 +397,7 @@ class TextInput(Component):
                 self._cursor += m.end()
             else:
                 cluster = next(iter(grapheme.graphemes(after)), "")
-                self._cursor += len(cluster)
+                self._cursor += len(cluster)  # type: ignore[arg-type]
 
     def _word_left(self) -> None:
         """Move the cursor to the start of the previous word."""

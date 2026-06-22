@@ -121,7 +121,7 @@ def auth_login(provider):
 async def _login(provider_id: str) -> None:
     from tau.auth.manager import AuthManager
     from tau.builtins.providers.text import oauth_providers
-    from tau.inference.provider.oauth.types import OAuthLoginCallbacks
+    from tau.inference.provider.oauth.types import OAuthAuthInfo, OAuthLoginCallbacks, OAuthPrompt
     from tau.inference.provider.registry import ProviderRegistry
 
     oauth_ids = [p.id for p in oauth_providers]
@@ -137,9 +137,20 @@ async def _login(provider_id: str) -> None:
 
     manager = AuthManager.create(registry)
 
+    async def on_prompt(prompt: OAuthPrompt) -> str:
+        """Prompt user for input during OAuth flow."""
+        return click.prompt(prompt.message, default="")
+
+    def on_auth(auth_info: OAuthAuthInfo) -> None:
+        """Display authorization info to the user."""
+        msg = f"Open this URL to authenticate:\n\n  {auth_info.url}\n"
+        if auth_info.instructions:
+            msg += f"{auth_info.instructions}\n"
+        click.echo(msg)
+
     callbacks = OAuthLoginCallbacks(
-        on_url=lambda url: click.echo(f"Open this URL to authenticate:\n\n  {url}\n"),
-        on_code=lambda: click.echo("Waiting for authentication…"),
+        on_auth=on_auth,
+        on_prompt=on_prompt,
     )
 
     click.echo(f"Logging in to '{provider_id}'…")

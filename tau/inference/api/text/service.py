@@ -84,6 +84,12 @@ class TextLLM:
             auth_manager if auth_manager is not None else type(self)._builtin_auth_manager()
         )
 
+        # Narrow types for the type checker
+        assert _models is not None
+        assert _providers is not None
+        assert _apis is not None
+        assert self._auth_manager is not None
+
         # When provider is not pinned, try all registered variants of the model
         # in order, skipping OAuth providers whose credentials are missing.
         # This lets `model_id="claude-sonnet-4-6"` work with an API key even if
@@ -99,7 +105,7 @@ class TextLLM:
         model = None
         resolved_provider = None
         for candidate in candidates:
-            cand_provider = _providers.get(candidate.provider)
+            cand_provider = _providers.get(candidate.provider)  # type: ignore[union-attr]
             if cand_provider is None:
                 continue
             if isinstance(cand_provider, OAuthProvider) and not isinstance(
@@ -111,7 +117,7 @@ class TextLLM:
             break
 
         if model is None or resolved_provider is None:
-            tried = [c.provider for c in candidates]
+            tried = [c.provider for c in candidates]  # type: ignore[union-attr]
             raise RuntimeError(
                 f"No usable provider found for '{model_id}'. "
                 f"Tried: {tried}. Log in or set an API key."
@@ -168,24 +174,24 @@ class TextLLM:
         from tau.inference.provider.types import OAuthProvider
         from tau.inference.types import AuthType
 
-        cls._auth_manager.reload()  # pick up any credentials added since startup
+        cls._auth_manager.reload()  # type: ignore[union-attr]
         result = []
         seen: set[str] = set()
-        for candidates in cls._models._models.values():
+        for candidates in cls._models._models.values():  # type: ignore[union-attr]
             for candidate in candidates:
                 key = f"{candidate.provider}/{candidate.id}"
                 if key in seen:
                     continue
-                provider = cls._providers.get(candidate.provider)
+                provider = cls._providers.get(candidate.provider)  # type: ignore[union-attr]
                 if provider is None:
                     continue
                 if getattr(provider, "auth_type", None) == AuthType.None_:
                     pass  # no credential required (e.g. local Ollama)
                 elif isinstance(provider, OAuthProvider):
-                    if not isinstance(cls._auth_manager.get(provider.id), OAuthCredential):
+                    if not isinstance(cls._auth_manager.get(provider.id), OAuthCredential):  # type: ignore[union-attr]
                         continue
                 else:
-                    cred = cls._auth_manager.get(provider.id)
+                    cred = cls._auth_manager.get(provider.id)  # type: ignore[union-attr]
                     if not isinstance(cred, APICredential) and not os.environ.get(
                         f"{provider.id.upper()}_API_KEY"
                     ):
@@ -255,7 +261,7 @@ class TextLLM:
         )
         from tau.inference.utils import ErrorKind, classify_error
 
-        api_key = await self._auth_manager.get_api_key(self.provider_id)
+        api_key = await self._auth_manager.get_api_key(self.provider_id)  # type: ignore[union-attr]
         if api_key:
             self.api.options.api_key = api_key
 
@@ -303,17 +309,17 @@ class TextLLM:
                     classified.kind == ErrorKind.AUTH
                     and not received_any
                     and not oauth_recovery_attempted
-                    and self._auth_manager.is_oauth(self.provider_id)
+                    and self._auth_manager.is_oauth(self.provider_id)  # type: ignore[union-attr]
                 ):
                     oauth_recovery_attempted = True
-                    refreshed = await self._auth_manager.force_refresh(
+                    refreshed = await self._auth_manager.force_refresh(  # type: ignore[union-attr]
                         self.provider_id, stale_access=self.api.options.api_key
                     )
                     if refreshed is not None:
                         self.api.options.api_key = refreshed.access
                         yield RetryEvent(attempt=attempt + 1, max_retries=max_retries, error=str(e))
                         continue  # free retry — does not consume a normal attempt
-                    if not self._auth_manager.has(self.provider_id):
+                    if not self._auth_manager.has(self.provider_id):  # type: ignore[union-attr]
                         yield ErrorEvent(
                             reason=StopReason.Error,
                             error=(
@@ -341,7 +347,7 @@ class TextLLM:
         from tau.inference.types import ErrorEvent, StopReason, ThinkingLevel
         from tau.inference.utils import ErrorKind, classify_error
 
-        api_key = await self._auth_manager.get_api_key(self.provider_id)
+        api_key = await self._auth_manager.get_api_key(self.provider_id)  # type: ignore[union-attr]
         if api_key:
             self.api.options.api_key = api_key
 
@@ -391,16 +397,16 @@ class TextLLM:
                     if (
                         classified.kind == ErrorKind.AUTH
                         and not oauth_recovery_attempted
-                        and self._auth_manager.is_oauth(self.provider_id)
+                        and self._auth_manager.is_oauth(self.provider_id)  # type: ignore[union-attr]
                     ):
                         oauth_recovery_attempted = True
-                        refreshed = await self._auth_manager.force_refresh(
+                        refreshed = await self._auth_manager.force_refresh(  # type: ignore[union-attr]
                             self.provider_id, stale_access=self.api.options.api_key
                         )
                         if refreshed is not None:
                             self.api.options.api_key = refreshed.access
                             continue  # free retry, does not consume attempt
-                        if not self._auth_manager.has(self.provider_id):
+                        if not self._auth_manager.has(self.provider_id):  # type: ignore[union-attr]
                             return [
                                 ErrorEvent(
                                     reason=StopReason.Error,

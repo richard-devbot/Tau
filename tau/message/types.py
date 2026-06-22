@@ -16,25 +16,7 @@ from tau.message.utils import audio_to_base64, image_to_base64, video_to_base64
 from tau.tool.types import ToolKind
 
 if TYPE_CHECKING:
-    from PIL import Image
-
     from tau.session.types import CustomMessageEntry
-
-
-class _LazyPIL:
-    """Defers PIL import until Image.Image is actually accessed
-    (e.g. by Pydantic's get_type_hints).
-    """
-
-    def __getattr__(self, name: str):
-        import PIL.Image as _pil
-
-        # Cache on the class so subsequent accesses skip __getattr__
-        setattr(type(self), name, getattr(_pil, name))
-        return getattr(_pil, name)
-
-
-Image = _LazyPIL()  # type: ignore[assignment]
 
 
 @dataclass
@@ -50,7 +32,7 @@ class ImageContent:
     """Image content (PIL images, bytes, URLs, or base64 strings)."""
 
     type: Literal["image"] = "image"
-    images: list[str | Image.Image | bytes] = field(default_factory=list)
+    images: list[str | Any | bytes] = field(default_factory=list)  # str | PIL Image | bytes
     dimension_note: str | None = None
 
     def __post_init__(self) -> None:
@@ -59,7 +41,7 @@ class ImageContent:
         # encode non-UTF-8 image bytes). Existing base64 and URL strings pass
         # through unchanged, and to_base64() re-detects the MIME type from the
         # base64 magic bytes, so downstream API/render code is unaffected.
-        normalized: list[str | Image.Image | bytes] = []
+        normalized: list[str | Any | bytes] = []  # str | PIL Image | bytes
         for img in self.images:
             if isinstance(img, str):
                 normalized.append(img)
@@ -303,7 +285,9 @@ class UserMessage(BaseMessage):
         return cls(contents=[TextContent(content=content)])
 
     @classmethod
-    def with_images(cls, content: str, images: list[str | Image.Image | bytes]) -> UserMessage:
+    def with_images(
+        cls, content: str, images: list[str | Any | bytes]
+    ) -> UserMessage:  # str | PIL Image | bytes
         """Construct UserMessage with text and images.
 
         Args:
@@ -345,7 +329,7 @@ class UserMessage(BaseMessage):
     def with_media(
         cls,
         content: str,
-        images: Sequence[str | Image.Image | bytes] | None = None,
+        images: Sequence[str | Any | bytes] | None = None,  # str | PIL Image | bytes
         audio: Sequence[bytes | str] | None = None,
         video: Sequence[bytes | str] | None = None,
     ) -> UserMessage:

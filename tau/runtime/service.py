@@ -223,11 +223,11 @@ class Runtime:
         import asyncio
         from asyncio.subprocess import PIPE, STDOUT
 
+        from tau.hooks.runtime import UserTerminalResult
         from tau.hooks.types import (
             TerminalExecutionEvent,
             TerminalOutputEvent,
             UserTerminalEvent,
-            UserTerminalResult,
         )
         from tau.message.types import TerminalExecutionMessage
 
@@ -320,7 +320,8 @@ class Runtime:
         cwd = self._context.session_manager.cwd
 
         # ── Resource discovery hook ──────────────────────────────────────────
-        from tau.hooks.types import ResourcesDiscoverEvent, ResourcesDiscoverResult
+        from tau.hooks.runtime import ResourcesDiscoverResult
+        from tau.hooks.types import ResourcesDiscoverEvent
 
         discover_results = await self._context.hooks.emit(ResourcesDiscoverEvent(cwd=str(cwd)))
         extra_skill_paths: list[str] = []

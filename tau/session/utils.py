@@ -168,7 +168,15 @@ def get_session_modified_date(
     if last_activity_time := get_last_activity_time(entries=entries):
         return datetime.fromtimestamp(last_activity_time)
 
-    header = header or entries[0]
+    if header is None:
+        # Try to find a header in the entries
+        for entry in entries:
+            if isinstance(entry, SessionHeader):
+                header = entry
+                break
+    if header is None:
+        # Fallback to current time if no header found
+        return datetime.now()
     return datetime.fromtimestamp(header.timestamp)
 
 

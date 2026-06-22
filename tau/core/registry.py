@@ -43,7 +43,7 @@ class Registry[T, E](ABC):
         """Pull the error list out of a load result."""
 
     def _item_key(self, item: T) -> str:
-        return item.name.lower()
+        return getattr(item, "name", "").lower()
 
     # ── Shared implementation ─────────────────────────────────────────────────
 

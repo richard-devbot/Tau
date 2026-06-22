@@ -69,24 +69,25 @@ def _messages_to_gemini(
                 for item in msg.contents:
                     match item:
                         case TextContent():
-                            parts.append(genai_types.Part(text=item.content))
+                            parts.append(genai_types.Part(text=item.content))  # type: ignore[arg-type]
                         case ImageContent():
                             for b64, mime in item.to_base64():
                                 parts.append(
                                     genai_types.Part(
                                         inline_data=genai_types.Blob(
-                                            mime_type=mime or "image/png", data=b64
+                                            mime_type=mime or "image/png",
+                                            data=b64,  # type: ignore[arg-type]
                                         ),
                                     )
                                 )
                 if parts:
-                    contents.append(genai_types.Content(role="user", parts=parts))
+                    contents.append(genai_types.Content(role="user", parts=parts))  # type: ignore[arg-type]
             case AssistantMessage():
                 parts = []
                 for item in msg.contents:
                     match item:
                         case TextContent():
-                            parts.append(genai_types.Part(text=item.content))
+                            parts.append(genai_types.Part(text=item.content))  # type: ignore[arg-type]
                         case ToolCallContent():
                             parts.append(
                                 genai_types.Part(
@@ -97,7 +98,7 @@ def _messages_to_gemini(
                                 )
                             )
                 if parts:
-                    contents.append(genai_types.Content(role="model", parts=parts))
+                    contents.append(genai_types.Content(role="model", parts=parts))  # type: ignore[arg-type]
             case ToolMessage():
                 parts = []
                 for content in msg.contents:
@@ -111,7 +112,7 @@ def _messages_to_gemini(
                             )
                         )
                 if parts:
-                    contents.append(genai_types.Content(role="user", parts=parts))
+                    contents.append(genai_types.Content(role="user", parts=parts))  # type: ignore[arg-type]
 
     return system, contents
 
@@ -161,7 +162,7 @@ class GeminiGenerateAPI(BaseAPI):
                         genai_types.FunctionDeclaration(
                             name=t.name,
                             description=t.description,
-                            parameters=t.schema.model_json_schema(),
+                            parameters=t.schema.model_json_schema(),  # type: ignore[arg-type]
                         )
                         for t in tools
                     ]
@@ -202,7 +203,7 @@ class GeminiGenerateAPI(BaseAPI):
         try:
             async for chunk in await self._client.aio.models.generate_content_stream(
                 model=model.id,
-                contents=contents,
+                contents=contents,  # type: ignore[arg-type]
                 config=config,
             ):
                 if self._cancelled():
@@ -225,32 +226,32 @@ class GeminiGenerateAPI(BaseAPI):
                                 yield ThinkingStartEvent(thinking=None)
                                 thinking_started = True
                             thinking_buf += part.text
-                            yield ThinkingDeltaEvent(thinking=ThinkingContent(content=part.text))
+                            yield ThinkingDeltaEvent(thinking=ThinkingContent(content=part.text))  # type: ignore[arg-type]
                         elif part.text:
                             if thinking_started:
                                 yield ThinkingEndEvent(
-                                    thinking=ThinkingContent(content=thinking_buf)
+                                    thinking=ThinkingContent(content=thinking_buf)  # type: ignore[arg-type]
                                 )
                                 thinking_started = False
                                 thinking_index += 1
                                 thinking_buf = ""
                             if not text_started:
-                                yield TextStartEvent(text=TextContent(content=""))
+                                yield TextStartEvent(text=TextContent(content=""))  # type: ignore[arg-type]
                                 text_started = True
                             text_buf += part.text
-                            yield TextDeltaEvent(text=TextContent(content=part.text))
+                            yield TextDeltaEvent(text=TextContent(content=part.text))  # type: ignore[arg-type]
                         elif part.function_call:
                             fc = part.function_call
                             tool_id = fc.name
                             args_str = json.dumps(dict(fc.args)) if fc.args else ""
                             yield ToolCallStartEvent(
-                                tool_call=ToolCallContent(id=tool_id, name=fc.name)
+                                tool_call=ToolCallContent(id=tool_id, name=fc.name)  # type: ignore[arg-type]
                             )
-                            yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=tool_id))
+                            yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=tool_id))  # type: ignore[arg-type]
                             yield ToolCallEndEvent(
-                                tool_call=ToolCallContent(
-                                    id=tool_id,
-                                    name=fc.name,
+                                tool_call=ToolCallContent(  # type: ignore[arg-type]
+                                    id=tool_id,  # type: ignore[arg-type]
+                                    name=fc.name,  # type: ignore[arg-type]
                                     args=json.loads(args_str) if args_str else {},
                                 )
                             )
@@ -259,9 +260,9 @@ class GeminiGenerateAPI(BaseAPI):
                 finish_reason = getattr(candidate, "finish_reason", None)
                 if finish_reason and str(finish_reason) not in ("", "FINISH_REASON_UNSPECIFIED"):
                     if thinking_started:
-                        yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))
+                        yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))  # type: ignore[arg-type]
                     if text_started:
-                        yield TextEndEvent(text=TextContent(content=text_buf))
+                        yield TextEndEvent(text=TextContent(content=text_buf))  # type: ignore[arg-type]
                     reason_str = (
                         finish_reason.name if hasattr(finish_reason, "name") else str(finish_reason)
                     )
@@ -283,9 +284,9 @@ class GeminiGenerateAPI(BaseAPI):
             return
 
         if thinking_started:
-            yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))
+            yield ThinkingEndEvent(thinking=ThinkingContent(content=thinking_buf))  # type: ignore[arg-type]
         if text_started:
-            yield TextEndEvent(text=TextContent(content=text_buf))
+            yield TextEndEvent(text=TextContent(content=text_buf))  # type: ignore[arg-type]
         yield EndEvent(
             reason=StopReason.Stop,
             input_tokens=_input_tokens,

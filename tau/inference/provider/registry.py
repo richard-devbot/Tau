@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import TypeVar
-
 from tau.inference.provider.types import (
     APIProvider,
     AudioProvider,
@@ -13,28 +11,26 @@ from tau.inference.provider.types import (
 
 TextProvider = APIProvider | OAuthProvider
 
-_T = TypeVar("_T")
-
 
 class _ProviderRegistryBase[T]:
     """Internal shared base for all provider sub-registries."""
 
     def __init__(self) -> None:
-        self._providers: dict[str, _T] = {}
+        self._providers: dict[str, T] = {}
 
-    def _key(self, _provider: _T) -> str:
+    def _key(self, _provider: T) -> str:
         raise NotImplementedError
 
-    def register(self, provider: _T) -> None:
+    def register(self, provider: T) -> None:
         self._providers[self._key(provider)] = provider
 
     def unregister(self, key: str) -> None:
         self._providers.pop(key, None)
 
-    def list(self) -> list[_T]:
+    def list(self) -> list[T]:
         return list(self._providers.values())
 
-    def get(self, key: str) -> _T | None:
+    def get(self, key: str) -> T | None:
         return self._providers.get(key)
 
     def reset(self) -> None:

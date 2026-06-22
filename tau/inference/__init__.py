@@ -63,9 +63,9 @@ from tau.inference.types import (
 
 
 def _get_llm_class():
-    from tau.inference.api.text.service import LLM
+    from tau.inference.api.text.service import TextLLM
 
-    return LLM
+    return TextLLM
 
 
 def _get_image_llm_class():
@@ -98,7 +98,7 @@ class LLM:
 
     @classmethod
     def __class_getitem__(cls, item):
-        return _get_llm_class().__class_getitem__(item)
+        return _get_llm_class().__class_getitem__(item)  # type: ignore[attr-defined]
 
 
 class ImageLLM:

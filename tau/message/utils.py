@@ -92,8 +92,9 @@ def image_to_base64(img: Any) -> tuple[str, str]:
             mime = _PIL_MIME.get(fmt, "image/png")
             return base64.b64encode(buf.getvalue()).decode(), mime
     # Raw bytes: detect MIME from magic bytes
-    mime = detect_image_mime(img)
-    return base64.b64encode(img).decode(), mime
+    # At this point, img must be bytes (either originally or PIL.Image was handled above)
+    mime = detect_image_mime(img)  # type: ignore[arg-type]
+    return base64.b64encode(img).decode(), mime  # type: ignore[arg-type]
 
 
 def audio_to_base64(item: bytes | str) -> tuple[str, str]:

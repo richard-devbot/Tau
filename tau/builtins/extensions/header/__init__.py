@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
 
-def register(tau: object) -> None:
+if TYPE_CHECKING:
+    from tau.extensions.api import ExtensionAPI
+
+
+def register(tau: ExtensionAPI) -> None:
     from tau.settings.paths import get_app_name, get_app_version
     from tau.tui.ansi import BOLD, CYAN, DIM, RESET
     from tau.tui.component import StaticComponent
@@ -14,6 +19,6 @@ def register(tau: object) -> None:
         return StaticComponent([f"{name} {version}"])
 
     @tau.on("tui_ready")
-    def on_ready(event, ctx):
+    def on_ready(event: Any, ctx: Any) -> None:
         if ctx.has_ui:
             ctx.ui.set_header(_build())

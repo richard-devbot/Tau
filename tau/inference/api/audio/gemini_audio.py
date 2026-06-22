@@ -67,8 +67,8 @@ class GeminiAudioAPI(BaseAPI):
             if self.options.on_response:
                 self.options.on_response(response)
 
-            part = response.candidates[0].content.parts[0]
-            audio_bytes: bytes = part.inline_data.data
+            part = response.candidates[0].content.parts[0]  # type: ignore[index,attr-defined]
+            audio_bytes: bytes = part.inline_data.data  # type: ignore[attr-defined,assignment]
 
             return SynthesizedAudio(
                 model_id=model.id,

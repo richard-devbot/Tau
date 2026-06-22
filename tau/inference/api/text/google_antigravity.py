@@ -302,9 +302,10 @@ _EXTRA_PROJECT_KEY = "project_id"
 def _load_cached_project_id() -> str | None:
     try:
         from tau.auth.types import OAuthCredential as _Cred
-        from tau.inference.api.text.service import LLM
+        from tau.inference.api.text.service import TextLLM
 
-        cred = LLM._auth_store.get(_PROVIDER_ID)
+        manager = TextLLM._builtin_auth_manager()
+        cred = manager.get(_PROVIDER_ID)
         if isinstance(cred, _Cred):
             return cred.extra.get(_EXTRA_PROJECT_KEY) or None
     except Exception:
@@ -315,12 +316,13 @@ def _load_cached_project_id() -> str | None:
 def _persist_project_id(project_id: str) -> None:
     try:
         from tau.auth.types import OAuthCredential as _Cred
-        from tau.inference.api.text.service import LLM
+        from tau.inference.api.text.service import TextLLM
 
-        cred = LLM._auth_store.get(_PROVIDER_ID)
+        manager = TextLLM._builtin_auth_manager()
+        cred = manager.get(_PROVIDER_ID)
         if isinstance(cred, _Cred) and cred.extra.get(_EXTRA_PROJECT_KEY) != project_id:
             cred.extra[_EXTRA_PROJECT_KEY] = project_id
-            LLM._auth_store.set(_PROVIDER_ID, cred)
+            manager.set(_PROVIDER_ID, cred)
     except Exception:
         pass
 
@@ -579,7 +581,7 @@ class GoogleAntigravityAPI(BaseAPI):
                         if done:
                             break
                 finally:
-                    await _bytes.aclose()
+                    await _bytes.aclose()  # type: ignore[attr-defined]
 
         except Exception as exc:
             yield ErrorEvent(reason=StopReason.Abort, error=str(exc))

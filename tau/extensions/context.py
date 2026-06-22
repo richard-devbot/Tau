@@ -388,7 +388,7 @@ class ExtensionContext:
         sm_session = getattr(self._runtime, "session_manager", None)
         cwd = str(sm_session.cwd) if sm_session is not None else ""
 
-        from tau.hooks.types import ProjectTrustEvent, ProjectTrustResult
+        from tau.hooks.runtime import ProjectTrustEvent, ProjectTrustResult
 
         results = await self._runtime.hooks.emit(ProjectTrustEvent(project_dir=cwd))
         for r in results:

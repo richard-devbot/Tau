@@ -79,12 +79,12 @@ class AuthManager:
         return AuthManager(registry, storage)
 
     @staticmethod
-    def in_memory(registry: ProviderRegistry, initial: dict = None) -> AuthManager:
+    def in_memory(registry: ProviderRegistry, initial: dict | None = None) -> AuthManager:
         """Create AuthManager with in-memory storage for testing."""
         if initial is None:
             initial = {}
         storage = InMemoryAuthStorage()
-        storage.with_lock(lambda _: LockResult(result=None, next=json.dumps(initial, indent=2)))
+        storage.with_lock(lambda _: LockResult(result=initial, next=json.dumps(initial, indent=2)))  # type: ignore[arg-type]
         return AuthManager.from_storage(registry, storage)
 
     def _record_error(self, error: Exception) -> None:

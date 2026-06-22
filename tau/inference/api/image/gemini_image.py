@@ -55,9 +55,9 @@ class GeminiImageAPI(BaseImageAPI):
                 self.options.on_response(response)
 
             output: list[TextContent | ImageContent] = []
-            for img in response.generated_images:
+            for img in response.generated_images:  # type: ignore[attr-defined]
                 if img.image and img.image.image_bytes:
-                    output.append(ImageContent(images=[img.image.image_bytes]))
+                    output.append(ImageContent(images=[img.image.image_bytes]))  # type: ignore[arg-type]
 
             return GeneratedImage(
                 model_id=model.id,

@@ -351,7 +351,7 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
             item = event.get("item") or {}
             itype = item.get("type", "")
             if itype == "message":
-                yield TextStartEvent(text=TextContent(content=""))
+                yield TextStartEvent(text=TextContent(content=""))  # type: ignore[arg-type]
             elif itype == "reasoning":
                 yield ThinkingStartEvent(thinking=None)
             elif itype == "function_call":
@@ -362,24 +362,24 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
                 call_id_by_item[item_id] = call_id
                 name_by_item[item_id] = name
                 started_calls.add(call_id)
-                yield ToolCallStartEvent(tool_call=ToolCallContent(id=call_id, name=name))
+                yield ToolCallStartEvent(tool_call=ToolCallContent(id=call_id, name=name))  # type: ignore[arg-type]
 
         elif etype == "response.output_text.delta":
-            yield TextDeltaEvent(text=TextContent(content=event.get("delta", "")))
+            yield TextDeltaEvent(text=TextContent(content=event.get("delta", "")))  # type: ignore[arg-type]
 
         elif etype == "response.output_text.done":
-            yield TextEndEvent(text=TextContent(content=event.get("text", "")))
+            yield TextEndEvent(text=TextContent(content=event.get("text", "")))  # type: ignore[arg-type]
 
         elif etype == "response.reasoning_summary_text.delta":
-            yield ThinkingDeltaEvent(thinking=ThinkingContent(content=event.get("delta", "")))
+            yield ThinkingDeltaEvent(thinking=ThinkingContent(content=event.get("delta", "")))  # type: ignore[arg-type]
 
         elif etype == "response.reasoning_summary_text.done":
-            yield ThinkingEndEvent(thinking=ThinkingContent(content=event.get("text", "")))
+            yield ThinkingEndEvent(thinking=ThinkingContent(content=event.get("text", "")))  # type: ignore[arg-type]
 
         elif etype == "response.function_call_arguments.delta":
             item_id = event.get("item_id", "")
             yield ToolCallDeltaEvent(
-                tool_call=ToolCallContent(id=call_id_by_item.get(item_id, item_id))
+                tool_call=ToolCallContent(id=call_id_by_item.get(item_id, item_id))  # type: ignore[arg-type]
             )
 
         elif etype == "response.function_call_arguments.done":
@@ -389,9 +389,9 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
 
             call_id = call_id_by_item.get(item_id, item_id)
             saw_tool_call = True
-            ended_calls.add(call_id)
+            ended_calls.add(call_id)  # type: ignore[arg-type]
             yield ToolCallEndEvent(
-                tool_call=ToolCallContent(id=call_id, name=name_by_item.get(item_id, ""), args=args)
+                tool_call=ToolCallContent(id=call_id, name=name_by_item.get(item_id, ""), args=args)  # type: ignore[arg-type]
             )
 
         elif etype == "response.output_item.done":
@@ -405,10 +405,10 @@ async def _process_events(events: AsyncIterator[dict[str, Any]]) -> AsyncGenerat
                     args = parse_tool_args(args_str)
                     if call_id not in started_calls:
                         started_calls.add(call_id)
-                        yield ToolCallStartEvent(tool_call=ToolCallContent(id=call_id, name=name))
+                        yield ToolCallStartEvent(tool_call=ToolCallContent(id=call_id, name=name))  # type: ignore[arg-type]
                     ended_calls.add(call_id)
                     yield ToolCallEndEvent(
-                        tool_call=ToolCallContent(id=call_id, name=name, args=args)
+                        tool_call=ToolCallContent(id=call_id, name=name, args=args)  # type: ignore[arg-type]
                     )
 
         elif etype == "response.completed":

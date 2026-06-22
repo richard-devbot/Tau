@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from tau.runtime.service import Runtime
@@ -31,11 +31,11 @@ class CommandContext:
         from tau.message.types import CustomMessage, LinesContent
 
         lines = text.splitlines() + [""]
-        contents = [LinesContent(lines=lines)]
+        contents: list[Any] = [LinesContent(lines=lines)]  # type: ignore[assignment]
         msg = CustomMessage(
             custom_type="system",
             timestamp=time.time(),
-            contents=contents,
+            contents=contents,  # type: ignore[arg-type]
         )
         self.layout.add_message(msg)
         self.tui.request_render()
