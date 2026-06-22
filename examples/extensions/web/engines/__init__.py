@@ -5,8 +5,7 @@ in ``_BUILDERS`` below.
 """
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from typing import Any, Callable
 
 from .base import BaseSearchEngine, SearchMode, result
 from .ddgs_engine import DDGSearchEngine

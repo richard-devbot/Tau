@@ -38,9 +38,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from engines import build_engine
-from tools.fetch import WebFetchTool
 from tools.search import WebSearchTool
+from tools.fetch import WebFetchTool
+from engines import build_engine
 
 
 def register(tau) -> None:

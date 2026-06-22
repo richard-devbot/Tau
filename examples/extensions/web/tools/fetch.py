@@ -1,21 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 from urllib.parse import urlparse
 
-from engines import BaseSearchEngine
 from pydantic import BaseModel, Field
 
+from tau.tool.types import Tool, ToolContext, ToolExecutionMode, ToolInvocation, ToolKind, ToolResult
 from tau.tool.render import call_line
-from tau.tool.types import (
-    Tool,
-    ToolContext,
-    ToolExecutionMode,
-    ToolInvocation,
-    ToolKind,
-    ToolResult,
-)
+
+from engines import BaseSearchEngine
 
 
 def _render_web_fetch_call(args: dict, _streaming: bool) -> list[str]:
@@ -83,8 +76,8 @@ def _render_web_fetch(content: str, opts: Any) -> list[str]:
 
     # Strip the header lines the tool prepends (URL: ... and [External content...])
     body_lines = [
-        ln for ln in content.splitlines()
-        if not ln.startswith("URL: ") and not ln.startswith("[External content")
+        l for l in content.splitlines()
+        if not l.startswith("URL: ") and not l.startswith("[External content")
     ]
 
     if not body_lines:
@@ -160,7 +153,7 @@ class WebFetchTool(Tool):
         llm     = context.llm if context is not None else None
 
         try:
-            text: str = await asyncio.to_thread(self._engine.fetch, url, timeout)
+            text: str = await self._engine.fetch(url, timeout)
         except Exception as e:
             return ToolResult.error(invocation.id, f"Failed to fetch {url}: {e}")
 

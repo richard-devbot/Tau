@@ -56,9 +56,9 @@ class BaseSearchEngine(ABC):
         return mode in self.supported_modes
 
     @abstractmethod
-    def search(self, query: str, mode: SearchMode, max_results: int) -> list[dict]:
+    async def search(self, query: str, mode: SearchMode, max_results: int) -> list[dict]:
         """Run a search and return normalized result dicts."""
 
     @abstractmethod
-    def fetch(self, url: str, timeout: int) -> str:
+    async def fetch(self, url: str, timeout: int) -> str:
         """Fetch a URL and return its content as text."""

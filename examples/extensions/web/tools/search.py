@@ -1,21 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-from engines import BaseSearchEngine
-from engines import SearchMode as _SearchMode
 from pydantic import BaseModel, Field
 
+from tau.tool.types import Tool, ToolContext, ToolExecutionMode, ToolInvocation, ToolKind, ToolResult
 from tau.tool.render import call_line
-from tau.tool.types import (
-    Tool,
-    ToolContext,
-    ToolExecutionMode,
-    ToolInvocation,
-    ToolKind,
-    ToolResult,
-)
+
+from engines import SearchMode as _SearchMode, BaseSearchEngine
 
 
 def _render_web_search_call(args: dict, _streaming: bool) -> list[str]:
@@ -42,9 +34,9 @@ class _WebSearchSchema(BaseModel):
         examples=["text", "news"],
     )
     max_results: int = Field(
-        examples=[10, 20],
         default=10,
         description="Number of results to return (default 10). Increase to 20+ for broader coverage.",
+        examples=[10, 20],
     )
 
 
@@ -71,7 +63,7 @@ def _result_lines(r: dict, mode: _SearchMode) -> tuple[str, str]:
 def _render_web_search(content: str, opts: Any) -> list[str]:
     from tau.tui.ansi import DIM, RESET
     metadata = opts.metadata or {}
-    _query       = metadata.get("query", "")
+    query        = metadata.get("query", "")
     mode         = metadata.get("mode", "text")
     result_count = metadata.get("result_count", 0)
     results      = metadata.get("results", [])
@@ -158,7 +150,7 @@ class WebSearchTool(Tool):
             )
 
         try:
-            results = await asyncio.to_thread(self._engine.search, query, mode, max_results)
+            results = await self._engine.search(query, mode, max_results)
         except Exception as e:
             return ToolResult.error(invocation.id, f"Search failed: {e}")
 

@@ -1,6 +1,8 @@
 """Tavily engine (LLM-oriented search, https://tavily.com). Requires an API key + ``tavily-python``."""
 from __future__ import annotations
 
+import asyncio
+
 from .base import BaseSearchEngine, SearchMode, result
 
 
@@ -21,26 +23,30 @@ class TavilySearchEngine(BaseSearchEngine):
             self._client = TavilyClient(api_key=self._api_key)
         return self._client
 
-    def search(self, query: str, mode: SearchMode, max_results: int) -> list[dict]:
-        client = self._get_client()
-        topic = "news" if mode is SearchMode.news else "general"
-        response = client.search(
-            query, max_results=max_results, topic=topic, search_depth=self._search_depth,
-        )
-        out: list[dict] = []
-        for r in response.get("results", []):
-            out.append(result(
-                title=r.get("title", ""),
-                url=r.get("url", ""),
-                snippet=r.get("content", ""),
-                date=r.get("published_date", ""),
-            ))
-        return out
+    async def search(self, query: str, mode: SearchMode, max_results: int) -> list[dict]:
+        def _search():
+            client = self._get_client()
+            topic = "news" if mode is SearchMode.news else "general"
+            response = client.search(
+                query, max_results=max_results, topic=topic, search_depth=self._search_depth,
+            )
+            out: list[dict] = []
+            for r in response.get("results", []):
+                out.append(result(
+                    title=r.get("title", ""),
+                    url=r.get("url", ""),
+                    snippet=r.get("content", ""),
+                    date=r.get("published_date", ""),
+                ))
+            return out
+        return await asyncio.to_thread(_search)
 
-    def fetch(self, url: str, timeout: int) -> str:
-        client = self._get_client()
-        response = client.extract(urls=[url], timeout=timeout)
-        results = response.get("results", [])
-        if not results:
-            return ""
-        return results[0].get("raw_content", "") or ""
+    async def fetch(self, url: str, timeout: int) -> str:
+        def _fetch():
+            client = self._get_client()
+            response = client.extract(urls=[url], timeout=timeout)
+            results = response.get("results", [])
+            if not results:
+                return ""
+            return results[0].get("raw_content", "") or ""
+        return await asyncio.to_thread(_fetch)
