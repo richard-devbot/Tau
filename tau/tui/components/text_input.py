@@ -156,19 +156,20 @@ class TextInput(Component):
 
         last_line_idx = len(text_lines) - 1
         for i, line_text in enumerate(text_lines):
-            prefix = self._prefix if i == 0 else indent
-            scroll = self._line_scrolls.get(i, 0)
+            line_prefix = self._prefix if i == 0 else indent
             col_in_line = cursor_col if i == cursor_line_idx else -1
-            rendered, scroll = _render_line(line_text, col_in_line, available, scroll)
-            self._line_scrolls[i] = scroll
-            if (
-                self._arg_hint
-                and i == last_line_idx
-                and i == cursor_line_idx
-                and cursor_col == len(line_text)
-            ):
-                rendered += DIM + self._arg_hint + RESET
-            result.append(BOLD + prefix + padding + RESET + rendered + padding)
+            segments = _render_line_wrapped(line_text, col_in_line, available)
+            for j, seg in enumerate(segments):
+                seg_prefix = line_prefix if j == 0 else indent
+                if (
+                    self._arg_hint
+                    and i == last_line_idx
+                    and i == cursor_line_idx
+                    and cursor_col == len(line_text)
+                    and j == len(segments) - 1
+                ):
+                    seg += DIM + self._arg_hint + RESET
+                result.append(BOLD + seg_prefix + padding + RESET + seg + padding)
 
         return result
 
@@ -343,6 +344,8 @@ class TextInput(Component):
             self._last_edit = None
         self._text = self._text[: self._cursor] + text + self._text[self._cursor :]
         self._cursor += len(text)
+        if "\n" in text:
+            self._line_scrolls = {}
 
     def _backspace(self) -> None:
         if self._cursor > 0:
@@ -533,38 +536,47 @@ def _char_width(ch: str) -> int:
     return 1
 
 
-def _render_line(text: str, cursor_col: int, available: int, scroll: int) -> tuple[str, int]:
+def _render_line_wrapped(text: str, cursor_col: int, available: int) -> list[str]:
     """
-    Render one logical line. cursor_col=-1 means no cursor on this line.
-    Returns (rendered_string, updated_scroll).
+    Render one logical line with word-wrap instead of horizontal scrolling.
+    cursor_col=-1 means no cursor on this line.
+    Returns a list of visual-line strings (without prefix/padding).
     """
     cursor_vis = visible_width(text[:cursor_col]) if cursor_col >= 0 else -1
 
-    if cursor_col >= 0:
-        if cursor_vis < scroll:
-            scroll = cursor_vis
-        elif cursor_vis >= scroll + available:
-            scroll = cursor_vis - available + 1
-
-    result = ""
-    col = 0
-    vis = 0
+    visual_lines: list[str] = []
+    current = ""
+    col = 0  # visual width on the current visual line
+    vis = 0  # visual position within the logical line
     i = 0
 
-    while i < len(text) and col < available:
+    while i < len(text):
         ch = text[i]
         w = _char_width(ch)
-        if vis >= scroll:
-            if cursor_col >= 0 and vis == cursor_vis:
-                # CURSOR_MARKER tells the Renderer to move the hardware cursor here
-                result += CURSOR_MARKER + cursor_block(ch)
-            else:
-                result += ch
-            col += w
+
+        # Wrap before this character when it would overflow (only for visible chars)
+        if w > 0 and col + w > available and col > 0:
+            visual_lines.append(current)
+            current = ""
+            col = 0
+
+        if cursor_col >= 0 and vis == cursor_vis:
+            # CURSOR_MARKER tells the Renderer to move the hardware cursor here
+            current += CURSOR_MARKER + cursor_block(ch)
+        else:
+            current += ch
+
+        col += w
         vis += w
         i += 1
 
-    if cursor_col >= 0 and cursor_col == len(text) and cursor_vis >= scroll and col < available:
-        result += CURSOR_MARKER + cursor_block()
+    # End-of-text cursor (cursor is past the last character)
+    if cursor_col >= 0 and cursor_col == len(text):
+        if col >= available and col > 0:
+            visual_lines.append(current)
+            current = CURSOR_MARKER + cursor_block()
+        else:
+            current += CURSOR_MARKER + cursor_block()
 
-    return result, scroll
+    visual_lines.append(current)
+    return visual_lines

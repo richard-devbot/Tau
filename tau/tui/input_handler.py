@@ -643,6 +643,9 @@ class InputHandler:
         text = self._CSI_U_CTRL_RE.sub(_decode, text)
         text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\t", "    ")
         text = "".join(ch for ch in text if ch == "\n" or ord(ch) >= 32)
+        # Strip trailing newlines — copying a line from the terminal often includes
+        # the newline, which would create a ghost empty line in the input box.
+        text = text.rstrip("\n")
 
         # Readability: pasting a path (/, ~, .) right after a word char gets a space.
         if text[:1] in ("/", "~", "."):

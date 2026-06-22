@@ -30,12 +30,14 @@ class ReadParams(BaseModel):
         examples=["/home/user/project/src/main.py", "/home/user/project/README.md"],
     )
     offset: int = Field(
-        default=0, ge=0,
+        default=0,
+        ge=0,
         description="Line number to start reading from (0-based).",
         examples=[0, 100, 250],
     )
     limit: int = Field(
-        default=2000, ge=1,
+        default=2000,
+        ge=1,
         description="Maximum number of lines to read.",
         examples=[50, 100, 2000],
     )

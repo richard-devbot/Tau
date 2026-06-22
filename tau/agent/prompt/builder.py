@@ -231,7 +231,9 @@ class PromptBuilder:
         append = self._append()
         git = self._git_section()
         footer = self._footer()
-        return identity + guidelines + tools + docs + project_context + skills + append + git + footer
+        return (
+            identity + guidelines + tools + docs + project_context + skills + append + git + footer
+        )
 
     # ------------------------------------------------------------------
     # Layers
@@ -267,7 +269,7 @@ class PromptBuilder:
             if guideline:
                 guidelines.append(f"- **{t.name}**: {guideline.strip()}")
         section = "\n\n# Available Tools\n\n" + "\n".join(lines)
-        section+="\nIn addition to the tools above, you may have access to other custom tools depending on the project."
+        section += "\nIn addition to the tools above, you may have access to other custom tools depending on the project."
         if guidelines:
             section += "\n\n## Tool Guidelines\n\n" + "\n".join(guidelines)
         return section
@@ -297,9 +299,7 @@ class PromptBuilder:
         return (
             "\n\n# Project Instructions\n\n"
             "Project-specific guidelines (follow before general Tau guidelines):\n\n"
-            "<project_context>\n\n"
-            + blocks
-            + "</project_context>"
+            "<project_context>\n\n" + blocks + "</project_context>"
         )
 
     def _docs_section(self) -> str:

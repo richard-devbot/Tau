@@ -285,7 +285,9 @@ class TextLLM:
                             received_content = True
                         yield event
                 if not received_content and attempt < max_retries:
-                    yield RetryEvent(attempt=attempt + 1, max_retries=max_retries, error="empty response")
+                    yield RetryEvent(
+                        attempt=attempt + 1, max_retries=max_retries, error="empty response"
+                    )
                     await asyncio.sleep(base_delay_s * (2**attempt))
                     attempt += 1
                     continue
@@ -368,7 +370,9 @@ class TextLLM:
 
                     has_content = any(
                         (isinstance(e, ToolCallEndEvent))
-                        or (isinstance(e, (TextEndEvent, TextDeltaEvent)) and e.text.content.strip())
+                        or (
+                            isinstance(e, (TextEndEvent, TextDeltaEvent)) and e.text.content.strip()
+                        )
                         for e in events
                     )
 
@@ -408,7 +412,9 @@ class TextLLM:
                             ]
 
                     if not classified.retryable or attempt >= max_retries:
-                        return [ErrorEvent(reason=StopReason.Error, error=str(e), kind=classified.kind)]
+                        return [
+                            ErrorEvent(reason=StopReason.Error, error=str(e), kind=classified.kind)
+                        ]
 
                     await asyncio.sleep(base_delay_s * (2**attempt))
                     attempt += 1
