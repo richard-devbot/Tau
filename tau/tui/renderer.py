@@ -8,6 +8,7 @@ from tau.tui.ansi import (
     is_window_focused,
     truncate,
     visible_width,
+    wrap as _wrap,
 )
 from tau.tui.component import Component
 from tau.tui.terminal import Terminal
@@ -45,10 +46,10 @@ class Renderer:
         self._prev_width: int = 0
         self._prev_height: int = 0
         self._resized: bool = False
-        # Memoizes the width-clamp of each line (line -> clamped line). Unchanged
+        # Memoizes the width-wrap of each line (line -> wrapped rows). Unchanged
         # blocks emit stable string objects, so this skips the costly visible_width
         # ANSI scan for every line that didn't change since the last frame.
-        self._clamp_cache: dict[str, str] = {}
+        self._clamp_cache: dict[str, list[str]] = {}
         self._clamp_cache_width: int = 0
         self._unsub_resize = terminal.on_resize(self._on_resize)
 
@@ -65,30 +66,34 @@ class Renderer:
 
         new_lines: list[str] = component.render(width)
 
-        # Clamp every line to the terminal width.  A logical line wider than
-        # `width` causes the terminal to auto-wrap onto extra physical rows,
-        # which desynchronises _hw_cursor_row (a logical index) from the real
-        # hardware cursor row (counted in physical rows).  That divergence makes
-        # the differential render write to the wrong rows, producing the
-        # duplicated-lines artifact that disappears on resize (full-clear redraw).
+        # Expand every line that exceeds the terminal width into multiple physical
+        # rows by wrapping rather than truncating.  A raw overflow line causes the
+        # terminal to auto-wrap onto extra physical rows, desynchronising
+        # _hw_cursor_row from the real hardware cursor row and corrupting the
+        # differential renderer.  By expanding here we keep the logical-line ↔
+        # physical-row mapping exact and the user sees the full content.
         #
         # `visible_width` runs an ANSI regex per line, which dominates frame cost
-        # on long transcripts (every line, every frame). Memoize the clamp by line
-        # value, rebuilt each frame so it stays bounded to the visible content —
-        # unchanged lines (stable cached-block strings) hit the cache and skip the
-        # scan entirely.
+        # on long transcripts.  Memoize the result by line value so unchanged
+        # lines (stable cached-block strings) skip the scan entirely.
         if width != self._clamp_cache_width:
             self._clamp_cache = {}
             self._clamp_cache_width = width
         prev_clamp = self._clamp_cache
-        clamp: dict[str, str] = {}
+        clamp: dict[str, list[str]] = {}
         clamped: list[str] = []
         for line in new_lines:
-            out = prev_clamp.get(line)
-            if out is None:
-                out = truncate(line, width) if visible_width(line) > width else line
-            clamp[line] = out
-            clamped.append(out)
+            wrapped = prev_clamp.get(line)
+            if wrapped is None:
+                if visible_width(line) > width:
+                    wrapped = _wrap(line, width)
+                    clamp[line] = wrapped
+                    clamped.extend(wrapped)
+                else:
+                    clamped.append(line)
+                continue
+            clamp[line] = wrapped
+            clamped.extend(wrapped)
         self._clamp_cache = clamp
         new_lines = clamped
 
