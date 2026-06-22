@@ -326,4 +326,8 @@ class OpenAIResponsesAPI(BaseAPI):
                     )
 
                 elif etype == "error":
-                    yield ErrorEvent(reason=StopReason.Abort, error=str(event))
+                    from tau.inference.utils import classify_error
+
+                    err_msg = str(getattr(event, "message", None) or event)
+                    classified = classify_error(ValueError(err_msg))
+                    yield ErrorEvent(reason=StopReason.Error, error=err_msg, kind=classified.kind)

@@ -232,4 +232,9 @@ class AnthropicMessagesAPI(BaseAPI):
                     )
 
                 elif etype == "error":
-                    yield ErrorEvent(reason=StopReason.Abort, error=str(event))
+                    from tau.inference.utils import classify_error
+
+                    err_obj = getattr(event, "error", None)
+                    err_msg = str(getattr(err_obj, "message", None) or event)
+                    classified = classify_error(ValueError(err_msg))
+                    yield ErrorEvent(reason=StopReason.Error, error=err_msg, kind=classified.kind)
