@@ -13,6 +13,16 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
+
+
+class ThresholdCompactionStop(Exception):
+    """Raised by transform_context after threshold compaction to stop the engine loop.
+
+    Threshold compaction means the context hit the configured limit mid-turn.
+    The turn stops cleanly so the user can review the compacted context and
+    continue manually — mirrors pi's willRetry=false behaviour for threshold
+    compaction.
+    """
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -681,4 +691,41 @@ async def compact(
         summary=summary,
         first_kept_entry_id=preparation.first_kept_entry_id,
         tokens_before=preparation.tokens_before,
+    )
+
+
+# ── Compaction trigger helpers ────────────────────────────────────────────────
+
+
+def latest_compaction_timestamp(branch: list[Any]) -> float | None:
+    """Return the timestamp of the most recent compaction entry in the branch, or None."""
+    from tau.session.types import CompactionEntry
+
+    for entry in reversed(branch):
+        if isinstance(entry, CompactionEntry):
+            return entry.timestamp
+    return None
+
+
+def is_silent_overflow(message: Any, context_window: int) -> bool:
+    """Detect overflow on a *successful* response (no API error was raised).
+
+    Two symptoms:
+    - Silent (z.ai): stop_reason=Stop but input tokens exceed the window.
+    - Length-stop (Xiaomi MiMo): stop_reason=Length with zero output tokens,
+      meaning the server truncated the input to fill the window and had no room
+      to generate anything.
+    """
+    from tau.inference.types import StopReason
+
+    if context_window <= 0:
+        return False
+    u = message.usage
+    inp = u.input_tokens + u.cache_read_tokens
+    if message.stop_reason == StopReason.Stop and inp > context_window:
+        return True
+    return bool(
+        message.stop_reason == StopReason.Length
+        and u.output_tokens == 0
+        and inp >= context_window * 0.99
     )

@@ -9,21 +9,23 @@ from tau.agent.types import AgentConfig, AgentContext, AgentPhase, ContextUsage,
 from tau.hooks.engine import MessageEndEvent, MessageRollbackEvent, SavePointEvent, SettledEvent
 from tau.hooks.service import Hooks
 from tau.message.types import (
-    AgentMessage,
     AssistantMessage,
     LLMMessage,
-    TerminalExecutionMessage,
-    TextContent,
     ToolMessage,
     UserMessage,
 )
 from tau.message.utils import strip_unusable_trailing_assistant
+from tau.session.utils import to_llm_messages as _to_llm_messages
 from tau.tool.types import ToolInvocation, ToolResult
 
 _log = logging.getLogger(__name__)
 
-_TOOL_CAP_BYTES = 50 * 1024  # 50 KB — DEFAULT_MAX_BYTES
-_TOOL_CAP_LINES = 2000        # DEFAULT_MAX_LINES
+_TOOL_CAP_BYTES = 50 * 1024   # 50 KB — DEFAULT_MAX_BYTES
+_TOOL_CAP_LINES = 2000         # DEFAULT_MAX_LINES
+_TOOL_LINE_CAP_BYTES = 2 * 1024  # 2 KB — max bytes for a single line
+
+
+from tau.session.compaction import ThresholdCompactionStop as _ThresholdCompactionStop
 
 
 def _fmt_size(n: int) -> str:
@@ -38,37 +40,6 @@ if TYPE_CHECKING:
     from tau.runtime.service import Runtime
     from tau.session.compaction import CompactionPreparation
     from tau.session.manager import SessionManager
-
-
-def _to_llm_messages(messages: list[AgentMessage]) -> list[LLMMessage]:
-    """Convert AgentMessages to LLM-compatible messages.
-
-    TerminalExecutionMessage   → UserMessage (Ran `cmd`\n```output```)
-    CompactionSummaryMessage → UserMessage with summary wrapped in XML tags
-    CustomMessage and other non-LLM types → skipped
-    Empty AssistantMessages are visual-only markers (aborts, persisted API/credit
-    errors) and are skipped — an assistant turn with neither content nor tool
-    calls is invalid to send back and triggers provider 400s.
-    """
-    from tau.message.types import CompactionSummaryMessage, ThinkingContent, ToolCallContent
-
-    result: list[LLMMessage] = []
-    for msg in messages:
-        if isinstance(msg, CompactionSummaryMessage):
-            text = f"<context-summary>\n{msg.summary}\n</context-summary>"
-            result.append(UserMessage.from_text(text))
-        elif isinstance(msg, TerminalExecutionMessage):
-            if not msg.exclude:
-                result.append(msg.to_user_message())
-        elif isinstance(msg, AssistantMessage):
-            has_usable = any(
-                isinstance(c, (TextContent, ToolCallContent, ThinkingContent)) for c in msg.contents
-            )
-            if has_usable:
-                result.append(msg)
-        elif isinstance(msg, (UserMessage, ToolMessage)):
-            result.append(msg)
-    return result
 
 
 class Agent:
@@ -209,6 +180,21 @@ class Agent:
         if total_bytes <= _TOOL_CAP_BYTES and total_lines <= _TOOL_CAP_LINES:
             return result
 
+        # Cap individual lines that would consume the entire budget on their own
+        # (e.g. minified JS). Truncate each line to _TOOL_LINE_CAP_BYTES.
+        capped_lines: list[str] = []
+        for line in lines:
+            lb = len(line.encode("utf-8", errors="replace"))
+            if lb > _TOOL_LINE_CAP_BYTES:
+                buf = line.encode("utf-8", errors="replace")[:_TOOL_LINE_CAP_BYTES]
+                # Walk back to a valid UTF-8 boundary
+                while buf and (buf[-1] & 0xC0) == 0x80:
+                    buf = buf[:-1]
+                capped_lines.append(buf.decode("utf-8", errors="replace") + f" …[line truncated: {_fmt_size(lb)} → {_fmt_size(_TOOL_LINE_CAP_BYTES)}]")
+            else:
+                capped_lines.append(line)
+        lines = capped_lines
+
         kept: list[str] = []
         byte_count = 0
         for i, line in enumerate(lines):
@@ -246,10 +232,13 @@ class Agent:
         from the current session so the engine always sees up-to-date
         compacted history.
         """
-        await self._check_compaction()
+        threshold_stop = await self._check_compaction()
         session_ctx = self._session_manager.build_session_context()
-        new_messages = _to_llm_messages(session_ctx.messages)
-        return strip_unusable_trailing_assistant(new_messages, self._session_manager)
+        llm_messages = _to_llm_messages(session_ctx.messages)
+        result = strip_unusable_trailing_assistant(llm_messages, self._session_manager)
+        if threshold_stop:
+            raise _ThresholdCompactionStop()
+        return result
 
     # -------------------------------------------------------------------------
     # Internal helpers
@@ -327,15 +316,6 @@ class Agent:
             )
         )
 
-    def _latest_compaction_timestamp(self) -> float | None:
-        """Timestamp of the most recent compaction in the active branch, if any."""
-        from tau.session.types import CompactionEntry
-
-        for entry in reversed(self._session_manager.get_branch()):
-            if isinstance(entry, CompactionEntry):
-                return entry.timestamp
-        return None
-
     def _latest_model_change_timestamp(self) -> float | None:
         """Timestamp of the most recent model-change entry in the active branch, if any."""
         from tau.session.types import ModelChangeEntry
@@ -345,20 +325,26 @@ class Agent:
                 return entry.timestamp
         return None
 
-    async def _check_compaction(self) -> None:
-        """Auto-compact if context usage exceeds the threshold. Circuit-breaks after 3 failures."""
+    async def _check_compaction(self) -> bool:
+        """Auto-compact if context usage exceeds the threshold. Circuit-breaks after 3 failures.
+
+        Returns True if threshold compaction ran (caller should stop the current turn),
+        False otherwise (overflow-forced compaction or no compaction needed).
+        """
         from tau.session.compaction import (
             estimate_context_tokens,
+            is_silent_overflow,
+            latest_compaction_timestamp,
             prepare_compaction,
             should_compact,
         )
 
         if self._compaction_failures >= 3:
-            return
+            return False
 
         settings = self._config.compaction
         if not settings.enabled:
-            return
+            return False
 
         entries = self._session_manager.get_branch()
         session_ctx = self._session_manager.build_session_context()
@@ -378,51 +364,36 @@ class Agent:
         model_change_ts = self._latest_model_change_timestamp()
         if model_change_ts is not None and last is not None:
             if last.timestamp <= model_change_ts:
-                return
+                return False
 
-        forced = last is not None and self._is_silent_overflow(last)
+        forced = last is not None and is_silent_overflow(last, self._context_window)
 
         if not forced:
             if not should_compact(usage.tokens, self._context_window, settings):
-                return
+                return False
             # Stale-anchor guard: right after a compaction the kept messages still carry
             # pre-compaction usage on their anchor, which would re-trigger compaction every
             # turn. Skip if the usage anchor predates the latest compaction boundary.
             if usage.last_usage_index is not None:
                 anchor = llm_messages[usage.last_usage_index]
-                comp_ts = self._latest_compaction_timestamp()
+                comp_ts = latest_compaction_timestamp(entries)
                 if comp_ts is not None and getattr(anchor, "timestamp", 0.0) <= comp_ts:
-                    return
+                    return False
 
         preparation = prepare_compaction(entries, settings)
         if preparation is None:
-            return
+            return False
 
         try:
             await self._apply_compaction(preparation, entries, manual=False)
+            # Threshold compaction: caller should stop the turn; user resumes manually.
+            # Forced (silent overflow) compaction: caller should continue — the LLM
+            # never got a usable response, so there's nothing for the user to resume from.
+            return not forced
         except Exception:
             self._compaction_failures += 1
             _log.exception("Auto-compaction failed")
-
-    def _is_silent_overflow(self, message: AssistantMessage) -> bool:
-        """Detect overflow on a *successful* response (no error was raised).
-
-        - Silent (z.ai): a normal stop whose input tokens exceed the window.
-        - Length-stop (Xiaomi MiMo): server truncated the input to fill the window,
-          leaving no room to generate, so it stops with zero output.
-        """
-        from tau.inference.types import StopReason
-
-        cw = self._context_window
-        if cw <= 0:
             return False
-        u = message.usage
-        inp = u.input_tokens + u.cache_read_tokens
-        if message.stop_reason == StopReason.Stop and inp > cw:
-            return True
-        return bool(
-            message.stop_reason == StopReason.Length and u.output_tokens == 0 and inp >= cw * 0.99
-        )
 
     async def _try_overflow_recovery(self) -> bool:
         """If the last turn died with a context-overflow error, compact once and signal a retry.

@@ -10,7 +10,17 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 from uuid_extensions import uuid7str as _uuid7str
 
-from tau.message.types import AgentMessage, ImageContent, LLMMessage, Role, TextContent
+from tau.message.types import (
+    AgentMessage,
+    AssistantMessage,
+    ImageContent,
+    LLMMessage,
+    Role,
+    TextContent,
+    TerminalExecutionMessage,
+    ToolMessage,
+    UserMessage,
+)
 from tau.session.types import (
     MessageEntry,
     SessionEntry,
@@ -263,3 +273,34 @@ def list_sessions_from_dir(
         _log.warning("failed to list sessions from %s", dir_path, exc_info=True)
 
     return sessions
+
+
+def to_llm_messages(messages: list[AgentMessage]) -> list[LLMMessage]:
+    """Convert AgentMessages to LLM-compatible messages.
+
+    TerminalExecutionMessage   → UserMessage (Ran `cmd`\n```output```)
+    CompactionSummaryMessage → UserMessage with summary wrapped in XML tags
+    CustomMessage and other non-LLM types → skipped
+    Empty AssistantMessages are visual-only markers (aborts, persisted API/credit
+    errors) and are skipped — an assistant turn with neither content nor tool
+    calls is invalid to send back and triggers provider 400s.
+    """
+    from tau.message.types import CompactionSummaryMessage, ThinkingContent, ToolCallContent
+
+    result: list[LLMMessage] = []
+    for msg in messages:
+        if isinstance(msg, CompactionSummaryMessage):
+            text = f"<context-summary>\n{msg.summary}\n</context-summary>"
+            result.append(UserMessage.from_text(text))
+        elif isinstance(msg, TerminalExecutionMessage):
+            if not msg.exclude:
+                result.append(msg.to_user_message())
+        elif isinstance(msg, AssistantMessage):
+            has_usable = any(
+                isinstance(c, (TextContent, ToolCallContent, ThinkingContent)) for c in msg.contents
+            )
+            if has_usable:
+                result.append(msg)
+        elif isinstance(msg, (UserMessage, ToolMessage)):
+            result.append(msg)
+    return result
