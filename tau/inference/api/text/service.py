@@ -346,7 +346,21 @@ class TextLLM:
         try:
             while True:
                 try:
-                    return await self.api.invoke(api_context, model=self.model)
+                    from tau.inference.types import TextDeltaEvent, TextEndEvent, ToolCallEndEvent
+
+                    events = await self.api.invoke(api_context, model=self.model)
+
+                    has_tool_calls = any(isinstance(e, ToolCallEndEvent) for e in events)
+                    text = next((e.text.content for e in events if isinstance(e, TextEndEvent)), None)
+                    if text is None:
+                        text = "".join(e.text.content for e in events if isinstance(e, TextDeltaEvent))
+
+                    if not has_tool_calls and not text.strip() and attempt < max_retries:
+                        await asyncio.sleep(base_delay_s * (2**attempt))
+                        attempt += 1
+                        continue
+
+                    return events
                 except Exception as e:
                     classified = classify_error(e)
 
