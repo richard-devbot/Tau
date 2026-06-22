@@ -336,6 +336,15 @@ class Agent:
                 return entry.timestamp
         return None
 
+    def _latest_model_change_timestamp(self) -> float | None:
+        """Timestamp of the most recent model-change entry in the active branch, if any."""
+        from tau.session.types import ModelChangeEntry
+
+        for entry in reversed(self._session_manager.get_branch()):
+            if isinstance(entry, ModelChangeEntry):
+                return entry.timestamp
+        return None
+
     async def _check_compaction(self) -> None:
         """Auto-compact if context usage exceeds the threshold. Circuit-breaks after 3 failures."""
         from tau.session.compaction import (
@@ -362,6 +371,15 @@ class Agent:
         # (Xiaomi MiMo) instead of erroring. The threshold check can miss these, so
         # force compaction when the last response shows the symptom.
         last = self._session_manager.find_last_assistant_message()
+
+        # Model-switch guard: if the last assistant message is older than the most recent
+        # model change, it came from a different model. Treating its usage/overflow data as
+        # a signal for the new model is unreliable (context windows differ), so skip.
+        model_change_ts = self._latest_model_change_timestamp()
+        if model_change_ts is not None and last is not None:
+            if last.timestamp <= model_change_ts:
+                return
+
         forced = last is not None and self._is_silent_overflow(last)
 
         if not forced:
@@ -418,6 +436,13 @@ class Agent:
 
         last = self._session_manager.find_last_assistant_message()
         if last is None or last.error_kind != ErrorKind.CONTEXT_OVERFLOW:
+            return False
+
+        # Model-switch guard: the overflow error is from a different model if it predates
+        # the most recent model-change entry. Skip recovery — the new model may handle the
+        # context fine, and compacting based on a stale signal wastes history.
+        model_change_ts = self._latest_model_change_timestamp()
+        if model_change_ts is not None and last.timestamp <= model_change_ts:
             return False
 
         if self._overflow_recovery_attempted:
