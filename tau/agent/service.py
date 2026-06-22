@@ -25,6 +25,7 @@ _TOOL_CAP_LINES = 2000         # DEFAULT_MAX_LINES
 _TOOL_LINE_CAP_BYTES = 2 * 1024  # 2 KB — max bytes for a single line
 
 
+from tau.hooks.engine import CompactionReason as _CompactionReason
 from tau.session.compaction import ThresholdCompactionStop as _ThresholdCompactionStop
 
 
@@ -284,7 +285,8 @@ class Agent:
         if preparation is None:
             return False
         await self._apply_compaction(
-            preparation, entries, manual=True, custom_instructions=custom_instructions
+            preparation, entries, manual=True, custom_instructions=custom_instructions,
+            reason=_CompactionReason.Manual,
         )
         return True
 
@@ -294,12 +296,15 @@ class Agent:
         entries: list,
         manual: bool,
         custom_instructions: str | None = None,
+        reason: _CompactionReason = _CompactionReason.Manual,
     ) -> None:
         """Run a prepared compaction, persist the summary, and emit the end event."""
         from tau.hooks.engine import CompactionEndEvent
 
+        will_retry = reason == _CompactionReason.Overflow
         result, from_extension = await self._run_compaction(
-            preparation, entries, manual=manual, custom_instructions=custom_instructions
+            preparation, entries, manual=manual, custom_instructions=custom_instructions,
+            reason=reason, will_retry=will_retry,
         )
         self._session_manager.append_compaction(
             summary=result.summary,
@@ -313,6 +318,8 @@ class Agent:
                 tokens_before=result.tokens_before,
                 summary_length=len(result.summary),
                 from_extension=from_extension,
+                reason=reason,
+                will_retry=will_retry,
             )
         )
 
@@ -385,7 +392,10 @@ class Agent:
             return False
 
         try:
-            await self._apply_compaction(preparation, entries, manual=False)
+            await self._apply_compaction(
+                preparation, entries, manual=False,
+                reason=_CompactionReason.Overflow if forced else _CompactionReason.Threshold,
+            )
             # Threshold compaction: caller should stop the turn; user resumes manually.
             # Forced (silent overflow) compaction: caller should continue — the LLM
             # never got a usable response, so there's nothing for the user to resume from.
@@ -433,7 +443,7 @@ class Agent:
         if preparation is None:
             return False
         try:
-            await self._apply_compaction(preparation, entries, manual=False)
+            await self._apply_compaction(preparation, entries, manual=False, reason=_CompactionReason.Overflow)
         except Exception:
             self._compaction_failures += 1
             _log.exception("Overflow-triggered compaction failed")
@@ -456,6 +466,8 @@ class Agent:
         entries: list,
         manual: bool,
         custom_instructions: str | None = None,
+        reason: _CompactionReason = _CompactionReason.Manual,
+        will_retry: bool = False,
     ) -> tuple:
         """Emit before_compaction (allowing interception), then run the default algorithm.
 
@@ -476,6 +488,8 @@ class Agent:
                 preparation=preparation,
                 entries=entries,
                 manual=manual,
+                reason=reason,
+                will_retry=will_retry,
             )
         )
 
@@ -487,7 +501,7 @@ class Agent:
             if res.compaction is not None:
                 return res.compaction, True
 
-        await self.hooks.emit(CompactionStartEvent(manual=manual))
+        await self.hooks.emit(CompactionStartEvent(manual=manual, reason=reason, will_retry=will_retry))
         result = await _compact(
             preparation, self._engine.llm, custom_instructions=custom_instructions
         )  # type: ignore[arg-type]

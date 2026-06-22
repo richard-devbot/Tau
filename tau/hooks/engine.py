@@ -19,6 +19,14 @@ class AgentEndReason(StrEnum):
     Error = "error"
 
 
+class CompactionReason(StrEnum):
+    """What triggered a context compaction."""
+
+    Manual = "manual"
+    Threshold = "threshold"
+    Overflow = "overflow"
+
+
 @dataclass
 class ContextEvent:
     """Carries the full message history just before it is sent to the LLM;
@@ -213,6 +221,8 @@ class BeforeCompactionEvent:
     preparation: CompactionPreparation | None = None
     entries: list[SessionEntry] = field(default_factory=list)
     manual: bool = False
+    reason: CompactionReason = CompactionReason.Manual
+    will_retry: bool = False
 
 
 @dataclass
@@ -221,6 +231,8 @@ class CompactionStartEvent:
 
     type: Literal["compaction_start"] = field(default="compaction_start", init=False)
     manual: bool = False
+    reason: CompactionReason = CompactionReason.Manual
+    will_retry: bool = False
 
 
 @dataclass
@@ -232,6 +244,8 @@ class CompactionEndEvent:
     tokens_before: int = 0
     summary_length: int = 0
     from_extension: bool = False
+    reason: CompactionReason = CompactionReason.Manual
+    will_retry: bool = False
 
 
 # ── Result types ──────────────────────────────────────────────────────────────

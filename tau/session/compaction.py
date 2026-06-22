@@ -20,7 +20,7 @@ class ThresholdCompactionStop(Exception):
 
     Threshold compaction means the context hit the configured limit mid-turn.
     The turn stops cleanly so the user can review the compacted context and
-    continue manually — mirrors pi's willRetry=false behaviour for threshold
+    continue manually willRetry=false behaviour for threshold
     compaction.
     """
 from typing import TYPE_CHECKING, Any
