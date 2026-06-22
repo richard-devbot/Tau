@@ -268,36 +268,36 @@ class OpenAIResponsesAPI(BaseAPI):
                 etype = event.type
 
                 if etype == "response.output_item.added":
-                    item = event.item
+                    item = event.item  # type: ignore[union-attr]
                     if item.type == "message":
                         yield TextStartEvent(text=TextContent(content=""))
                     elif item.type == "reasoning":
                         yield ThinkingStartEvent(thinking=None)
                     elif item.type == "function_call":
-                        tool_names[item.call_id] = item.name
+                        tool_names[item.call_id] = item.name  # type: ignore[union-attr,index]
                         yield ToolCallStartEvent(
-                            tool_call=ToolCallContent(id=item.call_id, name=item.name)
+                            tool_call=ToolCallContent(id=item.call_id, name=item.name)  # type: ignore[union-attr,arg-type]
                         )
 
                 elif etype == "response.output_text.delta":
-                    yield TextDeltaEvent(text=TextContent(content=event.delta))
+                    yield TextDeltaEvent(text=TextContent(content=event.delta))  # type: ignore[union-attr]
 
                 elif etype == "response.output_text.done":
-                    yield TextEndEvent(text=TextContent(content=event.text))
+                    yield TextEndEvent(text=TextContent(content=event.text))  # type: ignore[union-attr]
 
                 elif etype == "response.reasoning_summary_text.delta":
-                    yield ThinkingDeltaEvent(thinking=ThinkingContent(content=event.delta))
+                    yield ThinkingDeltaEvent(thinking=ThinkingContent(content=event.delta))  # type: ignore[union-attr]
 
                 elif etype == "response.reasoning_summary_text.done":
-                    yield ThinkingEndEvent(thinking=ThinkingContent(content=event.text))
+                    yield ThinkingEndEvent(thinking=ThinkingContent(content=event.text))  # type: ignore[union-attr]
 
                 elif etype == "response.function_call_arguments.delta":
-                    call_id = event.item_id
+                    call_id = event.item_id  # type: ignore[union-attr]
                     yield ToolCallDeltaEvent(tool_call=ToolCallContent(id=call_id))
 
                 elif etype == "response.function_call_arguments.done":
-                    call_id = event.item_id
-                    args_str = event.arguments.strip()
+                    call_id = event.item_id  # type: ignore[union-attr]
+                    args_str = event.arguments.strip()  # type: ignore[union-attr]
                     args = parse_tool_args(args_str)
 
                     yield ToolCallEndEvent(
@@ -307,7 +307,7 @@ class OpenAIResponsesAPI(BaseAPI):
                     )
 
                 elif etype == "response.done":
-                    resp = event.response
+                    resp = event.response  # type: ignore[union-attr]
                     u = getattr(resp, "usage", None)
                     if u:
                         _input_tokens = getattr(u, "input_tokens", 0) or 0

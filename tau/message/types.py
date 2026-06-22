@@ -16,6 +16,8 @@ from tau.message.utils import audio_to_base64, image_to_base64, video_to_base64
 from tau.tool.types import ToolKind
 
 if TYPE_CHECKING:
+    from PIL import Image
+
     from tau.session.types import CustomMessageEntry
 
 
@@ -32,7 +34,7 @@ class _LazyPIL:
         return getattr(_pil, name)
 
 
-Image = _LazyPIL()
+Image = _LazyPIL()  # type: ignore[assignment]
 
 
 @dataclass
@@ -472,6 +474,7 @@ class CustomMessage:
         # Normalize content to list of TextContent or ImageContent
         from typing import cast
 
+        contents: list[TextContent | ImageContent | LinesContent]
         if isinstance(raw, list):
             contents = cast(list[TextContent | ImageContent | LinesContent], raw)
         elif isinstance(raw, str):
@@ -479,7 +482,7 @@ class CustomMessage:
                 list[TextContent | ImageContent | LinesContent], [TextContent(content=raw)]
             )
         else:
-            contents: list[TextContent | ImageContent | LinesContent] = []
+            contents = []
         return cls(
             custom_type=entry.custom_type,
             contents=contents,
