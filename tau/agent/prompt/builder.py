@@ -33,8 +33,66 @@ def load_project_context_file(cwd: Path) -> tuple[str, Path] | None:
     return None
 
 
+def _find_git_root(cwd: Path) -> Path | None:
+    """Walk up from cwd and return the first directory containing .git, or None."""
+    current = cwd.resolve()
+    while True:
+        if (current / ".git").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def load_project_context_files(cwd: Path) -> list[tuple[str, Path]]:
+    """Walk from git root (or cwd if not in a repo) down to cwd, collecting context files.
+
+    Returns (content, path) tuples ordered root-first so cwd instructions appear
+    last and take highest precedence when the model reads top-to-bottom.
+    """
+    candidates = ["AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"]
+
+    def _load(directory: Path) -> tuple[str, Path] | None:
+        for filename in candidates:
+            path = directory / filename
+            if path.is_file():
+                try:
+                    content = path.read_text(encoding="utf-8").strip()
+                    return (content, path) if content else None
+                except OSError:
+                    pass
+        return None
+
+    resolved = cwd.resolve()
+    git_root = _find_git_root(resolved)
+    stop_at = git_root if git_root else resolved
+
+    # Collect directories from stop_at down to cwd
+    dirs: list[Path] = []
+    current = resolved
+    while True:
+        dirs.append(current)
+        if current == stop_at:
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    seen: set[Path] = set()
+    results: list[tuple[str, Path]] = []
+    for directory in reversed(dirs):
+        entry = _load(directory)
+        if entry and entry[1] not in seen:
+            seen.add(entry[1])
+            results.append(entry)
+
+    return results
+
+
 _DEFAULT_IDENTITY = """\
-You are a coding agent. You help USER understand, write, and modify code and files.
+You are a coding agent operating inside tau, a coding agent harness. You help USER understand, write, and modify code and files.
 
 You have strong software engineering skills. You think carefully before making changes,
 and follow the existing style and conventions of the project.
@@ -203,12 +261,17 @@ class PromptBuilder:
             if guideline:
                 guidelines.append(f"- **{t.name}**: {guideline.strip()}")
         section = "\n\n# Available Tools\n\n" + "\n".join(lines)
+        section+="\nIn addition to the tools above, you may have access to other custom tools depending on the project."
         if guidelines:
             section += "\n\n## Tool Guidelines\n\n" + "\n".join(guidelines)
         return section
 
     def _project_context_section(self) -> str:
         """Include project-specific context from AGENTS.md or CLAUDE.md if present.
+
+        Walks from git root down to cwd, loading one file per directory.
+        Each file is wrapped in <project_instructions path="..."> so the model
+        knows which directory each set of rules comes from.
 
         Skipped if:
         - disable_context_files is True (--no-context-files flag)
@@ -218,15 +281,19 @@ class PromptBuilder:
             return ""
         if self._opts.project_trusted is False:
             return ""
-        context = load_project_context_file(self._opts.cwd)
-        if not context:
+        files = load_project_context_files(self._opts.cwd)
+        if not files:
             return ""
-        content, path = context
+        blocks = "".join(
+            f'<project_instructions path="{path}">\n{content}\n</project_instructions>\n\n'
+            for content, path in files
+        )
         return (
-            f"\n\n# Project Instructions\n\n"
-            f"Project-specific guidelines and rules (from {path.name}):\n\n"
-            f"{content}\n\n"
-            "Follow project-specific instructions before general Tau guidelines."
+            "\n\n# Project Instructions\n\n"
+            "Project-specific guidelines (follow before general Tau guidelines):\n\n"
+            "<project_context>\n\n"
+            + blocks
+            + "</project_context>"
         )
 
     def _docs_section(self) -> str:

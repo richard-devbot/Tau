@@ -10,6 +10,7 @@ from tau.agent.prompt.builder import (
     _detect_os,
     _detect_shell,
     load_project_context_file,
+    load_project_context_files,
 )
 from tau.agent.prompt.types import PromptOptions
 from tau.builtins.tools.read import ReadTool
@@ -169,6 +170,46 @@ class TestPromptBuilderToolsSection:
         assert "Tool Guidelines" in prompt
 
 
+class TestLoadProjectContextFiles:
+    def test_returns_empty_when_no_files(self, tmp_path):
+        assert load_project_context_files(tmp_path) == []
+
+    def test_loads_single_file_from_cwd(self, tmp_path):
+        (tmp_path / "AGENTS.md").write_text("cwd rules")
+        results = load_project_context_files(tmp_path)
+        assert len(results) == 1
+        assert "cwd rules" in results[0][0]
+
+    def test_loads_multiple_files_root_first(self, tmp_path):
+        # Simulate git repo: parent is root, child is cwd
+        (tmp_path / ".git").mkdir()
+        child = tmp_path / "sub"
+        child.mkdir()
+        (tmp_path / "AGENTS.md").write_text("root rules")
+        (child / "AGENTS.md").write_text("child rules")
+        results = load_project_context_files(child)
+        assert len(results) == 2
+        assert "root rules" in results[0][0]
+        assert "child rules" in results[1][0]
+
+    def test_stops_at_git_root(self, tmp_path):
+        # Files above git root should not be included
+        (tmp_path / "AGENTS.md").write_text("above root rules")
+        git_root = tmp_path / "repo"
+        git_root.mkdir()
+        (git_root / ".git").mkdir()
+        (git_root / "AGENTS.md").write_text("repo rules")
+        results = load_project_context_files(git_root)
+        assert len(results) == 1
+        assert "repo rules" in results[0][0]
+
+    def test_deduplicates_same_file(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "AGENTS.md").write_text("rules")
+        results = load_project_context_files(tmp_path)
+        assert len(results) == 1
+
+
 class TestPromptBuilderProjectContext:
     def test_context_included_when_trusted_and_file_exists(self, tmp_path):
         (tmp_path / "AGENTS.md").write_text("Project rules here.")
@@ -176,6 +217,15 @@ class TestPromptBuilderProjectContext:
         prompt = builder.build()
         assert "Project rules here." in prompt
         assert "Project Instructions" in prompt
+
+    def test_context_uses_xml_wrapping(self, tmp_path):
+        (tmp_path / "AGENTS.md").write_text("Project rules here.")
+        builder = PromptBuilder(_opts(tmp_path))
+        prompt = builder.build()
+        assert "<project_context>" in prompt
+        assert "<project_instructions path=" in prompt
+        assert "</project_instructions>" in prompt
+        assert "</project_context>" in prompt
 
     def test_context_excluded_when_disabled(self, tmp_path):
         (tmp_path / "AGENTS.md").write_text("Project rules here.")
