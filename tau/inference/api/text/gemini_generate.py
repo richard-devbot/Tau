@@ -280,7 +280,10 @@ class GeminiGenerateAPI(BaseAPI):
                     return
 
         except Exception as exc:
-            yield ErrorEvent(reason=StopReason.Abort, error=str(exc))
+            from tau.inference.utils import classify_error
+
+            classified = classify_error(exc)
+            yield ErrorEvent(reason=StopReason.Error, error=str(exc), kind=classified.kind)
             return
 
         if thinking_started:

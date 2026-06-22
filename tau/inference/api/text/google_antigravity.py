@@ -119,6 +119,14 @@ _ONBOARD_USER_PATH = "/v1internal:onboardUser"
 _ANTIGRAVITY_VERSION = "1.26.0"
 _FALLBACK_PROJECT_ID = "rising-fact-p41fc"
 
+class _HTTPError(Exception):
+    """Thin wrapper so classify_error can read the HTTP status code."""
+
+    def __init__(self, status_code: int, body: str) -> None:
+        super().__init__(body)
+        self.status_code = status_code
+
+
 _STOP_REASON: dict[str, StopReason] = {
     "STOP": StopReason.Stop,
     "MAX_TOKENS": StopReason.Length,
@@ -449,9 +457,14 @@ class GoogleAntigravityAPI(BaseAPI):
 
                 if not response.is_success:
                     error_body = (await response.aread()).decode(errors="replace")
+                    from tau.inference.utils import classify_error
+
+                    _err = _HTTPError(response.status_code, f"HTTP {response.status_code}: {error_body}")
+                    classified = classify_error(_err)
                     yield ErrorEvent(
-                        reason=StopReason.Abort,
+                        reason=StopReason.Error,
                         error=f"HTTP {response.status_code}: {error_body}",
+                        kind=classified.kind,
                     )
                     return
 
@@ -584,7 +597,10 @@ class GoogleAntigravityAPI(BaseAPI):
                     await _bytes.aclose()  # type: ignore[attr-defined]
 
         except Exception as exc:
-            yield ErrorEvent(reason=StopReason.Abort, error=str(exc))
+            from tau.inference.utils import classify_error
+
+            classified = classify_error(exc)
+            yield ErrorEvent(reason=StopReason.Error, error=str(exc), kind=classified.kind)
             return
 
         if not done:
