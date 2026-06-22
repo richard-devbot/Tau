@@ -74,12 +74,14 @@ class AnthropicMessagesAPI(BaseAPI):
         tools: list[Tool] | None = None,
     ) -> dict[str, Any]:
         """Assemble the Anthropic API request payload, including thinking and tool configs."""
+        _suppress_temp = any(s in model.id for s in ("opus-4-7", "opus-4-8"))
         params: dict[str, Any] = {
             "model": model.id,
             "messages": anthropic_apply_message_cache(messages),
             "max_tokens": self.options.max_tokens or _DEFAULT_MAX_TOKENS,
-            "temperature": self.options.temperature,
         }
+        if not _suppress_temp:
+            params["temperature"] = self.options.temperature
         if system:
             params["system"] = [
                 {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
@@ -137,6 +139,7 @@ class AnthropicMessagesAPI(BaseAPI):
         _output_tokens = 0
         _cache_read_tokens = 0
         _cache_write_tokens = 0
+        _cache_write_1h_tokens = 0
 
         yield StartEvent()
 
@@ -214,6 +217,8 @@ class AnthropicMessagesAPI(BaseAPI):
                         _input_tokens = getattr(u, "input_tokens", 0) or 0
                         _cache_read_tokens = getattr(u, "cache_read_input_tokens", 0) or 0
                         _cache_write_tokens = getattr(u, "cache_creation_input_tokens", 0) or 0
+                        _cc = getattr(u, "cache_creation", None)
+                        _cache_write_1h_tokens = getattr(_cc, "ephemeral_1h_input_tokens", 0) or 0
 
                 elif etype == "message_delta":
                     u = getattr(event, "usage", None)
@@ -237,6 +242,7 @@ class AnthropicMessagesAPI(BaseAPI):
                             output_tokens=_output_tokens,
                             cache_read_tokens=_cache_read_tokens,
                             cache_write_tokens=_cache_write_tokens,
+                            cache_write_1h_tokens=_cache_write_1h_tokens,
                         )
 
                 elif etype == "error":

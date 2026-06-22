@@ -654,6 +654,7 @@ class Engine:
                                     output_tokens=ev.output_tokens,
                                     cache_read_tokens=ev.cache_read_tokens,
                                     cache_write_tokens=ev.cache_write_tokens,
+                                    cache_write_1h_tokens=ev.cache_write_1h_tokens,
                                 )
 
                 # If we broke out of the stream early due to abort, treat as abort

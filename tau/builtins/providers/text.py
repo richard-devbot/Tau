@@ -71,6 +71,15 @@ api_providers = [
         api="openai_completions",
         options=LLMOptions(base_url="https://api.kilo.ai/api/gateway"),
     ),
+    APIProvider(
+        id="fireworks",
+        name="Fireworks AI",
+        api="openai_completions",
+        options=LLMOptions(
+            base_url="https://api.fireworks.ai/inference/v1",
+            extra_params={"cache_compat": True},
+        ),
+    ),
     APIProvider(id="mistral", name="Mistral", api="mistral_chat", options=LLMOptions()),
     APIProvider(
         id="ollama",
