@@ -25,9 +25,20 @@ def _render_read_call(args: dict, _streaming: bool) -> list[str]:
 class ReadParams(BaseModel):
     """Parameters for the read tool."""
 
-    path: str = Field(description="Absolute path to the file to read.")
-    offset: int = Field(default=0, ge=0, description="Line number to start reading from (0-based).")
-    limit: int = Field(default=2000, ge=1, description="Maximum number of lines to read.")
+    path: str = Field(
+        description="Absolute path to the file to read.",
+        examples=["/home/user/project/src/main.py", "/home/user/project/README.md"],
+    )
+    offset: int = Field(
+        default=0, ge=0,
+        description="Line number to start reading from (0-based).",
+        examples=[0, 100, 250],
+    )
+    limit: int = Field(
+        default=2000, ge=1,
+        description="Maximum number of lines to read.",
+        examples=[50, 100, 2000],
+    )
 
 
 _PREVIEW_LINES = 5

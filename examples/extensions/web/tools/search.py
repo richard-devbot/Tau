@@ -27,14 +27,22 @@ class _WebSearchSchema(BaseModel):
         ...,
         description=(
             "The search query. Be specific — include names, versions, or error "
-            "messages for better results."
+            "messages for better results. Supports site: filtering to restrict "
+            "results to a domain, e.g. 'asyncio timeout site:docs.python.org'."
         ),
+        examples=[
+            "Python asyncio timeout handling",
+            "TypeError: cannot unpack non-sequence NoneType",
+            "fastapi dependency injection site:fastapi.tiangolo.com",
+        ],
     )
     mode: _SearchMode = Field(
         default=_SearchMode.text,
         description="Search mode: 'text' (default), 'news', 'images', 'videos', or 'books'.",
+        examples=["text", "news"],
     )
     max_results: int = Field(
+        examples=[10, 20],
         default=10,
         description="Number of results to return (default 10). Increase to 20+ for broader coverage.",
     )

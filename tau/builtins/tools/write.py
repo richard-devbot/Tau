@@ -24,8 +24,14 @@ def _render_write_call(args: dict, _streaming: bool) -> list[str]:
 class WriteParams(BaseModel):
     """Parameters for the write tool."""
 
-    path: str = Field(description="Absolute path to the file to write.")
-    content: str = Field(description="Content to write to the file.")
+    path: str = Field(
+        description="Absolute path to the file to write.",
+        examples=["/home/user/project/src/utils.py", "/home/user/project/config.json"],
+    )
+    content: str = Field(
+        description="Content to write to the file.",
+        examples=["def hello():\n    print('Hello, world!')\n"],
+    )
 
 
 _PREVIEW_LINES = 5

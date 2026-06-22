@@ -29,7 +29,9 @@ class LsParams(BaseModel):
     """Parameters for the ls tool."""
 
     path: str = Field(
-        default="", description="Directory path to list. Defaults to the agent's cwd."
+        default="",
+        description="Directory path to list. Defaults to the agent's cwd.",
+        examples=["/home/user/project", "/home/user/project/src"],
     )
 
 

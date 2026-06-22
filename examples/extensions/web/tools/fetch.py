@@ -35,6 +35,10 @@ class _WebFetchSchema(BaseModel):
             "Full URL to fetch (must start with http:// or https://). "
             "Redirects are followed automatically."
         ),
+        examples=[
+            "https://docs.python.org/3/library/asyncio.html",
+            "https://api.github.com/repos/python/cpython/releases/latest",
+        ],
     )
     prompt: str | None = Field(
         default=None,
@@ -43,10 +47,15 @@ class _WebFetchSchema(BaseModel):
             "Use when you know what you're looking for — e.g. 'current temperature in Singapore', "
             "'latest release version'. Omit for APIs, JSON endpoints, or when you need raw content."
         ),
+        examples=[
+            "latest stable release version",
+            "installation instructions for Linux",
+        ],
     )
     timeout: int = Field(
         default=10,
         description="Request timeout in seconds (default 10). Increase to 30+ for slow or large pages.",
+        examples=[10, 30],
     )
 
 

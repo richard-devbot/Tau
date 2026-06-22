@@ -60,9 +60,14 @@ def _render_glob_result(content: str, opts: Any) -> list[str]:
 class GlobParams(BaseModel):
     """Parameters for the glob tool."""
 
-    pattern: str = Field(description="Glob pattern (e.g. 'src/**/*.py').")
+    pattern: str = Field(
+        description="Glob pattern (e.g. 'src/**/*.py').",
+        examples=["src/**/*.py", "**/*.ts", "tests/**/test_*.py"],
+    )
     path: str = Field(
-        default="", description="Base directory to search from. Defaults to the agent's cwd."
+        default="",
+        description="Base directory to search from. Defaults to the agent's cwd.",
+        examples=["/home/user/project", "/home/user/project/src"],
     )
 
 

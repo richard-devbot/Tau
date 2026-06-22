@@ -60,12 +60,16 @@ def _render_terminal_result(content: str, opts: Any) -> list[str]:
 class TerminalParams(BaseModel):
     """Parameters for terminal command execution."""
 
-    command: str = Field(description="Shell command to execute.")
+    command: str = Field(
+        description="Shell command to execute.",
+        examples=["python -m pytest tests/", "ruff check src/", "git status"],
+    )
     timeout: int = Field(
         default=_DEFAULT_TIMEOUT,
         ge=1,
         le=600,
         description=f"Timeout in seconds (default {_DEFAULT_TIMEOUT}, max 600).",
+        examples=[30, 120, 300],
     )
 
 

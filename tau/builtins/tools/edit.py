@@ -29,11 +29,22 @@ _CONTEXT_LINES = 2
 class EditParams(BaseModel):
     """Parameters for the edit tool."""
 
-    path: str = Field(description="Absolute path to the file to edit.")
-    old_string: str = Field(description="Exact string to find and replace.")
-    new_string: str = Field(description="Replacement string.")
+    path: str = Field(
+        description="Absolute path to the file to edit.",
+        examples=["/home/user/project/src/main.py", "/home/user/project/config.json"],
+    )
+    old_string: str = Field(
+        description="Exact string to find and replace.",
+        examples=["def old_function():", "MAX_RETRIES = 3"],
+    )
+    new_string: str = Field(
+        description="Replacement string.",
+        examples=["def new_function():", "MAX_RETRIES = 5"],
+    )
     replace_all: bool = Field(
-        default=False, description="Replace all occurrences; default replaces only the first."
+        default=False,
+        description="Replace all occurrences; default replaces only the first.",
+        examples=[False, True],
     )
 
 

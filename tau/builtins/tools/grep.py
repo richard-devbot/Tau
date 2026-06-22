@@ -66,17 +66,27 @@ def _render_grep_result(content: str, opts: Any) -> list[str]:
 class GrepParams(BaseModel):
     """Parameters for the grep tool."""
 
-    pattern: str = Field(description="Regular expression to search for.")
+    pattern: str = Field(
+        description="Regular expression to search for.",
+        examples=["def parse_config", "class UserService", "TODO|FIXME"],
+    )
     path: str = Field(
-        default="", description="File or directory to search. Defaults to the agent's cwd."
+        default="",
+        description="File or directory to search. Defaults to the agent's cwd.",
+        examples=["/home/user/project/src", "/home/user/project/src/main.py"],
     )
     include: str = Field(
         default="",
         description=(
             "Glob pattern to filter files (e.g. '*.py'). Only used when path is a directory."
         ),
+        examples=["*.py", "*.ts", "*.{ts,tsx}"],
     )
-    case_sensitive: bool = Field(default=True, description="Whether the pattern is case-sensitive.")
+    case_sensitive: bool = Field(
+        default=True,
+        description="Whether the pattern is case-sensitive.",
+        examples=[True, False],
+    )
 
 
 class GrepTool(Tool):

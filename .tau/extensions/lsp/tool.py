@@ -505,22 +505,54 @@ def _render_lsp_result(content: str, opts: Any) -> list[str]:
 
 
 class LSPParams(BaseModel):
-    operation: Operation = Field(description="LSP operation to perform.")
+    operation: Operation = Field(
+        description="LSP operation to perform.",
+        examples=["goToDefinition", "findReferences", "hover", "rename", "diagnostics"],
+    )
     file_path: str = Field(
         default="",
         description="Absolute path to the file to inspect. Required for all ops except workspaceSymbol (a project-wide search).",
+        examples=["/home/user/project/src/main.py", "/home/user/project/src/utils.ts"],
     )
-    line: int = Field(default=1, ge=1, description="1-based line number (required for position-based ops).")
-    character: int = Field(default=1, ge=1, description="1-based character offset (required for position-based ops).")
-    end_line: int = Field(default=1, ge=1, description="1-based end line (required for codeAction).")
-    end_character: int = Field(default=1, ge=1, description="1-based end character (required for codeAction).")
-    new_name: str = Field(default="", description="New symbol name (required for rename).")
-    query: str = Field(default="", description="Search query (optional for workspaceSymbol).")
-    action_kind: str = Field(default="", description=(
-        "codeAction only: when set, auto-applies the first action matching this kind and writes "
-        "changes to disk. Common values: 'quickfix', 'refactor', 'source.fixAll', "
-        "'source.organizeImports'. Omit to list available actions without applying."
-    ))
+    line: int = Field(
+        default=1, ge=1,
+        description="1-based line number (required for position-based ops).",
+        examples=[42, 100],
+    )
+    character: int = Field(
+        default=1, ge=1,
+        description="1-based character offset (required for position-based ops).",
+        examples=[15, 8],
+    )
+    end_line: int = Field(
+        default=1, ge=1,
+        description="1-based end line (required for codeAction).",
+        examples=[42, 105],
+    )
+    end_character: int = Field(
+        default=1, ge=1,
+        description="1-based end character (required for codeAction).",
+        examples=[30, 20],
+    )
+    new_name: str = Field(
+        default="",
+        description="New symbol name (required for rename).",
+        examples=["parse_config", "UserService", "handleRequest"],
+    )
+    query: str = Field(
+        default="",
+        description="Search query (optional for workspaceSymbol).",
+        examples=["ClassName", "parseConfig", "handle_request"],
+    )
+    action_kind: str = Field(
+        default="",
+        description=(
+            "codeAction only: when set, auto-applies the first action matching this kind and writes "
+            "changes to disk. Common values: 'quickfix', 'refactor', 'source.fixAll', "
+            "'source.organizeImports'. Omit to list available actions without applying."
+        ),
+        examples=["quickfix", "source.organizeImports", "refactor"],
+    )
 
 
 _DESCRIPTION = (
