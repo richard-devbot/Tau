@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, DIM, RESET
+from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, DIM, RESET, cursor_block
 
 
 @dataclass
@@ -208,7 +208,7 @@ class SettingsModal:
                 has_submenu = bool(item.submenu_items or item.submenu_settings)
 
                 if is_sel and self._editing:
-                    val_display = self._edit_buffer + "\033[7m \033[27m"
+                    val_display = self._edit_buffer + cursor_block()
                     row = (
                         f"  {BOLD}{BRIGHT_WHITE}→ {label_padded}{RESET}"
                         f"  {BRIGHT_WHITE}{val_display}{RESET}"

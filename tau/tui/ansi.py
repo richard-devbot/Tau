@@ -32,6 +32,41 @@ BLINK = "\x1b[5m"
 REVERSE = "\x1b[7m"
 STRIKE = "\x1b[9m"
 
+# ── Text cursor block ─────────────────────────────────────────────────────────
+# The editor draws its own text cursor (the real hardware cursor is hidden).
+# When the terminal window has focus we draw a solid reverse-video block. When
+# it loses focus we instead render a plain cell and let the renderer reveal the
+# real hardware cursor, which the terminal itself draws as a full-cell hollow
+# outline — matching the native unfocused-cursor look exactly. The terminal
+# reports focus changes via DECSET 1004 (see Terminal.enable_focus_reporting);
+# TUI feeds the result here, and Renderer reads is_window_focused() to decide
+# whether to show the hardware cursor.
+_window_focused = True
+
+
+def set_window_focused(focused: bool) -> None:
+    """Record whether the terminal window currently has focus."""
+    global _window_focused
+    _window_focused = focused
+
+
+def is_window_focused() -> bool:
+    """True when the terminal window has focus (defaults True if unreported)."""
+    return _window_focused
+
+
+def cursor_block(ch: str = " ") -> str:
+    """Return the text-cursor cell for character ``ch`` under the cursor.
+
+    Focused  → solid reverse-video block (``ch`` shown inverted).
+    Unfocused→ the bare character/cell, so the terminal's own hardware cursor
+    (revealed by the renderer while unfocused) draws its native hollow outline
+    over it.
+    """
+    if _window_focused:
+        return REVERSE + ch + "\x1b[27m"
+    return ch
+
 # Standard foreground colours
 BLACK = "\x1b[30m"
 RED = "\x1b[31m"

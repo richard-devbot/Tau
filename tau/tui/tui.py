@@ -5,8 +5,9 @@ import sys
 import time
 from collections.abc import Awaitable, Callable
 
+from tau.tui.ansi import set_window_focused
 from tau.tui.component import Component, Container, Focusable
-from tau.tui.input import BgColorEvent, InputEvent, KeyEvent
+from tau.tui.input import BgColorEvent, FocusEvent, InputEvent, KeyEvent
 from tau.tui.overlay import OverlayEntry, OverlayHandle, OverlayOptions
 from tau.tui.renderer import Renderer
 from tau.tui.terminal import Terminal
@@ -128,6 +129,7 @@ class TUI(Container):
             self._terminal.hide_cursor()
             self._terminal.disable_autowrap()
             self._terminal.enable_bracketed_paste()
+            self._terminal.enable_focus_reporting()
             self._renderer.reset()
             self._request_render()
 
@@ -142,6 +144,7 @@ class TUI(Container):
                 self._cancel_timers()
                 self._terminal.disable_kitty_keyboard()
                 self._terminal.disable_bracketed_paste()
+                self._terminal.disable_focus_reporting()
                 self._terminal.enable_autowrap()
                 # Move cursor past last rendered line so the shell prompt
                 # appears below the TUI output (not on top of it).
@@ -408,7 +411,8 @@ class TUI(Container):
         Route an event through the handler chain.
 
         Priority (highest → lowest):
-        0. System events — BgColorEvent stored silently; key-releases dropped.
+        0. System events — BgColorEvent stored silently; window focus toggles
+           the cursor style; key-releases dropped.
         1. Intercept handlers — may consume before anyone else sees the event.
         2. Focused overlay (if any) — modal; returning True blocks everything below.
            Visibility re-checked on each dispatch to handle terminal resize.
@@ -422,7 +426,13 @@ class TUI(Container):
                 self._bg_color_future.set_result(self.background_color)
             return
 
-        # 0b. Key-release events (Kitty protocol) — drop to avoid double-firing.
+        # 0b. Window focus in/out — toggle the cursor style and repaint.
+        if isinstance(event, FocusEvent):
+            set_window_focused(event.focused)
+            self._request_render()
+            return
+
+        # 0c. Key-release events (Kitty protocol) — drop to avoid double-firing.
         #     Code that explicitly needs releases can use on_input_intercept().
         if isinstance(event, KeyEvent) and event.released:
             return

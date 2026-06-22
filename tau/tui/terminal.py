@@ -307,6 +307,26 @@ class Terminal:
         """
         self.write("\x1b[?2004l")
 
+    def enable_focus_reporting(self) -> None:
+        """
+        Enable terminal focus reporting (DECSET 1004).
+
+        When enabled, the terminal emits \x1b[I when the window gains focus
+        and \x1b[O when it loses focus. The app uses this to draw a hollow
+        text cursor while unfocused and a solid one while focused.
+        Sends ANSI code: \x1b[?1004h (enable focus reporting)
+        """
+        self.write("\x1b[?1004h")
+
+    def disable_focus_reporting(self) -> None:
+        """
+        Disable terminal focus reporting (DECSET 1004).
+
+        Stops the terminal from emitting focus in/out events.
+        Sends ANSI code: \x1b[?1004l (disable focus reporting)
+        """
+        self.write("\x1b[?1004l")
+
     # -------------------------------------------------------------------------
     # Auto-wrap (DECAWM)
     # -------------------------------------------------------------------------

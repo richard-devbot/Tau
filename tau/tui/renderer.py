@@ -5,6 +5,7 @@ from tau.tui.ansi import (
     CURSOR_MARKER,
     RESET,
     _char_width,  # type: ignore[attr-defined]
+    is_window_focused,
     truncate,
     visible_width,
 )
@@ -282,8 +283,13 @@ class Renderer:
         elif row_delta < 0:
             buf += f"\x1b[{-row_delta}A"
         buf += f"\x1b[{target_col + 1}G"  # absolute column (1-indexed)
-        if self._show_hardware_cursor:
-            buf += "\x1b[?25h"  # show cursor (if enabled)
+        # Reveal the real hardware cursor when the window is unfocused: the
+        # terminal draws it as a hollow outline, giving the native unfocused
+        # cursor look. While focused we keep it hidden and draw our own block.
+        if self._show_hardware_cursor or not is_window_focused():
+            buf += "\x1b[?25h"  # show cursor
+        else:
+            buf += "\x1b[?25l"  # hide cursor (we draw our own block)
         self._terminal.write_flush(buf)
         self._hw_cursor_row = target_row
 

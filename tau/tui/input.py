@@ -223,7 +223,19 @@ class BgColorEvent:
         return (0.2126 * self.r + 0.7152 * self.g + 0.0722 * self.b) < 128
 
 
-InputEvent = KeyEvent | PasteEvent | MouseEvent | BgColorEvent
+@dataclass
+class FocusEvent:
+    """Terminal window focus change (DECSET 1004).
+
+    Emitted when the terminal reports ``\\x1b[I`` (focus gained) or
+    ``\\x1b[O`` (focus lost).
+    """
+
+    focused: bool
+    raw: str = ""
+
+
+InputEvent = KeyEvent | PasteEvent | MouseEvent | BgColorEvent | FocusEvent
 
 
 # ── CSI / SS3 lookup tables ───────────────────────────────────────────────────
@@ -566,6 +578,10 @@ class InputParser:
         # ── Shift+Tab: ESC [ Z ────────────────────────────────────────────────
         if final == "Z" and not params_str:
             return KeyEvent(key="tab", char=None, shift=True, raw=raw)
+
+        # ── Focus in/out: ESC [ I / ESC [ O (DECSET 1004) ────────────────────
+        if final in ("I", "O") and not params_str:
+            return FocusEvent(focused=final == "I", raw=raw)
 
         # ── Simple CSI: ESC [ <letter> (no params) ───────────────────────────
         if not params_str:

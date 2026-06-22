@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import grapheme
 
-from tau.tui.ansi import BOLD, CURSOR_MARKER, DIM, RESET, visible_width
+from tau.tui.ansi import BOLD, CURSOR_MARKER, DIM, RESET, cursor_block, visible_width
 from tau.tui.component import Component
 from tau.tui.input import InputEvent, Key, KeyEvent, PasteEvent
 
@@ -136,14 +136,14 @@ class TextInput(Component):
         indent = " " * prefix_w
 
         if not self._text:
-            cursor_block = CURSOR_MARKER + "\x1b[7m \x1b[27m"
+            empty_cursor = CURSOR_MARKER + cursor_block()
             placeholder = self._placeholder[:available] if self._placeholder else ""
             return [
                 BOLD
                 + self._prefix
                 + padding
                 + RESET
-                + cursor_block
+                + empty_cursor
                 + DIM
                 + placeholder
                 + padding
@@ -557,7 +557,7 @@ def _render_line(text: str, cursor_col: int, available: int, scroll: int) -> tup
         if vis >= scroll:
             if cursor_col >= 0 and vis == cursor_vis:
                 # CURSOR_MARKER tells the Renderer to move the hardware cursor here
-                result += CURSOR_MARKER + "\x1b[7m" + ch + "\x1b[27m"
+                result += CURSOR_MARKER + cursor_block(ch)
             else:
                 result += ch
             col += w
@@ -565,6 +565,6 @@ def _render_line(text: str, cursor_col: int, available: int, scroll: int) -> tup
         i += 1
 
     if cursor_col >= 0 and cursor_col == len(text) and cursor_vis >= scroll and col < available:
-        result += CURSOR_MARKER + "\x1b[7m \x1b[27m"
+        result += CURSOR_MARKER + cursor_block()
 
     return result, scroll
