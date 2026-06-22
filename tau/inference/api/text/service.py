@@ -280,7 +280,7 @@ class TextLLM:
 
         attempt = 0
         oauth_recovery_attempted = False
-        _log.debug("stream: provider=%s model=%s", self.provider_id, self.model.name)
+        _log.debug("stream: provider=%s model=%s", self.provider_id, getattr(self.model, "name", getattr(self.model, "id", "unknown")))
         while True:
             received_any = False
             received_content = False
@@ -298,7 +298,7 @@ class TextLLM:
                     _log.warning(
                         "empty response from %s/%s, retrying (attempt %d/%d)",
                         self.provider_id,
-                        self.model.name,
+                        getattr(self.model, "name", getattr(self.model, "id", "unknown")),
                         attempt + 1,
                         max_retries,
                     )
@@ -346,7 +346,7 @@ class TextLLM:
                     _log.error(
                         "inference error from %s/%s: %s",
                         self.provider_id,
-                        self.model.name,
+                        getattr(self.model, "name", getattr(self.model, "id", "unknown")),
                         e,
                     )
                     yield ErrorEvent(reason=StopReason.Error, error=str(e), kind=classified.kind)
@@ -354,7 +354,7 @@ class TextLLM:
                 _log.warning(
                     "transient error from %s/%s: %s, retrying (attempt %d/%d)",
                     self.provider_id,
-                    self.model.name,
+                    getattr(self.model, "name", getattr(self.model, "id", "unknown")),
                     e,
                     attempt + 1,
                     max_retries,
@@ -393,7 +393,7 @@ class TextLLM:
 
         attempt = 0
         oauth_recovery_attempted = False
-        _log.debug("invoke: provider=%s model=%s", self.provider_id, self.model.name)
+        _log.debug("invoke: provider=%s model=%s", self.provider_id, getattr(self.model, "name", getattr(self.model, "id", "unknown")))
         try:
             while True:
                 try:
@@ -413,7 +413,7 @@ class TextLLM:
                         _log.warning(
                             "empty response from %s/%s, retrying (attempt %d/%d)",
                             self.provider_id,
-                            self.model.name,
+                            getattr(self.model, "name", getattr(self.model, "id", "unknown")),
                             attempt + 1,
                             max_retries,
                         )
@@ -456,7 +456,7 @@ class TextLLM:
                         _log.error(
                             "inference error from %s/%s: %s",
                             self.provider_id,
-                            self.model.name,
+                            getattr(self.model, "name", getattr(self.model, "id", "unknown")),
                             e,
                         )
                         return [
@@ -466,7 +466,7 @@ class TextLLM:
                     _log.warning(
                         "transient error from %s/%s: %s, retrying (attempt %d/%d)",
                         self.provider_id,
-                        self.model.name,
+                        getattr(self.model, "name", getattr(self.model, "id", "unknown")),
                         e,
                         attempt + 1,
                         max_retries,
