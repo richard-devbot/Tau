@@ -258,16 +258,16 @@ class _Renderer:
                 r.append("")
 
         # Max visible width per column; leave room for outer borders + inner gaps:
-        # "│ " + cells joined by " │ " + " │" = 2 + (ncols-1)*3 + 2 = ncols*3+1 overhead
+        # "│  " + cells joined by "  │  " + "  │" = 2+2 per cell + ncols+1 separators = ncols*5+1 overhead
         col_widths = [max(visible_width(r[c]) for r in rendered) for c in range(ncols)]
-        overhead = ncols * 3 + 1
+        overhead = ncols * 5 + 1
         available = max(ncols, self.width - overhead)
         total = sum(col_widths)
         if total > available:
             col_widths = [max(1, int(w / total * available)) for w in col_widths]
 
         def _border(left: str, mid: str, right: str, fill: str = "─") -> str:
-            segs = (fill * (w + 2) for w in col_widths)
+            segs = (fill * (w + 4) for w in col_widths)
             return self.theme.hr(left + mid.join(segs) + right)
 
         top = _border("┌", "┬", "┐")
@@ -277,14 +277,18 @@ class _Renderer:
         def _row(cells: list[str]) -> list[str]:
             wrapped = [wrap(cell, col_widths[ci]) or [cell] for ci, cell in enumerate(cells)]
             height = max(len(w) for w in wrapped)
-            out = []
+            blank = self.theme.hr("│") + self.theme.hr("│").join(
+                " " * (col_widths[ci] + 4) for ci in range(ncols)
+            ) + self.theme.hr("│")
+            out = [blank]
             for li in range(height):
                 padded = []
                 for ci, lines in enumerate(wrapped):
                     cw = col_widths[ci]
                     cell = lines[li] if li < len(lines) else ""
-                    padded.append(" " + cell + " " * max(1, cw - visible_width(cell) + 1))
+                    padded.append("  " + cell + " " * max(2, cw - visible_width(cell) + 2))
                 out.append(self.theme.hr("│") + self.theme.hr("│").join(padded) + self.theme.hr("│"))
+            out.append(blank)
             return out
 
         lines: list[str] = [top]
