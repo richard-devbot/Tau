@@ -344,4 +344,7 @@ class MistralChatAPI(BaseAPI):
                         )
 
         except Exception as e:
-            yield ErrorEvent(reason=StopReason.Error, error=str(e))
+            from tau.inference.utils import classify_error
+
+            classified = classify_error(e)
+            yield ErrorEvent(reason=StopReason.Error, error=str(e), kind=classified.kind)
