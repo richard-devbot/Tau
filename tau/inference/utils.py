@@ -188,6 +188,48 @@ _TRANSPORT_ERROR_TYPES = frozenset(
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+_MAX_RETRY_AFTER_S = 60.0
+
+
+def get_retry_after_delay(error: Exception, fallback_s: float) -> float:
+    """Return the retry delay in seconds from a Retry-After / Retry-After-Ms header.
+
+    Caps at _MAX_RETRY_AFTER_S (60s) so a provider that says "retry in 16 days"
+    doesn't stall the agent. Falls back to fallback_s when the header is absent
+    or unparseable (e.g. empty-response retries where there is no exception).
+    """
+    import time
+
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None) if response is not None else None
+    if headers is None:
+        return fallback_s
+
+    # Retry-After-Ms (milliseconds) — some providers send this
+    raw_ms = headers.get("retry-after-ms")
+    if raw_ms is not None:
+        try:
+            return min(float(raw_ms) / 1000.0, _MAX_RETRY_AFTER_S)
+        except (ValueError, TypeError):
+            pass
+
+    # Retry-After (seconds or HTTP-date)
+    raw = headers.get("retry-after")
+    if raw is not None:
+        try:
+            return min(float(raw), _MAX_RETRY_AFTER_S)
+        except (ValueError, TypeError):
+            pass
+        try:
+            from email.utils import parsedate_to_datetime
+            delay_s = parsedate_to_datetime(raw).timestamp() - time.time()
+            if delay_s > 0:
+                return min(delay_s, _MAX_RETRY_AFTER_S)
+        except Exception:
+            pass
+
+    return fallback_s
+
 
 def _status(error: Exception) -> int | None:
     for attr in ("status_code", "status", "code", "http_status"):

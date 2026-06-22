@@ -262,7 +262,7 @@ class TextLLM:
             TextEndEvent,
             ToolCallEndEvent,
         )
-        from tau.inference.utils import ErrorKind, classify_error
+        from tau.inference.utils import ErrorKind, classify_error, get_retry_after_delay
 
         api_key = await self._auth_manager.get_api_key(self.provider_id)  # type: ignore[union-attr]
         if api_key:
@@ -360,7 +360,7 @@ class TextLLM:
                     max_retries,
                 )
                 yield RetryEvent(attempt=attempt + 1, max_retries=max_retries, error=str(e))
-                await asyncio.sleep(base_delay_s * (2**attempt))
+                await asyncio.sleep(get_retry_after_delay(e, base_delay_s * (2**attempt)))
                 attempt += 1
 
     async def invoke(
@@ -371,7 +371,7 @@ class TextLLM:
         import asyncio
 
         from tau.inference.types import ErrorEvent, StopReason, ThinkingLevel
-        from tau.inference.utils import ErrorKind, classify_error
+        from tau.inference.utils import ErrorKind, classify_error, get_retry_after_delay
 
         api_key = await self._auth_manager.get_api_key(self.provider_id)  # type: ignore[union-attr]
         if api_key:
@@ -471,7 +471,7 @@ class TextLLM:
                         attempt + 1,
                         max_retries,
                     )
-                    await asyncio.sleep(base_delay_s * (2**attempt))
+                    await asyncio.sleep(get_retry_after_delay(e, base_delay_s * (2**attempt)))
                     attempt += 1
         finally:
             self.api.options.thinking_level = original
