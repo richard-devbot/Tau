@@ -104,7 +104,7 @@ def _resize_to_fit(img: Image.Image, max_w: int, max_h: int) -> Image.Image:
     if w <= max_w and h <= max_h:
         return img
     scale = min(max_w / w, max_h / h)
-    return img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
+    return img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.Resampling.LANCZOS)
 
 
 def _as_rgb(img: Image.Image) -> Image.Image:
@@ -166,7 +166,7 @@ def _encode_best(
         nh = max(1, int(h * _SCALE_STEP))
         if nw == w and nh == h:
             break
-        current = img.resize((nw, nh), Image.LANCZOS)
+        current = img.resize((nw, nh), Image.Resampling.LANCZOS)
 
     # Last resort: return whatever PNG we have
     return _encode_png(img), "image/png"

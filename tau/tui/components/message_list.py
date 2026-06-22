@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from tau.tui.ansi import BOLD, RESET, visible_width, wrap
+from tau.tui.ansi import BOLD, RESET, cursor_block, visible_width, wrap
 from tau.tui.component import Component
 from tau.tui.diff import _is_diff
 from tau.tui.input import InputEvent, Key, KeyEvent
@@ -308,7 +308,7 @@ class MessageBlock:
                     lines.append("")
 
         if self._streaming:
-            cursor = t.stream_cursor("▋")
+            cursor = cursor_block()
             if lines:
                 lines[-1] = lines[-1] + cursor
             else:
@@ -335,7 +335,7 @@ class MessageBlock:
             for line in msg.output.rstrip().split("\n"):
                 lines.append("  " + t.dim(line))
         if self._streaming:
-            lines.append("  " + t.stream_cursor("▋"))
+            lines.append("  " + cursor_block())
         return lines
 
     def _render_custom(self, msg: Any, width: int) -> list[str]:
