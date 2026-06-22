@@ -12,6 +12,7 @@ Tau supports the following inference providers:
 | OpenAI | API Key | No | [Link](#openai) |
 | Google Gemini | API Key | Yes | [Link](#google-gemini) |
 | Mistral AI | API Key | Limited | [Link](#mistral-ai) |
+| Fireworks AI | API Key | No | [Link](#fireworks-ai) |
 | Ollama | None | Yes | [Link](#ollama-local) |
 | Azure OpenAI | API Key | No | [Link](#azure-openai) |
 
@@ -103,11 +104,51 @@ export MISTRAL_API_KEY=...
 tau --model mistral/mistral-large -p "Say hello"
 ```
 
+## Fireworks AI
+
+Fireworks AI provides fast, cost-efficient inference for open-source models including Llama, DeepSeek, Qwen, and Mixtral — with OpenAI-compatible APIs.
+
+**Text models**:
+
+| Model | Context | Pricing (in/out per M tokens) |
+|-------|---------|-------------------------------|
+| `accounts/fireworks/models/llama-v3p3-70b-instruct` | 131K | $0.90 / $0.90 |
+| `accounts/fireworks/models/llama-v3p1-405b-instruct` | 131K | $3.00 / $3.00 |
+| `accounts/fireworks/models/deepseek-r1` *(thinking)* | 160K | $3.00 / $7.00 |
+| `accounts/fireworks/models/deepseek-v3` | 131K | $0.90 / $0.90 |
+| `accounts/fireworks/models/qwen3-235b-a22b` *(thinking)* | 131K | $0.22 / $0.88 |
+| `accounts/fireworks/models/qwen3-30b-a3b` *(thinking)* | 131K | $0.15 / $0.60 |
+| `accounts/fireworks/models/mixtral-8x22b-instruct` | 65K | $0.90 / $0.90 |
+| `accounts/fireworks/models/gemma2-9b-it` | 8K | $0.20 / $0.20 |
+
+**Image models**: Flux 1 Schnell FP8, Flux 1 Dev FP8
+
+### Setup
+
+1. Create an account at [Fireworks AI](https://fireworks.ai)
+2. Generate an API key in your account settings
+3. Set the environment variable:
+
+```bash
+export FIREWORKS_API_KEY=fw_...
+```
+
+### Verify
+
+```bash
+tau --model fireworks/accounts/fireworks/models/llama-v3p3-70b-instruct -p "Say hello"
+```
+
+### Notes
+
+- Uses the OpenAI-compatible completions API under the hood
+- Session affinity is maintained automatically via a per-request `x-session-affinity` header
+
 ## Ollama (Local)
 
 Run open-source models locally without API keys or internet.
 
-**Models**: `llama2`, `mistral`, `neural-chat`, and [others](https://ollama.ai/library)
+**Models**: `llama2`, `mistral`, `neural-chat`, `qwen3.5:cloud` (262K context, thinking), and [others](https://ollama.ai/library)
 
 ### Setup
 

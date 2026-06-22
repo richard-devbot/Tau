@@ -102,8 +102,8 @@ Prints session info inline in the chat. Shows:
 
 - **Session Info** — Name (if set), File path, ID
 - **Messages** — User, Assistant, Tool calls, Tool results, Total
-- **Tokens** — Input, Output, Cache read (if any), Cache write (if any), Total
-- **Cost** — Total USD cost (only shown if non-zero)
+- **Tokens** — Input, Output, Cache read (if any), Cache write (if any), Total — counts use human-readable suffixes (e.g. `1.2K`, `3.4M`); each line shows an inline cost estimate in USD
+- **Cost** — Total USD cost with inline estimate (only shown if non-zero)
 
 ### `/copy`
 

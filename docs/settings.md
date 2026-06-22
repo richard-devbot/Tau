@@ -187,6 +187,10 @@ When your conversation grows long, tau automatically summarizes older messages t
 - **`reserve_tokens`**: How many tokens to keep available for the LLM's response (default 16,384 ≈ 4K-5K words)
 - **`keep_recent_tokens`**: How many recent message tokens to preserve word-for-word before summarization kicks in (default 20,000 ≈ 5K-6K words)
 
+#### Mid-turn (threshold) compaction
+
+In addition to compaction triggered at the start of a turn, tau can compact **mid-turn** when the context hits the configured limit while the agent is already running. When this happens the engine stops cleanly so you can review the compacted context and continue — no partial output is lost. Tool output lines are truncated before sending to the LLM to help prevent hitting the threshold in the first place.
+
 Example configurations:
 
 ```json
@@ -283,6 +287,10 @@ These settings are applied to the LLM client at startup:
 - `retry.max_retries` and `retry.base_delay_ms` are passed directly to the client when enabled.
 
 Changes take effect on the next session start or after `/reload`.
+
+#### Adaptive retry delay
+
+When a provider responds with a `Retry-After` or `Retry-After-Ms` header (common on rate-limit responses), tau uses that value as the retry delay instead of the configured `base_delay_ms`. The delay is capped at **60 seconds** so a provider that returns an extreme value (e.g. "retry in 16 days") doesn't stall the agent indefinitely. When no header is present, `base_delay_ms` is used.
 
 ```json
 {
@@ -442,11 +450,11 @@ All retry settings are **fully implemented and wired to the LLM client at startu
 All thinking budget settings are **fully implemented and configurable**:
 
 - **`thinking_budgets.minimal`**: Token budget for "minimal" level (default: `1024`)
-- **`thinking_budgets.low`**: Token budget for "low" level (default: `2048`)
-- **`thinking_budgets.medium`**: Token budget for "medium" level (default: `4096`)
-- **`thinking_budgets.high`**: Token budget for "high" level (default: `8192`)
-- **`thinking_budgets.xhigh`**: Token budget for "xhigh" level (default: `16384`)
-- **`thinking_budgets.max`**: Token budget for "max" level (default: `32768`)
+- **`thinking_budgets.low`**: Token budget for "low" level (default: `4096`)
+- **`thinking_budgets.medium`**: Token budget for "medium" level (default: `8192`)
+- **`thinking_budgets.high`**: Token budget for "high" level (default: `16384`)
+- **`thinking_budgets.xhigh`**: Token budget for "xhigh" level (default: `32768`)
+- **`thinking_budgets.max`**: Token budget for "max" level (default: `65536`)
 
 Override these to customize extended thinking token allocations for your workflow.
 
