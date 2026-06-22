@@ -535,10 +535,6 @@ class Agent:
 
         opts = options or PromptOptions()
 
-        # Pre-flight: a resumed or already-oversized session can exceed the window on the
-        # very first send. Compact before appending and shipping the new turn.
-        await self._check_compaction()
-
         user_message = UserMessage.with_media(
             text,
             list(opts.images) if opts.images else None,
