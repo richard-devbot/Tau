@@ -12,6 +12,13 @@ api_providers = [
     APIProvider(id="anthropic", name="Anthropic", api="anthropic_messages", options=LLMOptions()),
     APIProvider(id="google", name="Google", api="gemini_generate", options=LLMOptions()),
     APIProvider(
+        id="google-vertex",
+        name="Google Vertex AI",
+        api="google_vertex",
+        options=LLMOptions(),
+        auth_type=AuthType.None_,
+    ),
+    APIProvider(
         id="nvidia",
         name="NVIDIA",
         api="openai_completions",
