@@ -1,7 +1,8 @@
 """Jina AI Reader engine — fetch via r.jina.ai, search via s.jina.ai.
 
 No extra dependencies required (uses httpx, already in the project).
-An optional API key unlocks higher rate limits and the internal proxy.
+API key is REQUIRED for search (s.jina.ai returns 401 without one).
+Fetch (r.jina.ai) works without a key but a key unlocks higher rate limits.
 Obtain one at https://jina.ai/reader.
 """
 from __future__ import annotations
