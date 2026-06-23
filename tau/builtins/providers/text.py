@@ -62,6 +62,12 @@ api_providers = [
         options=LLMOptions(base_url="https://api.minimax.io/anthropic"),
     ),
     APIProvider(
+        id="cerebras",
+        name="Cerebras",
+        api="openai_completions",
+        options=LLMOptions(base_url="https://api.cerebras.ai/v1"),
+    ),
+    APIProvider(
         id="deepseek",
         name="DeepSeek",
         api="openai_completions",

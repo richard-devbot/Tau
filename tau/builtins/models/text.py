@@ -541,6 +541,29 @@ models = [
         input=_TEXT_IMAGE,
         output=_TEXT,
     ),
+    # Cerebras (fast inference ~3000 tok/s, OpenAI-compatible)
+    Model(
+        id="gpt-oss-120b",
+        name="GPT OSS 120B",
+        provider="cerebras",
+        cost=Cost(input=0.35, output=0.75),
+        thinking=True,
+        context_window=131_072,
+        max_output_tokens=40_960,
+        input=_TEXT,
+        output=_TEXT,
+    ),
+    Model(
+        id="zai-glm-4.7",
+        name="Z.ai GLM 4.7",
+        provider="cerebras",
+        cost=Cost(input=2.25, output=2.75),
+        thinking=True,
+        context_window=131_072,
+        max_output_tokens=40_960,
+        input=_TEXT,
+        output=_TEXT,
+    ),
     # Perplexity
     Model(
         id="perplexity/sonar",
