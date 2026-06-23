@@ -69,7 +69,7 @@ def _render_web_fetch(content: str, opts: Any) -> list[str]:
     content_length = metadata.get("content_length", 0)
     extracted      = metadata.get("extracted", False)
 
-    domain = urlparse(url).netloc or url
+    domain   = urlparse(url).netloc or url
     size_tag = f"  {DIM}{_human_size(content_length)}{RESET}" if content_length else ""
     ext_tag  = f"  {DIM}extracted{RESET}" if extracted else ""
     summary = f"Fetched {domain}{size_tag}{ext_tag}"
@@ -176,6 +176,7 @@ class WebFetchTool(Tool):
             "content_length": content_length,
             "truncated": truncated,
             "extracted": extracted,
+            "engine": self._engine.name,
         }
 
         return ToolResult.ok(invocation.id, f"URL: {url}\n{_UNTRUSTED}\n{text}", metadata=metadata)

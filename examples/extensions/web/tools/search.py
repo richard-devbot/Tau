@@ -68,7 +68,7 @@ def _render_web_search(content: str, opts: Any) -> list[str]:
     result_count = metadata.get("result_count", 0)
     results      = metadata.get("results", [])
 
-    mode_tag = f"  {DIM}{mode}{RESET}" if mode != "text" else ""
+    mode_tag    = f"  {DIM}{mode}{RESET}" if mode != "text" else ""
     result_word = "result" if result_count == 1 else "results"
     summary = f"Found {result_count} {result_word}{mode_tag}"
 
@@ -160,6 +160,7 @@ class WebSearchTool(Tool):
             "result_count": len(results),
             "max_results": max_results,
             "results": results,
+            "engine": self._engine.name,
         }
 
         if not results:
