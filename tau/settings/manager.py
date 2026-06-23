@@ -338,6 +338,10 @@ class SettingsManager:
 
         self.storage.with_lock(scope, persist_fn)
 
+    def is_batching(self) -> bool:
+        """Return True if batch mode is active (writes are deferred)."""
+        return self._batch_mode
+
     def begin_batch(self) -> None:
         """Suppress disk writes until save_batch() is called.
         In-memory state still updates immediately.
@@ -506,6 +510,8 @@ class SettingsManager:
     def set_show_tool_calls(self, value: bool):
         """Set whether to display tool calls and persist to global settings."""
         self.global_settings.show_tool_calls = value
+        self._mark_modified("show_tool_calls")
+        self._save()
 
     def get_show_images(self) -> bool:
         """Return whether to render inline images (default: True)."""
@@ -516,8 +522,6 @@ class SettingsManager:
         """Set whether to render inline images and persist to global settings."""
         self.global_settings.show_images = value
         self._mark_modified("show_images")
-        self._save()
-        self._mark_modified("show_tool_calls")
         self._save()
 
     def get_model(self) -> str | None:
@@ -683,19 +687,22 @@ class SettingsManager:
         if self.global_settings.compaction is None:
             self.global_settings.compaction = CompactionSettings()
         self.global_settings.compaction.enabled = value
-        self._mark_modified("compaction.enabled")
+        self._mark_modified("compaction", "enabled")
+        self._save()
 
     def set_compaction_reserve_tokens(self, value: int) -> None:
         if self.global_settings.compaction is None:
             self.global_settings.compaction = CompactionSettings()
         self.global_settings.compaction.reserve_tokens = max(1, value)
-        self._mark_modified("compaction.reserve_tokens")
+        self._mark_modified("compaction", "reserve_tokens")
+        self._save()
 
     def set_compaction_keep_recent_tokens(self, value: int) -> None:
         if self.global_settings.compaction is None:
             self.global_settings.compaction = CompactionSettings()
         self.global_settings.compaction.keep_recent_tokens = max(1, value)
-        self._mark_modified("compaction.keep_recent_tokens")
+        self._mark_modified("compaction", "keep_recent_tokens")
+        self._save()
 
     def is_branch_summary_enabled(self) -> bool:
         """Return whether branch summarization is enabled (default: True)."""
@@ -708,7 +715,7 @@ class SettingsManager:
         if self.global_settings.branch_summary is None:
             self.global_settings.branch_summary = BranchSummarySettings()
         self.global_settings.branch_summary.enabled = value
-        self._mark_modified("branch_summary.enabled")
+        self._mark_modified("branch_summary", "enabled")
         self._save()
 
     def get_branch_summary_skip_prompt(self) -> bool:
@@ -728,7 +735,7 @@ class SettingsManager:
         if self.global_settings.branch_summary is None:
             self.global_settings.branch_summary = BranchSummarySettings()
         self.global_settings.branch_summary.reserve_tokens = max(1, value)
-        self._mark_modified("branch_summary.reserve_tokens")
+        self._mark_modified("branch_summary", "reserve_tokens")
         self._save()
 
     def set_branch_summary_skip_prompt(self, value: bool) -> None:
@@ -736,7 +743,7 @@ class SettingsManager:
         if self.global_settings.branch_summary is None:
             self.global_settings.branch_summary = BranchSummarySettings()
         self.global_settings.branch_summary.skip_prompt = value
-        self._mark_modified("branch_summary.skip_prompt")
+        self._mark_modified("branch_summary", "skip_prompt")
         self._save()
 
     # ── Retry ─────────────────────────────────────────────────────────────────

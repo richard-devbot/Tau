@@ -241,8 +241,10 @@ class SettingsModal:
         lines.append(divider)
         if self._editing:
             lines.append(f"  {DIM}enter confirm  esc cancel{RESET}")
+        elif self._title:
+            lines.append(f"  {DIM}↑/↓ move  enter/spc toggle  esc back  type to search{RESET}")
         else:
-            lines.append(f"  {DIM}↑/↓ move  enter/spc toggle  esc cancel  type to search{RESET}")
+            lines.append(f"  {DIM}↑/↓ move  enter/spc toggle  esc save & close  type to search{RESET}")
 
         return lines
 

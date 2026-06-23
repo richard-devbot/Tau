@@ -326,7 +326,12 @@ class Runtime:
             return LoadExtensionsResult()
 
         # ── Settings ─────────────────────────────────────────────────────────
-        await sm.reload()
+        # Skip reload when /settings is open (batch mode): the settings panel
+        # holds in-memory changes that haven't been written to disk yet.
+        # Reloading from disk here would overwrite those changes and clear
+        # modified_fields, causing save_batch() at close to write nothing.
+        if not sm.is_batching():
+            await sm.reload()
 
         cwd = self._context.session_manager.cwd
 
@@ -446,7 +451,8 @@ class Runtime:
         if sm is None:
             return LoadExtensionsResult()
 
-        await sm.reload()
+        if not sm.is_batching():
+            await sm.reload()
 
         old = self._context.ext_runtime
         if old is None:
