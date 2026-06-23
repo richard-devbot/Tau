@@ -420,6 +420,11 @@ class App:
             trust_store.apply_option(chosen)
             sm.set_project_trusted(True)
 
+            # Now that trust is granted, start persisting the session.
+            session_mgr = self._runtime.session_manager
+            if session_mgr is not None and not session_mgr.persist:
+                session_mgr.enable_persist()
+
             # Reload extensions so project config takes effect
             import asyncio as _asyncio
 

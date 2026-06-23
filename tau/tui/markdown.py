@@ -264,7 +264,15 @@ class _Renderer:
         available = max(ncols, self.width - overhead)
         total = sum(col_widths)
         if total > available:
-            col_widths = [max(1, int(w / total * available)) for w in col_widths]
+            exact = [w / total * available for w in col_widths]
+            col_widths = [max(1, int(e)) for e in exact]
+            # Distribute the pixels lost to int() truncation using largest-remainder
+            # so columns always sum to exactly `available`.
+            deficit = available - sum(col_widths)
+            if deficit > 0:
+                order = sorted(range(ncols), key=lambda i: -(exact[i] % 1))
+                for j in range(deficit):
+                    col_widths[order[j % ncols]] += 1
 
         def _border(left: str, mid: str, right: str, fill: str = "─") -> str:
             segs = (fill * (w + 4) for w in col_widths)

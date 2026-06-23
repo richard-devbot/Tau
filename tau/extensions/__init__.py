@@ -8,7 +8,6 @@ from tau.extensions.api import (
     ShortcutRegistration,
 )
 from tau.extensions.context import ExtensionContext
-from tau.extensions.events import EventBus
 from tau.extensions.loader import ExtensionLoader
 from tau.extensions.runtime import ExtensionRuntime
 from tau.extensions.settings import ExtensionSettings, ExtensionSettingsError
@@ -21,7 +20,6 @@ __all__ = [
     "LoadExtensionsResult",
     "ExtensionContext",
     "ExtensionRuntime",
-    "EventBus",
     "ExtensionLoader",
     "ExecResult",
     "ShortcutRegistration",

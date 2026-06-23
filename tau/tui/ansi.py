@@ -234,10 +234,16 @@ def _split_at_columns(text: str, width: int, tracker: _AnsiStateTracker) -> tupl
     Split text into (head, tail) where head fits within width columns.
     Tracker maintains active SGR state so head starts with the right codes
     and tail can be resumed correctly.
+    Breaks at word boundaries when possible; falls back to hard split for long words.
     """
     prefix = tracker.active_codes()
     taken, col = "", 0
     i = 0
+
+    # Word-boundary checkpoint: position in source text after last consumed space
+    last_wb_i = -1
+    last_wb_taken = ""
+    last_wb_snap: tuple | None = None
 
     while i < len(text):
         # Check for ANSI escape at current position
@@ -256,6 +262,17 @@ def _split_at_columns(text: str, width: int, tracker: _AnsiStateTracker) -> tupl
         taken += ch
         col += w
         i += 1
+        # Record word boundary after consuming each space
+        if ch == " ":
+            last_wb_i = i
+            last_wb_taken = taken
+            last_wb_snap = tracker.snapshot()
+
+    # Stopped mid-word: snap back to last space boundary if one exists
+    if i < len(text) and last_wb_i != -1:
+        tracker.restore(last_wb_snap)  # type: ignore[arg-type]
+        taken = last_wb_taken
+        i = last_wb_i
 
     head = prefix + taken + (RESET if tracker.has_state() else "")
     tail = text[i:]
@@ -348,6 +365,12 @@ class _AnsiStateTracker:
     def _reset(self) -> None:
         self._bold = self._dim = self._italic = self._underline = False
         self._fg = self._bg = None
+
+    def snapshot(self) -> tuple:
+        return (self._bold, self._dim, self._italic, self._underline, self._fg, self._bg)
+
+    def restore(self, snap: tuple) -> None:
+        self._bold, self._dim, self._italic, self._underline, self._fg, self._bg = snap
 
     def has_state(self) -> bool:
         return bool(

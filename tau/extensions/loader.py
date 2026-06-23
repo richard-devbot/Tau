@@ -18,7 +18,6 @@ from tau.extensions.api import (
     LoadExtensionsResult,
     _RuntimeRef,
 )
-from tau.extensions.events import EventBus
 from tau.packages.utils import add_site_packages_path
 
 if TYPE_CHECKING:
@@ -79,7 +78,6 @@ class ExtensionLoader:
         settings: SettingsManager | None = None,
         cwd: Path | None = None,
         runtime_ref: _RuntimeRef | None = None,
-        events: EventBus | None = None,
     ) -> None:
         self._builtins_dir: Path | None = (
             builtins_dir if (builtins_dir is not None and builtins_dir.is_dir()) else None
@@ -96,7 +94,6 @@ class ExtensionLoader:
         self._settings = settings
         self._cwd = cwd or Path(".")
         self._runtime_ref = runtime_ref
-        self._events = events or EventBus()
 
         # Project first, then global
         if project_dir is not None and project_dir.is_dir():
@@ -330,7 +327,6 @@ class ExtensionLoader:
                 settings=self._settings,  # type: ignore[arg-type]
                 cwd=self._cwd,
                 runtime_ref=self._runtime_ref,
-                events=self._events,
             )
 
             result = register_fn(api)

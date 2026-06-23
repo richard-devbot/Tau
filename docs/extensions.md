@@ -627,29 +627,6 @@ session working directory; pass an explicit `cwd=` to override.
 
 ---
 
-## Cross-extension event bus
-
-Extensions can communicate with each other via `tau.events`:
-
-```python
-# producer.py
-def register(tau):
-    @tau.on("session_start")
-    async def on_start(event, ctx):
-        await tau.events.emit("producer:ready", {"version": "1.0"})
-
-# consumer.py
-def register(tau):
-    @tau.events.on("producer:ready")
-    async def on_ready(data):
-        print(f"producer ready — version {data['version']}")
-```
-
-This is separate from the hooks bus: `tau.events` is for extension-to-extension
-messages; `tau.on(...)` is for system lifecycle events.
-
----
-
 ## Editor autocomplete providers
 
 Extensions can inject custom autocomplete suggestions into the editor. When the user
@@ -742,7 +719,6 @@ def register(tau):
 | `tau.register_flag(name, type, env, default)` | Declare an env-backed flag |
 | `tau.get_flag(name)` | Read a registered flag's value |
 | `await tau.exec(cmd, args, cwd)` | Run a shell command |
-| `tau.events` | Cross-extension `EventBus` |
 | `tau.config` | Per-extension settings dict from `settings.json` |
 | `tau.cwd` | `Path` — working directory at session start |
 | `tau.model_id` | Active model identifier |

@@ -11,7 +11,6 @@ from tau.agent.types import AgentConfig
 from tau.builtins.tools import TOOLS
 from tau.engine.service import Engine, EngineOptions
 from tau.extensions.api import _RuntimeRef
-from tau.extensions.events import EventBus
 from tau.extensions.loader import ExtensionLoader
 from tau.extensions.runtime import ExtensionRuntime
 from tau.hooks.service import Hooks
@@ -107,6 +106,7 @@ class RuntimeContext:
         )
 
         # ── Settings ──────────────────────────────────────────────────────────
+        _trust_pending = False
         if settings_manager is None:
             from tau.trust.manager import has_project_trust_inputs, trust_store
 
@@ -127,6 +127,7 @@ class RuntimeContext:
                 else:
                     stored = trust_store.get(cwd)
                     project_trusted = stored if stored is not None else False
+                    _trust_pending = stored is None  # no prior decision → TrustScreen will show
             settings_manager = SettingsManager.create(
                 cwd, config_dir=config_dir, project_trusted=project_trusted
             )
@@ -155,13 +156,17 @@ class RuntimeContext:
             )
 
         # ── Session manager ───────────────────────────────────────────────────
-        if config.resume and not config.session_file and config.persist_session:
+        # Don't create the session directory until trust is granted. When trust
+        # is pending (policy="ask", no prior decision) the TrustScreen will call
+        # session_manager.enable_persist() after the user approves.
+        _persist = config.persist_session and not _trust_pending
+        if config.resume and not config.session_file and _persist:
             session_manager = SessionManager.continue_recent(cwd)
         else:
             session_manager = SessionManager(
                 cwd=cwd,
                 session_file=config.session_file,
-                persist=config.persist_session,
+                persist=_persist,
             )
 
         # ── Shared hook bus ───────────────────────────────────────────────────
@@ -227,7 +232,6 @@ class RuntimeContext:
                     settings=settings_manager,
                     cwd=cwd,
                     runtime_ref=runtime_ref,
-                    events=EventBus(),
                 )
             else:
                 # Extensions disabled — load builtins only.
@@ -237,7 +241,6 @@ class RuntimeContext:
                     settings=settings_manager,
                     cwd=cwd,
                     runtime_ref=runtime_ref,
-                    events=EventBus(),
                 )
             load_result = await loader.load()
             ext_runtime = ExtensionRuntime(load_result, hooks, runtime_ref)

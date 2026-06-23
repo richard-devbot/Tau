@@ -314,7 +314,6 @@ class Runtime:
         from tau.agent.prompt.builder import build_prompt
         from tau.agent.prompt.types import PromptOptions
         from tau.extensions.api import LoadExtensionsResult, _RuntimeRef
-        from tau.extensions.events import EventBus
         from tau.extensions.loader import ExtensionLoader
         from tau.extensions.runtime import ExtensionRuntime
         from tau.prompts.registry import prompt_registry
@@ -390,7 +389,6 @@ class Runtime:
             settings=sm,
             cwd=cwd,
             runtime_ref=runtime_ref,
-            events=EventBus(),
         )
         load_result = await loader.load()
         new_ext = ExtensionRuntime(load_result, self._context.hooks, runtime_ref)
@@ -441,7 +439,6 @@ class Runtime:
         from tau.agent.prompt.builder import build_prompt
         from tau.agent.prompt.types import PromptOptions
         from tau.extensions.api import LoadExtensionsResult
-        from tau.extensions.events import EventBus
         from tau.extensions.loader import ExtensionLoader
         from tau.extensions.runtime import ExtensionRuntime
         from tau.settings.paths import get_extensions_dir
@@ -477,7 +474,6 @@ class Runtime:
             settings=sm,
             cwd=cwd,
             runtime_ref=runtime_ref,
-            events=EventBus(),
         )
         # Populate the per-subdir caches (deps + manifest settings schema) for
         # this extension so _load_one re-attaches its auto-generated panel.

@@ -7,8 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from tau.extensions.events import EventBus
-
 if TYPE_CHECKING:
     from tau.inference.api.text.service import TextLLM
     from tau.settings.manager import SettingsManager
@@ -211,9 +209,6 @@ class ExtensionAPI:
                 result = await tau.exec("git", ["status"])
                 print(result.stdout)
 
-            # Cross-extension event bus
-            await tau.events.emit("my-ext:ready", {})
-
     Configuration is loaded from the ``settings`` dict of the matching entry
     in ``extensions.list`` (in settings.json) and passed to ``ExtensionSettings``
     for type-safe access with validation and nested structure support. It is an
@@ -239,7 +234,6 @@ class ExtensionAPI:
         settings: SettingsManager,
         cwd: Path,
         runtime_ref: _RuntimeRef | None = None,
-        events: EventBus | None = None,
     ) -> None:
         self._extension = extension
         self._llm = llm
@@ -247,7 +241,6 @@ class ExtensionAPI:
         self._cwd = cwd
         self._runtime_ref = runtime_ref
         self._flags: dict[str, FlagRegistration] = {}
-        self._events: EventBus = events if events is not None else EventBus()
 
     # ── Events ────────────────────────────────────────────────────────────────
 
@@ -879,13 +872,6 @@ class ExtensionAPI:
             stderr=stderr_bytes.decode(errors="replace"),
             code=proc.returncode,
         )
-
-    # ── Cross-extension event bus ─────────────────────────────────────────────
-
-    @property
-    def events(self) -> EventBus:
-        """Shared event bus for cross-extension communication."""
-        return self._events
 
     # ── Built-in tool factories ───────────────────────────────────────────────
 

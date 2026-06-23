@@ -77,6 +77,25 @@ class SessionManager:
         else:
             self.new_session()
 
+    def enable_persist(self) -> None:
+        """Switch from a non-persisting session to a persisting one.
+
+        Called after the user grants project trust. Creates the session
+        directory and writes buffered entries to disk so nothing is lost.
+        """
+        if self.persist:
+            return
+        self.persist = True
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+        # Materialise the session file path that new_session() skipped earlier.
+        if self.session_file is None and self.session_id is not None:
+            from datetime import datetime
+            file_timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S-%f")
+            self.session_file = (
+                self.session_dir / f"{file_timestamp}_{self.session_id}.jsonl"
+            ).resolve()
+        self._rewrite_file()
+
     def set_session(self, session_file: Path):
         """Load or initialize a session from a file."""
         self.session_file = session_file
