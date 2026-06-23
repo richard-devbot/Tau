@@ -112,3 +112,51 @@ class TestParseSource:
     def test_invalid_source_raises(self):
         with pytest.raises(ValueError):
             parse_source("!@#$%^")
+
+
+class TestExtensionsFromPyproject:
+    def test_returns_empty_for_missing_file(self, tmp_path):
+        from tau.packages.utils import extensions_from_pyproject
+        result = extensions_from_pyproject(tmp_path / "nonexistent.toml", tmp_path)
+        assert result == []
+
+    def test_returns_empty_when_no_tau_section(self, tmp_path):
+        from tau.packages.utils import extensions_from_pyproject
+        f = tmp_path / "pyproject.toml"
+        f.write_text('[tool.other]\nextensions = ["ext.py"]\n', encoding="utf-8")
+        result = extensions_from_pyproject(f, tmp_path)
+        assert result == []
+
+    def test_returns_existing_extension_paths(self, tmp_path):
+        from tau.settings.paths import get_app_name
+        from tau.packages.utils import extensions_from_pyproject
+        ext = tmp_path / "my_ext.py"
+        ext.write_text("# extension", encoding="utf-8")
+        app_name = get_app_name().lower()
+        f = tmp_path / "pyproject.toml"
+        f.write_text(
+            f'[tool.{app_name}]\nextensions = ["my_ext.py"]\n',
+            encoding="utf-8",
+        )
+        result = extensions_from_pyproject(f, tmp_path)
+        assert len(result) == 1
+        assert result[0].name == "my_ext.py"
+
+    def test_skips_nonexistent_extension_files(self, tmp_path):
+        from tau.settings.paths import get_app_name
+        from tau.packages.utils import extensions_from_pyproject
+        app_name = get_app_name().lower()
+        f = tmp_path / "pyproject.toml"
+        f.write_text(
+            f'[tool.{app_name}]\nextensions = ["missing.py"]\n',
+            encoding="utf-8",
+        )
+        result = extensions_from_pyproject(f, tmp_path)
+        assert result == []
+
+    def test_invalid_toml_returns_empty(self, tmp_path):
+        from tau.packages.utils import extensions_from_pyproject
+        f = tmp_path / "pyproject.toml"
+        f.write_text("not valid toml ][", encoding="utf-8")
+        result = extensions_from_pyproject(f, tmp_path)
+        assert result == []

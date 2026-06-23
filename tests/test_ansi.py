@@ -326,3 +326,56 @@ class TestAnsiStateTracker:
         assert t.has_state() is True
         codes = t.active_codes()
         assert "38;2" in codes
+
+
+class TestWindowFocus:
+    def setup_method(self):
+        from tau.tui import ansi
+        ansi._window_focused = True  # reset to known state
+
+    def teardown_method(self):
+        from tau.tui import ansi
+        ansi._window_focused = True  # restore default
+
+    def test_is_focused_by_default(self):
+        from tau.tui.ansi import is_window_focused
+        assert is_window_focused() is True
+
+    def test_set_unfocused(self):
+        from tau.tui.ansi import is_window_focused, set_window_focused
+        set_window_focused(False)
+        assert is_window_focused() is False
+
+    def test_set_focused(self):
+        from tau.tui.ansi import is_window_focused, set_window_focused
+        set_window_focused(False)
+        set_window_focused(True)
+        assert is_window_focused() is True
+
+
+class TestCursorBlock:
+    def setup_method(self):
+        from tau.tui import ansi
+        ansi._window_focused = True
+
+    def teardown_method(self):
+        from tau.tui import ansi
+        ansi._window_focused = True
+
+    def test_focused_returns_reverse_video(self):
+        from tau.tui.ansi import REVERSE, cursor_block
+        result = cursor_block("x")
+        assert REVERSE in result
+        assert "x" in result
+
+    def test_unfocused_returns_bare_char(self):
+        from tau.tui.ansi import REVERSE, cursor_block, set_window_focused
+        set_window_focused(False)
+        result = cursor_block("x")
+        assert result == "x"
+        assert REVERSE not in result
+
+    def test_default_char_is_space(self):
+        from tau.tui.ansi import cursor_block
+        result = cursor_block()
+        assert " " in result

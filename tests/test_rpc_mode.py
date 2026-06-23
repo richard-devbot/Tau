@@ -150,8 +150,13 @@ class TestRpcDialogMethod:
                     captured_output.append(buf.getvalue())
 
             task = asyncio.ensure_future(_dialog_task())
-            await asyncio.sleep(0)
-            # resolve the first pending future
+            # Poll until the pending future appears (coroutine needs ≥1 tick to
+            # reach the `await fut` inside _dialog; a single sleep(0) is usually
+            # enough but we loop for robustness against implementation changes)
+            for _ in range(10):
+                await asyncio.sleep(0)
+                if ctx._pending:
+                    break
             for _, fut in list(ctx._pending.items()):
                 if not fut.done():
                     fut.set_result("a")
@@ -174,7 +179,10 @@ class TestRpcDialogMethod:
                     sys.stdout = old
 
             task = asyncio.ensure_future(_confirm_task())
-            await asyncio.sleep(0)
+            for _ in range(10):
+                await asyncio.sleep(0)
+                if ctx._pending:
+                    break
             for _, fut in list(ctx._pending.items()):
                 if not fut.done():
                     fut.set_result({"confirmed": True})
@@ -197,7 +205,10 @@ class TestRpcDialogMethod:
                     sys.stdout = old
 
             task = asyncio.ensure_future(_confirm_task())
-            await asyncio.sleep(0)
+            for _ in range(10):
+                await asyncio.sleep(0)
+                if ctx._pending:
+                    break
             for _, fut in list(ctx._pending.items()):
                 if not fut.done():
                     fut.set_result({"cancelled": True})
@@ -206,3 +217,113 @@ class TestRpcDialogMethod:
 
         result = asyncio.run(_run())
         assert result is False
+
+
+class TestRpcFireExtendedMethods:
+    def test_set_title_fire(self):
+        ctx = RpcExtensionUIContext({})
+        _, lines = capture_write(ctx.set_title, "My Title")
+        obj = json.loads(lines[0])
+        assert obj["method"] == "setTitle"
+        assert obj["title"] == "My Title"
+
+    def test_set_editor_text_fire(self):
+        ctx = RpcExtensionUIContext({})
+        _, lines = capture_write(ctx.set_editor_text, "some prefill")
+        obj = json.loads(lines[0])
+        assert obj["method"] == "set_editor_text"
+        assert obj["text"] == "some prefill"
+
+    def test_set_title_does_not_add_to_pending(self):
+        ctx = RpcExtensionUIContext({})
+        capture_write(ctx.set_title, "x")
+        assert len(ctx._pending) == 0
+
+    def test_set_editor_text_does_not_add_to_pending(self):
+        ctx = RpcExtensionUIContext({})
+        capture_write(ctx.set_editor_text, "x")
+        assert len(ctx._pending) == 0
+
+
+class TestRpcInputEditorDialog:
+    def test_input_dialog(self):
+        ctx = RpcExtensionUIContext({})
+
+        async def _run():
+            async def _task():
+                buf = StringIO()
+                old, sys.stdout = sys.stdout, buf
+                try:
+                    return await ctx.input("Enter value", placeholder="e.g. foo")
+                finally:
+                    sys.stdout = old
+
+            task = asyncio.ensure_future(_task())
+            for _ in range(10):
+                await asyncio.sleep(0)
+                if ctx._pending:
+                    break
+            for _, fut in list(ctx._pending.items()):
+                if not fut.done():
+                    fut.set_result("user typed this")
+                    break
+            return await task
+
+        result = asyncio.run(_run())
+        assert result == "user typed this"
+
+    def test_input_emits_correct_method(self):
+        ctx = RpcExtensionUIContext({})
+        captured: list[dict] = []
+
+        async def _run():
+            async def _task():
+                buf = StringIO()
+                old, sys.stdout = sys.stdout, buf
+                try:
+                    return await ctx.input("Enter value")
+                finally:
+                    sys.stdout = old
+                    lines = buf.getvalue().splitlines()
+                    if lines:
+                        captured.append(json.loads(lines[0]))
+
+            task = asyncio.ensure_future(_task())
+            for _ in range(10):
+                await asyncio.sleep(0)
+                if ctx._pending:
+                    break
+            for _, fut in list(ctx._pending.items()):
+                if not fut.done():
+                    fut.set_result(None)
+                    break
+            return await task
+
+        asyncio.run(_run())
+        assert captured[0]["method"] == "input"
+
+    def test_editor_dialog(self):
+        ctx = RpcExtensionUIContext({})
+
+        async def _run():
+            async def _task():
+                buf = StringIO()
+                old, sys.stdout = sys.stdout, buf
+                try:
+                    return await ctx.editor("Edit content", prefill="initial text")
+                finally:
+                    sys.stdout = old
+
+            task = asyncio.ensure_future(_task())
+            for _ in range(10):
+                await asyncio.sleep(0)
+                if ctx._pending:
+                    break
+            for _, fut in list(ctx._pending.items()):
+                if not fut.done():
+                    fut.set_result("edited content")
+                    break
+            return await task
+
+        result = asyncio.run(_run())
+        assert result == "edited content"

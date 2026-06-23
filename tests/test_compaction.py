@@ -212,3 +212,222 @@ class TestSerializeConversation:
         msg = CustomMessage(custom_type="info", contents=[TextContent(content="custom text")])
         text = serialize_conversation([msg])
         assert "[info]: custom text" in text
+
+
+class TestTruncate:
+    def test_short_text_unchanged(self):
+        from tau.session.compaction import _truncate
+        assert _truncate("hello", 10) == "hello"
+
+    def test_exact_length_unchanged(self):
+        from tau.session.compaction import _truncate
+        assert _truncate("hello", 5) == "hello"
+
+    def test_long_text_truncated(self):
+        from tau.session.compaction import _truncate
+        result = _truncate("a" * 100, 10)
+        assert result.startswith("a" * 10)
+        assert "truncated" in result
+
+    def test_truncation_message_includes_count(self):
+        from tau.session.compaction import _truncate
+        result = _truncate("x" * 20, 5)
+        assert "15" in result
+
+
+class TestIsValidCutPoint:
+    def test_user_message_entry_is_valid(self):
+        from tau.session.compaction import _is_valid_cut_point
+        from tau.session.types import MessageEntry
+        entry = MessageEntry(message=UserMessage.from_text("hi"))
+        assert _is_valid_cut_point(entry) is True
+
+    def test_terminal_message_entry_is_valid(self):
+        from tau.session.compaction import _is_valid_cut_point
+        from tau.session.types import MessageEntry
+        entry = MessageEntry(message=TerminalExecutionMessage(command="ls"))
+        assert _is_valid_cut_point(entry) is True
+
+    def test_assistant_with_content_is_valid(self):
+        from tau.session.compaction import _is_valid_cut_point
+        from tau.session.types import MessageEntry
+        entry = MessageEntry(message=AssistantMessage.from_text("reply"))
+        assert _is_valid_cut_point(entry) is True
+
+    def test_aborted_empty_assistant_is_invalid(self):
+        from tau.inference.types import StopReason
+        from tau.session.compaction import _is_valid_cut_point
+        from tau.session.types import MessageEntry
+        msg = AssistantMessage(contents=[], stop_reason=StopReason.Abort)
+        entry = MessageEntry(message=msg)
+        assert _is_valid_cut_point(entry) is False
+
+    def test_custom_message_entry_is_valid(self):
+        from tau.session.compaction import _is_valid_cut_point
+        from tau.session.types import CustomMessageEntry
+        entry = CustomMessageEntry(custom_type="info", content=[])
+        assert _is_valid_cut_point(entry) is True
+
+    def test_branch_summary_entry_is_valid(self):
+        from tau.session.compaction import _is_valid_cut_point
+        from tau.session.types import BranchSummaryEntry
+        entry = BranchSummaryEntry(from_id="abc", summary="sum")
+        assert _is_valid_cut_point(entry) is True
+
+    def test_tool_message_entry_is_invalid(self):
+        from tau.session.compaction import _is_valid_cut_point
+        from tau.session.types import MessageEntry
+        entry = MessageEntry(message=ToolMessage.from_result(ToolResultContent(id="1", content="ok")))
+        assert _is_valid_cut_point(entry) is False
+
+
+class TestLatestCompactionTimestamp:
+    def test_empty_branch_returns_none(self):
+        from tau.session.compaction import latest_compaction_timestamp
+        assert latest_compaction_timestamp([]) is None
+
+    def test_no_compaction_returns_none(self):
+        from tau.session.compaction import latest_compaction_timestamp
+        from tau.session.types import MessageEntry
+        entries = [MessageEntry(message=UserMessage.from_text("hi"))]
+        assert latest_compaction_timestamp(entries) is None
+
+    def test_returns_most_recent_compaction_timestamp(self):
+        from tau.session.compaction import latest_compaction_timestamp
+        from tau.session.types import CompactionEntry
+        c1 = CompactionEntry(summary="s1", first_kept_entry_id="x", tokens_before=100)
+        c1.timestamp = 1000.0
+        c2 = CompactionEntry(summary="s2", first_kept_entry_id="y", tokens_before=200)
+        c2.timestamp = 2000.0
+        assert latest_compaction_timestamp([c1, c2]) == 2000.0
+
+
+class TestIsSilentOverflow:
+    def test_zero_context_window_returns_false(self):
+        from tau.session.compaction import is_silent_overflow
+        msg = AssistantMessage.from_text("ok")
+        assert is_silent_overflow(msg, 0) is False
+
+    def test_normal_stop_within_window(self):
+        from tau.session.compaction import is_silent_overflow
+        msg = AssistantMessage.from_text("ok")
+        msg.usage.input_tokens = 100
+        assert is_silent_overflow(msg, 200_000) is False
+
+    def test_stop_with_input_exceeding_window(self):
+        from tau.inference.types import StopReason
+        from tau.session.compaction import is_silent_overflow
+        msg = AssistantMessage.from_text("ok")
+        msg.stop_reason = StopReason.Stop
+        msg.usage.input_tokens = 200_001
+        assert is_silent_overflow(msg, 200_000) is True
+
+    def test_length_stop_zero_output_near_window(self):
+        from tau.inference.types import StopReason
+        from tau.session.compaction import is_silent_overflow
+        msg = AssistantMessage(contents=[])
+        msg.stop_reason = StopReason.Length
+        msg.usage.input_tokens = 199_000
+        msg.usage.output_tokens = 0
+        assert is_silent_overflow(msg, 200_000) is True
+
+    def test_length_stop_with_output_tokens(self):
+        from tau.inference.types import StopReason
+        from tau.session.compaction import is_silent_overflow
+        msg = AssistantMessage.from_text("partial")
+        msg.stop_reason = StopReason.Length
+        msg.usage.input_tokens = 199_000
+        msg.usage.output_tokens = 100
+        assert is_silent_overflow(msg, 200_000) is False
+
+
+class TestFindCutPoint:
+    def _user_entry(self, text: str = "q"):
+        from tau.session.types import MessageEntry
+        return MessageEntry(message=UserMessage.from_text(text))
+
+    def _asst_entry(self, text: str = "a"):
+        from tau.session.types import MessageEntry
+        return MessageEntry(message=AssistantMessage.from_text(text))
+
+    def test_empty_entries_returns_start(self):
+        from tau.session.compaction import find_cut_point
+        result = find_cut_point([], 0, 0, 1000)
+        assert result.first_kept_entry_index == 0
+
+    def test_small_conversation_no_split(self):
+        from tau.session.compaction import find_cut_point
+        entries = [self._user_entry(), self._asst_entry()]
+        result = find_cut_point(entries, 0, len(entries), keep_recent_tokens=10_000)
+        assert result.first_kept_entry_index == 0
+        assert result.is_split_turn is False
+
+    def test_keeps_recent_messages(self):
+        from tau.session.compaction import find_cut_point
+        # Build a long sequence; keep_recent_tokens is tiny so only the last few survive
+        entries = [self._user_entry(f"msg{i}") for i in range(10)]
+        result = find_cut_point(entries, 0, len(entries), keep_recent_tokens=2)
+        # Cut point should be well into the list
+        assert result.first_kept_entry_index > 0
+
+    def test_split_turn_detected(self):
+        from tau.session.compaction import find_cut_point
+        from tau.session.types import MessageEntry
+        # user + many assistants (long) + user + asst at the end
+        # keep_recent tiny so cut falls in the middle of a turn
+        big_text = "word " * 1000
+        entries = [
+            self._user_entry("first"),
+            MessageEntry(message=AssistantMessage.from_text(big_text)),
+            self._user_entry("second"),
+            self._asst_entry("short"),
+        ]
+        result = find_cut_point(entries, 0, len(entries), keep_recent_tokens=10)
+        assert result.first_kept_entry_index >= 0
+
+
+class TestPrepareCompaction:
+    def _user_entry(self, text: str = "q"):
+        from tau.session.types import MessageEntry
+        return MessageEntry(message=UserMessage.from_text(text))
+
+    def _asst_entry(self, text: str = "a"):
+        from tau.session.types import MessageEntry
+        return MessageEntry(message=AssistantMessage.from_text(text))
+
+    def test_empty_entries_returns_none(self):
+        from tau.session.compaction import prepare_compaction
+        assert prepare_compaction([], CompactionSettings()) is None
+
+    def test_last_entry_is_compaction_returns_none(self):
+        from tau.session.compaction import prepare_compaction
+        from tau.session.types import CompactionEntry, MessageEntry
+        entries = [
+            self._user_entry(),
+            CompactionEntry(summary="prev", first_kept_entry_id="x", tokens_before=100),
+        ]
+        assert prepare_compaction(entries, CompactionSettings()) is None
+
+    def test_small_history_within_budget_returns_none(self):
+        from tau.session.compaction import prepare_compaction
+        entries = [self._user_entry(), self._asst_entry()]
+        settings = CompactionSettings(keep_recent_tokens=100_000)
+        assert prepare_compaction(entries, settings) is None
+
+    def test_long_history_produces_preparation(self):
+        from tau.session.compaction import prepare_compaction
+        big_text = "word " * 2000
+        # Old turn (to be summarised) followed by a new short turn to keep.
+        # With keep_recent_tokens=5, the algorithm keeps only the new short turn
+        # and cuts cleanly at the user boundary — no split turn.
+        entries = [
+            self._user_entry(big_text),
+            self._asst_entry(big_text),
+            self._user_entry("new question"),
+            self._asst_entry("short answer"),
+        ]
+        settings = CompactionSettings(keep_recent_tokens=5)
+        prep = prepare_compaction(entries, settings)
+        assert prep is not None
+        assert prep.first_kept_entry_id != ""
+        assert len(prep.messages_to_summarize) > 0

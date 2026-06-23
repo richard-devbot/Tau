@@ -216,3 +216,86 @@ class TestUsage:
         assert u.input_tokens == 0
         assert u.output_tokens == 0
         assert u.cost.total == 0.0
+
+
+class TestAudioContentMethods:
+    def test_from_base64(self):
+        from tau.message.types import AudioContent
+        b64 = "SUQz"  # ID3 magic in base64 prefix
+        ac = AudioContent.from_base64(b64)
+        assert ac.audio == [b64]
+
+    def test_from_base64_roundtrip(self):
+        import base64
+        from tau.message.types import AudioContent
+        raw = b"ID3" + b"\x00" * 10
+        b64 = base64.b64encode(raw).decode()
+        ac = AudioContent.from_base64(b64)
+        result_b64, mime = ac.to_base64()[0]
+        assert mime == "audio/mpeg"
+        assert result_b64 == b64
+
+    def test_from_file(self, tmp_path):
+        from tau.message.types import AudioContent
+        f = tmp_path / "sound.mp3"
+        f.write_bytes(b"ID3" + b"\x00" * 10)
+        ac = AudioContent.from_file(f)
+        assert len(ac.audio) == 1
+
+    def test_to_base64_with_bytes(self):
+        from tau.message.types import AudioContent
+        raw = b"ID3" + b"\x00" * 10
+        ac = AudioContent(audio=[raw])
+        b64, mime = ac.to_base64()[0]
+        assert mime == "audio/mpeg"
+        import base64
+        assert base64.b64decode(b64)[:3] == b"ID3"
+
+
+class TestVideoContentMethods:
+    def test_from_file(self, tmp_path):
+        from tau.message.types import VideoContent
+        f = tmp_path / "clip.mp4"
+        f.write_bytes(b"\x00\x00\x00\x18ftyp")
+        vc = VideoContent.from_file(f)
+        assert len(vc.video) == 1
+
+    def test_to_base64_with_bytes(self):
+        from tau.message.types import VideoContent
+        raw = b"\x00\x01\x02\x03"
+        vc = VideoContent(video=[raw])
+        b64, mime = vc.to_base64()[0]
+        assert mime == "video/mp4"
+        import base64
+        assert base64.b64decode(b64) == raw
+
+
+class TestBranchSummaryMessage:
+    def test_construction(self):
+        from tau.message.types import BranchSummaryMessage, Role
+        msg = BranchSummaryMessage(summary="branch done", from_id="entry123")
+        assert msg.summary == "branch done"
+        assert msg.from_id == "entry123"
+        assert msg.role == Role.BRANCH_SUMMARY
+
+    def test_defaults(self):
+        from tau.message.types import BranchSummaryMessage
+        msg = BranchSummaryMessage()
+        assert msg.summary == ""
+        assert msg.from_id == ""
+        assert isinstance(msg.timestamp, float)
+
+
+class TestCompactionSummaryMessageDirect:
+    def test_construction(self):
+        from tau.message.types import CompactionSummaryMessage, Role
+        msg = CompactionSummaryMessage(summary="ctx summary", tokens_before=5000)
+        assert msg.summary == "ctx summary"
+        assert msg.tokens_before == 5000
+        assert msg.role == Role.COMPACTION_SUMMARY
+
+    def test_defaults(self):
+        from tau.message.types import CompactionSummaryMessage
+        msg = CompactionSummaryMessage()
+        assert msg.summary == ""
+        assert msg.tokens_before == 0

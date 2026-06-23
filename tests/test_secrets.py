@@ -1,10 +1,15 @@
 """Tests for tau/utils/secrets.py — secret reference resolution."""
 from __future__ import annotations
 
+import pytest
+
 from tau.utils.secrets import _cache, clear_cache, resolve_secret, resolve_secrets
 
 
-def setup_function():
+@pytest.fixture(autouse=True)
+def _reset_cache():
+    clear_cache()
+    yield
     clear_cache()
 
 

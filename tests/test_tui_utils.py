@@ -19,8 +19,15 @@ class TestProjectName:
         assert isinstance(result, str)
         assert len(result) > 0
 
-    def test_in_git_repo_returns_basename(self):
-        # We're already in a git repo (the Tau project)
+    def test_in_git_repo_returns_basename(self, monkeypatch):
+        import subprocess
+
+        class _GitResult:
+            returncode = 0
+            stdout = "/home/user/my-project\n"
+
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _GitResult())
         result = project_name()
+        assert result == "my-project"
         assert "/" not in result
         assert "\\" not in result

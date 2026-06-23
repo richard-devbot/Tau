@@ -143,3 +143,30 @@ class TestToolRegistryReplaceSource:
         r.replace_source("mcp", [])
         assert r.get("read") is None
         assert len(r) == 0
+
+
+class TestToolRegistryContainerProtocol:
+    def test_len_empty(self):
+        assert len(ToolRegistry()) == 0
+
+    def test_len_after_register(self):
+        r = _reg(ReadTool(), WriteTool())
+        assert len(r) == 2
+
+    def test_len_decreases_on_unregister(self):
+        r = _reg(ReadTool(), WriteTool())
+        r.unregister("read")
+        assert len(r) == 1
+
+    def test_contains_registered_tool(self):
+        r = _reg(ReadTool())
+        assert "read" in r
+
+    def test_not_contains_unregistered_tool(self):
+        r = ToolRegistry()
+        assert "read" not in r
+
+    def test_contains_after_unregister(self):
+        r = _reg(ReadTool())
+        r.unregister("read")
+        assert "read" not in r
