@@ -19,6 +19,13 @@ api_providers = [
         auth_type=AuthType.None_,
     ),
     APIProvider(
+        id="anthropic-vertex",
+        name="Anthropic on Vertex AI",
+        api="anthropic_vertex",
+        options=LLMOptions(),
+        auth_type=AuthType.None_,
+    ),
+    APIProvider(
         id="nvidia",
         name="NVIDIA",
         api="openai_completions",
