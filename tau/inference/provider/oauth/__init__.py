@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from tau.inference.provider.oauth.pkce import generate_pkce
 from tau.inference.provider.oauth.types import (
     OAuthAuthInfo,
@@ -6,6 +8,15 @@ from tau.inference.provider.oauth.types import (
     OAuthPrompt,
 )
 from tau.inference.provider.types import OAuthProvider
+
+if TYPE_CHECKING:
+    from tau.inference.provider.oauth.anthropic_claude_code import AnthropicClaudeCodeOAuthProvider
+    from tau.inference.provider.oauth.github_copilot import (
+        GitHubCopilotOAuthProvider,
+        get_copilot_base_url,
+    )
+    from tau.inference.provider.oauth.google_antigravity import GoogleAntigravityOAuthProvider
+    from tau.inference.provider.oauth.openai_codex import OpenAICodexOAuthProvider
 
 __all__ = [
     "OAuthProvider",

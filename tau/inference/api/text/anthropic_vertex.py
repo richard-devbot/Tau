@@ -4,7 +4,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
-from anthropic import AsyncAnthropicVertex
+from anthropic import AsyncAnthropicVertex  # pyright: ignore[reportPrivateImportUsage]
 
 from tau.inference.api.text.base import BaseLLMAPI as BaseAPI
 from tau.inference.api.text.utils import (
