@@ -19,7 +19,7 @@ from tau.tool.types import (
 _DEFAULT_TIMEOUT = 120
 
 
-def _render_terminal_call(args: dict, _streaming: bool) -> list[str]:
+def _render_terminal_call(args: dict, _streaming: bool = False) -> list[str]:
     return call_line("terminal", args.get("command", ""))
 
 
@@ -106,7 +106,7 @@ class TerminalTool(Tool):
         signal: AbortSignal | None = None,
         context: ToolContext | None = None,
     ) -> ToolResult:
-        """Execute a shell command and return the output."""
+        """Execute a shell command and stream output incrementally to the TUI."""
         params = TerminalParams.model_validate(invocation.params)
         cwd = invocation.cwd or None
 
@@ -135,25 +135,55 @@ class TerminalTool(Tool):
                     stderr=asyncio.subprocess.STDOUT,
                     cwd=cwd,
                 )
-            try:
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=params.timeout)
-            except TimeoutError:
-                proc.kill()
-                await proc.communicate()
-                return ToolResult.error(
-                    invocation.id,
-                    f"Command timed out after {params.timeout}s: {params.command}",
-                    metadata={
-                        "command": params.command,
-                        "exit_code": -1,
-                        "timed_out": True,
-                        "output_length": 0,
-                    },
-                )
         except OSError as e:
             return ToolResult.error(invocation.id, f"Failed to start command: {e}")
 
-        output = stdout.decode("utf-8", errors="replace")
+        chunks: list[str] = []
+        timed_out = False
+
+        async def _read_loop() -> None:
+            assert proc.stdout is not None
+            while True:
+                if signal is not None and signal.is_set():
+                    break
+                line = await proc.stdout.readline()
+                if not line:
+                    break
+                chunks.append(line.decode("utf-8", errors="replace"))
+                if tool_execution_update_callback is not None:
+                    await tool_execution_update_callback(
+                        ToolResult.ok(invocation.id, "".join(chunks))
+                    )
+
+        try:
+            await asyncio.wait_for(_read_loop(), timeout=params.timeout)
+        except TimeoutError:
+            timed_out = True
+        finally:
+            # Always kill and drain so the OS pipe buffer is flushed and no
+            # zombie process is left behind, regardless of timeout or abort.
+            if proc.returncode is None:
+                proc.kill()
+            if proc.stdout is not None:
+                try:
+                    await asyncio.wait_for(proc.stdout.read(), timeout=5)
+                except Exception:
+                    pass
+            await proc.wait()
+
+        if timed_out:
+            return ToolResult.error(
+                invocation.id,
+                f"Command timed out after {params.timeout}s: {params.command}",
+                metadata={
+                    "command": params.command,
+                    "exit_code": -1,
+                    "timed_out": True,
+                    "output_length": len("".join(chunks)),
+                },
+            )
+
+        output = "".join(chunks)
         rc = proc.returncode or 0
         metadata = {
             "command": params.command,
