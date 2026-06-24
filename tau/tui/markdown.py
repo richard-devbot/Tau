@@ -264,15 +264,40 @@ class _Renderer:
         available = max(ncols, self.width - overhead)
         total = sum(col_widths)
         if total > available:
-            exact = [w / total * available for w in col_widths]
-            col_widths = [max(1, int(e)) for e in exact]
-            # Distribute the pixels lost to int() truncation using largest-remainder
-            # so columns always sum to exactly `available`.
-            deficit = available - sum(col_widths)
-            if deficit > 0:
-                order = sorted(range(ncols), key=lambda i: -(exact[i] % 1))
-                for j in range(deficit):
-                    col_widths[order[j % ncols]] += 1
+            # Protect narrow columns: process from narrowest to widest and grant
+            # each its full natural width while there is budget left.  Once a
+            # column would consume more than its fair cap, distribute the
+            # remaining budget among it and all wider columns proportionally
+            # (largest-remainder tie-break) so they each get a fair share.
+            asc = sorted(range(ncols), key=lambda i: col_widths[i])
+            result = [0] * ncols
+            remaining = available
+            cutoff: int | None = None
+            for rank, idx in enumerate(asc):
+                cols_left = ncols - rank
+                cap = remaining - (cols_left - 1)  # leave ≥1 for each remaining col
+                if col_widths[idx] <= cap:
+                    result[idx] = col_widths[idx]
+                    remaining -= col_widths[idx]
+                else:
+                    cutoff = rank
+                    break
+
+            if cutoff is not None:
+                tail = [asc[j] for j in range(cutoff, ncols)]
+                tail_nat = [col_widths[i] for i in tail]
+                tail_total = sum(tail_nat)
+                exact_tail = [w / tail_total * remaining for w in tail_nat]
+                alloc_tail = [max(1, int(e)) for e in exact_tail]
+                deficit = remaining - sum(alloc_tail)
+                if deficit > 0:
+                    order2 = sorted(range(len(alloc_tail)), key=lambda j: -(exact_tail[j] % 1))
+                    for k in range(deficit):
+                        alloc_tail[order2[k % len(order2)]] += 1
+                for j, i in enumerate(tail):
+                    result[i] = alloc_tail[j]
+
+            col_widths = result
 
         def _border(left: str, mid: str, right: str, fill: str = "─") -> str:
             segs = (fill * (w + 4) for w in col_widths)
