@@ -251,9 +251,20 @@ class _Renderer:
         if not rendered:
             return []
 
-        ncols = max(len(r) for r in rendered)
-        # Pad short rows so every row has ncols cells.
+        # Canonical column count comes from the header row when present.
+        # Using max() would inflate ncols when a data cell contains a literal
+        # "|" that the parser split into an extra column.
+        if has_header and rendered:
+            ncols = len(rendered[0])
+        else:
+            ncols = max(len(r) for r in rendered)
+
+        # Normalise every row to exactly ncols cells.
         for r in rendered:
+            if len(r) > ncols:
+                # Extra cells came from a literal "|" inside cell content.
+                # Re-join them back into the last expected cell.
+                r[ncols - 1 :] = ["|".join(r[ncols - 1 :])]
             while len(r) < ncols:
                 r.append("")
 
