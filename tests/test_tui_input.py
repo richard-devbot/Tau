@@ -289,7 +289,7 @@ class TestInputParser:
         from tau.tui.input import InputParser
         return InputParser()
 
-    def _key(self, raw: str) -> "KeyEvent":
+    def _key(self, raw: str) -> KeyEvent:
         events = self._parser().feed(raw)
         assert len(events) == 1
         assert isinstance(events[0], KeyEvent)
@@ -388,6 +388,28 @@ class TestInputParser:
         events = self._parser().feed("\x1b[<0;10;5M")
         assert isinstance(events[0], MouseEvent)
         assert events[0].pressed is True
+
+    def test_repeated_chars_split_into_separate_events(self):
+        # A single read can batch several auto-repeated bytes together (e.g.
+        # holding Space). Each must become its own KeyEvent so key matching
+        # works — otherwise key="   " never matches "space".
+        events = self._parser().feed("   ")
+        assert len(events) == 3
+        assert all(isinstance(e, KeyEvent) and e.matches("space") for e in events)
+
+    def test_typed_run_splits_per_character(self):
+        events = self._parser().feed("abc")
+        assert [e.key for e in events if isinstance(e, KeyEvent)] == ["a", "b", "c"]
+
+    def test_multibyte_char_kept_as_single_event(self):
+        events = self._parser().feed("\U0001f600")
+        assert len(events) == 1
+        assert isinstance(events[0], KeyEvent)
+        assert events[0].char == "\U0001f600"
+
+    def test_char_then_escape_sequence(self):
+        events = self._parser().feed("a\x1b[A")
+        assert [e.key for e in events if isinstance(e, KeyEvent)] == ["a", "up"]
 
     def test_flush_empty(self):
         assert self._parser().flush() == []

@@ -376,6 +376,25 @@ _CTRL_CHARS: dict[str, tuple[str, bool]] = {
 # ── Sequence completeness ─────────────────────────────────────────────────────
 
 
+def _split_text_unit(buf: str) -> tuple[str, str]:
+    """Peel one logical character unit off the front of a plain-text buffer.
+
+    ASCII code points are returned one at a time so a burst of auto-repeated
+    keys (a held Space, fast typing, or an unbracketed paste) splits into one
+    event per character. A run of non-ASCII code points is kept together so
+    multi-codepoint graphemes (ZWJ emoji sequences, combining marks) survive as
+    a single event.
+
+    Returns ``(unit, rest)``.
+    """
+    if ord(buf[0]) < 0x80:
+        return buf[0], buf[1:]
+    i = 1
+    while i < len(buf) and ord(buf[i]) >= 0x80:
+        i += 1
+    return buf[:i], buf[i:]
+
+
 def _is_complete(buf: str) -> bool | None:
     """
     Return True if buf is a complete escape sequence,
@@ -460,6 +479,18 @@ class InputParser:
         self._buf += data
         events: list[InputEvent] = []
         while self._buf:
+            # Plain text (not an escape sequence): peel off one character unit at
+            # a time. A single read can batch several repeated bytes together —
+            # e.g. holding Space floods the OS auto-repeat into one "   " chunk.
+            # Splitting per character means each keypress becomes its own event,
+            # so key matching (matches("space"), etc.) works and held keys don't
+            # collapse into a single bogus multi-char event.
+            if not self._buf.startswith("\x1b"):
+                unit, self._buf = _split_text_unit(self._buf)
+                event = self._parse_one(unit)
+                if event is not None:
+                    events.append(event)
+                continue
             complete = _is_complete(self._buf)
             if complete is None:
                 break  # need more data

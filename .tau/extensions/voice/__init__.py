@@ -61,6 +61,10 @@ class _VoiceController:
         self._mode = "idle"
         self._press_time: float = 0.0
         self._last_space_time: float = 0.0
+        # Observed auto-repeat interval (seconds). Measured from the gap between
+        # consecutive space events so the release watcher can trip just above the
+        # real cadence instead of a flat, conservative delay. 0.0 = not measured.
+        self._repeat_interval: float = 0.0
 
         self._activation_task: asyncio.Task | None = None
         self._watcher_task: asyncio.Task | None = None
@@ -136,17 +140,30 @@ class _VoiceController:
         self._mode = "recording"
         self._start_animation(self._RECORDING_FRAMES)
 
+    def _release_gap(self) -> float:
+        """Seconds of silence that mean the key was released.
+
+        Once the auto-repeat cadence is known we trip just above it (≈2.5×,
+        clamped to 0.25–_RELEASE_GAP) so release feels immediate. Before any
+        repeat is measured — i.e. still inside the OS initial-repeat delay — we
+        stay at the conservative _RELEASE_GAP to avoid a false release.
+        """
+        if self._repeat_interval <= 0.0:
+            return _RELEASE_GAP
+        return max(0.25, min(_RELEASE_GAP, self._repeat_interval * 2.5))
+
     async def _release_watcher(self) -> None:
         """Fallback release detector for terminals without Kitty key-up events.
 
-        Polls every 50 ms. If no space event has arrived for _RELEASE_GAP seconds
-        the key has been released — trigger the same logic as a Kitty key-up.
+        Polls every 50 ms. If no space event has arrived for the adaptive
+        release gap the key has been released — trigger the same logic as a
+        Kitty key-up.
         """
         while True:
             await asyncio.sleep(0.05)
             if self._mode not in ("waiting", "recording"):
                 return
-            if time.monotonic() - self._last_space_time >= _RELEASE_GAP:
+            if time.monotonic() - self._last_space_time >= self._release_gap():
                 self._handle_release()
                 return
 
@@ -306,14 +323,25 @@ class _VoiceController:
         if self._mode == "idle" and not event.repeat:
             self._press_time = time.monotonic()
             self._last_space_time = self._press_time
+            # Forget the previous hold's cadence so the release watcher stays
+            # conservative until this hold's repeats are measured — otherwise it
+            # could false-trip during the OS initial-repeat delay.
+            self._repeat_interval = 0.0
             self._mode = "waiting"
             self._activation_task = asyncio.ensure_future(self._activation_timer())
             self._watcher_task = asyncio.ensure_future(self._release_watcher())
             return True  # consume; space will be re-emitted if released early
 
-        # Auto-repeat while waiting or recording — keep timestamp fresh
+        # Auto-repeat while waiting or recording — keep timestamp fresh and
+        # learn the repeat cadence (used to size the release gap).
         if self._mode in ("waiting", "recording"):
-            self._last_space_time = time.monotonic()
+            now = time.monotonic()
+            gap = now - self._last_space_time
+            # Ignore the long initial key-repeat delay and any outliers; only
+            # steady-state intervals (< _RELEASE_GAP) describe the real cadence.
+            if 0.0 < gap < _RELEASE_GAP:
+                self._repeat_interval = gap
+            self._last_space_time = now
             return True
 
         # Consume space during transcription too
