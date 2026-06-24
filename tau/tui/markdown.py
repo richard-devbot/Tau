@@ -275,40 +275,25 @@ class _Renderer:
         available = max(ncols, self.width - overhead)
         total = sum(col_widths)
         if total > available:
-            # Protect narrow columns: process from narrowest to widest and grant
-            # each its full natural width while there is budget left.  Once a
-            # column would consume more than its fair cap, distribute the
-            # remaining budget among it and all wider columns proportionally
-            # (largest-remainder tie-break) so they each get a fair share.
-            asc = sorted(range(ncols), key=lambda i: col_widths[i])
-            result = [0] * ncols
-            remaining = available
-            cutoff: int | None = None
-            for rank, idx in enumerate(asc):
-                cols_left = ncols - rank
-                cap = remaining - (cols_left - 1)  # leave ≥1 for each remaining col
-                if col_widths[idx] <= cap:
-                    result[idx] = col_widths[idx]
-                    remaining -= col_widths[idx]
-                else:
-                    cutoff = rank
-                    break
-
-            if cutoff is not None:
-                tail = [asc[j] for j in range(cutoff, ncols)]
-                tail_nat = [col_widths[i] for i in tail]
-                tail_total = sum(tail_nat)
-                exact_tail = [w / tail_total * remaining for w in tail_nat]
-                alloc_tail = [max(1, int(e)) for e in exact_tail]
-                deficit = remaining - sum(alloc_tail)
-                if deficit > 0:
-                    order2 = sorted(range(len(alloc_tail)), key=lambda j: -(exact_tail[j] % 1))
-                    for k in range(deficit):
-                        alloc_tail[order2[k % len(order2)]] += 1
-                for j, i in enumerate(tail):
-                    result[i] = alloc_tail[j]
-
-            col_widths = result
+            # Level-down algorithm (inspired by Textualize/rich _collapse_widths):
+            # Repeatedly reduce the widest column(s) toward the next-widest level
+            # until the total fits.  Narrow columns are never touched because they
+            # never reach max_w, so they keep their full natural width for free.
+            widths = list(col_widths)
+            excess = total - available
+            while excess > 0:
+                max_w = max(widths)
+                second_w = max((w for w in widths if w < max_w), default=0)
+                at_max = [i for i, w in enumerate(widths) if w == max_w]
+                n = len(at_max)
+                headroom = max_w - second_w  # reduction before hitting next level
+                total_reduce = min(excess, n * headroom)
+                per = total_reduce // n
+                extra = total_reduce - per * n
+                for rank, i in enumerate(at_max):
+                    widths[i] -= per + (1 if rank < extra else 0)
+                excess -= total_reduce
+            col_widths = [max(1, w) for w in widths]
 
         def _border(left: str, mid: str, right: str, fill: str = "─") -> str:
             segs = (fill * (w + 4) for w in col_widths)
