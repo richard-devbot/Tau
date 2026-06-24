@@ -27,11 +27,13 @@
           "description": "Provider for the STT model (openai, groq, google, sarvam)."
         },
         {
-          "key": "hold_seconds",
-          "label": "Hold duration (s)",
+          "key": "hold_ms",
+          "label": "Hold duration (ms)",
           "type": "int",
-          "default": 2,
-          "description": "How long (in seconds) to hold Space before recording starts."
+          "default": 500,
+          "min": 100,
+          "max": 5000,
+          "description": "How long (in milliseconds) to hold Space before recording starts. 500 = 0.5 s."
         },
         {
           "key": "sample_rate",

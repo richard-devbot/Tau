@@ -112,8 +112,8 @@ class VoiceController:
             task.cancel()
 
     async def _activation_timer(self) -> None:
-        """Open the mic and show Recording animation after hold_seconds."""
-        await asyncio.sleep(self._cfg.hold_seconds)
+        """Open the mic and show Recording animation after hold_ms."""
+        await asyncio.sleep(self._cfg.hold_ms / 1000)
         if self._mode != "waiting":
             return
         if not self._open_stream():

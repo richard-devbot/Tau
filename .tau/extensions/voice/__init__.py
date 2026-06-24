@@ -24,11 +24,19 @@ def register(tau: ExtensionAPI) -> None:
     from tau.extensions.settings import ExtensionSettings
 
     cfg_raw = ExtensionSettings(VoiceConfig, tau.config)
+
+    # Hold duration is now stored in milliseconds (int-friendly for /settings).
+    # Fall back to the legacy float `hold_seconds` key for older configs.
+    hold_ms = cfg_raw.get("hold_ms", None)
+    if hold_ms is None:
+        legacy = cfg_raw.get("hold_seconds", None)
+        hold_ms = int(float(legacy) * 1000) if legacy is not None else 500
+
     cfg = VoiceConfig(
         enabled=cfg_raw.get("enabled", True),
         stt_model=cfg_raw.get("stt_model", "whisper-1"),
         stt_provider=cfg_raw.get("stt_provider", "openai"),
-        hold_seconds=float(cfg_raw.get("hold_seconds", 2.0)),
+        hold_ms=int(hold_ms),
         sample_rate=int(cfg_raw.get("sample_rate", 16000)),
     )
 

@@ -16,5 +16,5 @@ class VoiceConfig:
     enabled: bool = True
     stt_model: str = "whisper-1"
     stt_provider: str = "openai"
-    hold_seconds: float = 2.0
+    hold_ms: int = 500
     sample_rate: int = 16000

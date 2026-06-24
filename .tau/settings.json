@@ -14,7 +14,7 @@
           "enabled": true,
           "stt_model": "whisper-1",
           "stt_provider": "openai",
-          "hold_seconds": 2,
+          "hold_ms": 500,
           "sample_rate": 16000
         }
       }
