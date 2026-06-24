@@ -637,3 +637,16 @@ class App:
         sm = self._runtime.settings_manager
         if sm is not None:
             await sm.flush()
+        self._print_resume_hint()
+
+    def _print_resume_hint(self) -> None:
+        session_mgr = self._runtime.session_manager
+        if session_mgr is None or not session_mgr.persist or not session_mgr.session_id:
+            return
+        # Only show if the session file exists on disk — an empty session that was
+        # never written produces an ID that --resume <id> cannot resolve.
+        if session_mgr.session_file is None or not session_mgr.session_file.exists():
+            return
+        sid = session_mgr.session_id
+        print(f"\n\x1b[2mResume this session with:\x1b[0m")
+        print(f"\x1b[1mtau --resume {sid}\x1b[0m\n")

@@ -74,16 +74,19 @@ def resolve_model(model: str | None, provider: str | None) -> tuple[str | None, 
         "UI theme name (default: dark). Builtins: dark, light. See /theme for all installed themes."
     ),
 )
-@click.option("--resume", "-r", is_flag=True, default=False, help="Resume the most recent session.")
+@click.option(
+    "--resume",
+    "-r",
+    default=None,
+    metavar="[ID]",
+    help="Resume a session. Omit an ID to resume the most recent; pass an ID for a specific session.",
+)
 @click.option(
     "--system",
     "-s",
     default=None,
     metavar="TEXT",
     help="Inject additional text into the system prompt.",
-)
-@click.option(
-    "--session", default=None, metavar="ID", help="Resume a specific session by ID or path."
 )
 @click.option(
     "--ephemeral", "-e", is_flag=True, default=False, help="Don't save this session to disk."
@@ -130,9 +133,8 @@ def cli(
     provider: str | None,
     model: str | None,
     theme: str | None,
-    resume: bool,
+    resume: str | None,
     system: str | None,
-    session: str | None,
     ephemeral: bool,
     print_flag: bool,
     mode: str | None,
@@ -158,7 +160,6 @@ def cli(
     ctx.obj["theme"] = theme
     ctx.obj["resume"] = resume
     ctx.obj["system"] = system or ""
-    ctx.obj["session"] = session
     ctx.obj["ephemeral"] = ephemeral
     ctx.obj["quiet"] = quiet
     ctx.obj["mode"] = resolve_mode(mode, print_flag, prompt, output_format)
@@ -170,13 +171,33 @@ def cli(
         asyncio.run(_start(ctx.obj))
 
 
+_RESUME_LATEST = "__LATEST__"
+
+
+def _resolve_session_file(resume_id: str) -> Path:
+    """Find a session file by its ID, searching all project session directories."""
+    from tau.settings.paths import get_sessions_dir
+
+    matches = list(get_sessions_dir().rglob(f"*{resume_id}*.jsonl"))
+    if not matches:
+        raise click.ClickException(f"No session found with ID: {resume_id}")
+    if len(matches) > 1:
+        matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return matches[0].resolve()
+
+
 async def _start(opts: dict) -> None:
     """Start the runtime with the given options and run in the specified mode."""
     from tau.runtime.service import Runtime
     from tau.runtime.types import RuntimeConfig
 
     resolved_provider, resolved_model = resolve_model(opts["model"], opts["provider"])
-    session_file = Path(opts["session"]).resolve() if opts["session"] else None
+
+    resume_value: str | None = opts.get("resume")
+    resume_latest = resume_value == _RESUME_LATEST
+    session_file: Path | None = None
+    if resume_value and not resume_latest:
+        session_file = _resolve_session_file(resume_value)
 
     # Determine project trust from flags
     project_trusted = None
@@ -189,7 +210,7 @@ async def _start(opts: dict) -> None:
         cwd=Path.cwd(),
         model_id=resolved_model,
         provider=resolved_provider,
-        resume=opts["resume"],
+        resume=resume_latest,
         session_file=session_file,
         persist_session=not opts["ephemeral"],
         mode=opts["mode"],
@@ -321,6 +342,35 @@ cli.add_command(update)
 cli.add_command(list_packages, name="list")
 
 
+def _rewrite_resume_arg(argv: list[str]) -> list[str]:
+    """Make --resume [ID] work as an optional-value option.
+
+    click only supports required or absent values for options, so we pre-process
+    sys.argv before click sees it:
+      --resume         → --resume __LATEST__   (resume most recent)
+      --resume <id>    → --resume <id>          (resume specific session)
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ("--resume", "-r"):
+            out.append("--resume")
+            if i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+                out.append(argv[i + 1])
+                i += 2
+            else:
+                out.append(_RESUME_LATEST)
+                i += 1
+        else:
+            out.append(arg)
+            i += 1
+    return out
+
+
 def main() -> None:
     """Entry point for the CLI."""
+    import sys
+
+    sys.argv[1:] = _rewrite_resume_arg(sys.argv[1:])
     cli()
