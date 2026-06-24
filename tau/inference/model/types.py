@@ -57,6 +57,16 @@ class Model:
         """
         return self.max_input_tokens or self.context_window
 
+    @property
+    def is_stt(self) -> bool:
+        """True for a speech-to-text model (audio in → text out). UI label: Voice."""
+        return Modality.Audio in self.input and Modality.Text in self.output
+
+    @property
+    def is_tts(self) -> bool:
+        """True for a text-to-speech model (text in → audio out). UI label: Speak."""
+        return Modality.Text in self.input and Modality.Audio in self.output
+
     def get_name(self) -> str:
         """Return the human-readable model name."""
         return self.name

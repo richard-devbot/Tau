@@ -1,8 +1,11 @@
 from tau.inference.provider.types import VideoProvider
 
 providers = [
-    VideoProvider(name="fal", api="fal-video"),
+    VideoProvider(id="fal", name="fal.ai", api="fal-video"),
     VideoProvider(
-        name="openrouter", api="openrouter-video", base_url="https://openrouter.ai/api/v1"
+        id="openrouter",
+        name="OpenRouter",
+        api="openrouter-video",
+        base_url="https://openrouter.ai/api/v1",
     ),
 ]

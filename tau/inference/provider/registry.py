@@ -81,7 +81,7 @@ class ImageProviderRegistry(_ProviderRegistryBase[ImageProvider]):
     """Registry mapping provider names to image-generation provider instances."""
 
     def _key(self, provider: ImageProvider) -> str:
-        return provider.name
+        return provider.id
 
     @classmethod
     def from_builtins(cls) -> ImageProviderRegistry:
@@ -97,7 +97,7 @@ class AudioProviderRegistry(_ProviderRegistryBase[AudioProvider]):
     """Registry mapping provider names to audio (STT/TTS) provider instances."""
 
     def _key(self, provider: AudioProvider) -> str:
-        return provider.name
+        return provider.id
 
     @classmethod
     def from_builtins(cls) -> AudioProviderRegistry:
@@ -113,7 +113,7 @@ class VideoProviderRegistry(_ProviderRegistryBase[VideoProvider]):
     """Registry mapping provider names to video-generation provider instances."""
 
     def _key(self, provider: VideoProvider) -> str:
-        return provider.name
+        return provider.id
 
     @classmethod
     def from_builtins(cls) -> VideoProviderRegistry:

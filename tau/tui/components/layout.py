@@ -333,6 +333,10 @@ class Layout(Component):
                             model_sel.move_up()
                         case "down":
                             model_sel.move_down()
+                        case "left":
+                            model_sel.prev_section()
+                        case "right":
+                            model_sel.next_section()
                         case "tab":
                             model_sel.toggle_scope()
                         case "enter":
@@ -1038,15 +1042,20 @@ class Layout(Component):
 
     def open_model_selector(
         self,
-        models: list,
-        current_key: str,
-        on_commit: Callable[[tuple[str, str]], None],
+        sections: list[tuple[str, str, list, str]],
+        on_commit: Callable[[tuple[str, str, str]], None],
         on_cancel: Callable[[], None],
+        initial: str | None = None,
     ) -> None:
-        """Open the model selector modal."""
+        """Open the tabbed model selector modal.
+
+        ``sections`` is a list of ``(modality, label, models, current_key)``;
+        ``initial`` selects the starting modality tab. ``on_commit`` receives
+        ``(model_id, provider, modality)``.
+        """
         from tau.tui.components.model_palette import ModelSelectorModal
 
-        modal = ModelSelectorModal(models, current_key)
+        modal = ModelSelectorModal(sections, initial=initial)
         self._active_selector = InlineSelector(
             kind="model",
             selector=modal,

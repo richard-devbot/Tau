@@ -23,6 +23,13 @@ class VideoLLM:
         ProviderRegistry(video=VideoProviderRegistry.from_builtins())
     )
 
+    @classmethod
+    def list_available(cls) -> list:
+        """Return all video models whose provider has usable auth (credential or env var)."""
+        from tau.inference.api.availability import available_models
+
+        return available_models(cls._models, cls._providers, cls._auth_manager)
+
     def __init__(
         self,
         model_id: str,
@@ -50,7 +57,7 @@ class VideoLLM:
         api_name = model.api or prov.api
 
         self.model = model
-        self.provider_id = prov.name
+        self.provider_id = prov.id
 
         base_url = model.base_url or prov.base_url
         base_opts = VideoOptions(base_url=base_url)

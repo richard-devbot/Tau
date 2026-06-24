@@ -26,6 +26,8 @@ from tau.settings.types import (
     ExtensionsSettings,
     HTTPProxySettings,
     ImageSettings,
+    ModelRef,
+    ModelSettings,
     PackageEntry,
     PackagesSettings,
     ProviderRetrySettings,
@@ -58,6 +60,11 @@ _ENUM_FIELD_TYPES: dict[str, type] = {
     "steering_mode": SteeringMode,
     "follow_up_mode": FollowupMode,
 }
+
+# Per-modality model slots and user-facing aliases. "text" is a facade over the
+# flat model/provider keys; the rest live in the nested ``models`` object.
+_MODALITY_SLOTS: frozenset[str] = frozenset({"text", "voice", "speak", "image", "video"})
+_MODALITY_ALIASES: dict[str, str] = {"stt": "voice", "tts": "speak", "audio": "voice"}
 
 
 class SettingsManager:
@@ -177,6 +184,22 @@ class SettingsManager:
                     k: v for k, v in value.items() if k in valid_retry and k != "provider"
                 }
                 kwargs[key] = RetrySettings(**retry_kwargs, provider=provider)
+            elif key == "model" and isinstance(value, dict):
+                valid_modalities = {f.name for f in dc.fields(ModelSettings)}
+                valid_ref = {f.name for f in dc.fields(ModelRef)}
+                ms_kwargs = {
+                    modality: ModelRef(**{k: v for k, v in ref.items() if k in valid_ref})
+                    for modality, ref in value.items()
+                    if modality in valid_modalities and isinstance(ref, dict)
+                }
+                kwargs[key] = ModelSettings(**ms_kwargs)
+            elif key == "model" and isinstance(value, str):
+                # Legacy flat "model": "<id>" (+ sibling "provider"): fold into
+                # model.text so old config files load instead of crashing. The
+                # nested object is written back on the next save.
+                kwargs[key] = ModelSettings(
+                    text=ModelRef(id=value, provider=data.get("provider"))
+                )
             elif key == "extensions" and isinstance(value, dict):
                 entries = None
                 if isinstance(value.get("list"), list):
@@ -438,16 +461,6 @@ class SettingsManager:
         """Return a deep copy of the raw project settings (before global merge)."""
         return copy.deepcopy(self.project_settings)
 
-    def get_provider(self) -> str | None:
-        """Return the default LLM provider, or None if unset."""
-        return self.settings.provider
-
-    def set_provider(self, provider: str):
-        """Set the default LLM provider and persist to global settings."""
-        self.global_settings.provider = provider
-        self._mark_modified("provider")
-        self._save()
-
     def get_theme(self) -> str | None:
         """Return the persisted UI theme name, or None if unset."""
         return self.settings.theme
@@ -524,22 +537,27 @@ class SettingsManager:
         self._mark_modified("show_images")
         self._save()
 
-    def get_model(self) -> str | None:
-        """Return the default model ID, or None if unset."""
-        return self.settings.model
+    def get_model_ref(self, modality: str) -> ModelRef | None:
+        """Return the ``{id, provider}`` selected for a modality, or None if unset.
 
-    def set_model(self, model: str):
-        """Set the default model ID and persist to global settings."""
-        self.global_settings.model = model
-        self._mark_modified("model")
-        self._save()
+        ``modality`` is one of ``text|voice|speak|image|video`` (aliases
+        ``stt``→voice, ``tts``→speak, ``audio``→voice). ``text`` is the chat model.
+        """
+        modality = _MODALITY_ALIASES.get(modality, modality)
+        if modality not in _MODALITY_SLOTS:
+            raise ValueError(f"unknown model modality: {modality!r}")
+        model = self.settings.model
+        return getattr(model, modality, None) if model is not None else None
 
-    def set_model_and_provider(self, provider: str, model_id: str):
-        """Set both the default provider and model in a single write."""
-        self.global_settings.provider = provider
-        self.global_settings.model = model_id
-        self._mark_modified("provider")
-        self._mark_modified("model")
+    def set_model_ref(self, modality: str, provider: str, model_id: str) -> None:
+        """Persist the ``{id, provider}`` for a modality to global settings."""
+        modality = _MODALITY_ALIASES.get(modality, modality)
+        if modality not in _MODALITY_SLOTS:
+            raise ValueError(f"unknown model modality: {modality!r}")
+        if self.global_settings.model is None:
+            self.global_settings.model = ModelSettings()
+        setattr(self.global_settings.model, modality, ModelRef(id=model_id, provider=provider))
+        self._mark_modified("model", modality)
         self._save()
 
     def get_thinking_level(self) -> ThinkingLevel | None:

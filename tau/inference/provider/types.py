@@ -101,7 +101,8 @@ class APIProvider:
 class ImageProvider:
     """Provider descriptor for image generation APIs."""
 
-    name: str
+    id: str  # registry key / credential id (e.g. "openai")
+    name: str  # display name (e.g. "OpenAI")
     api: str
     base_url: str
     auth_type: AuthType = AuthType.ApiKey
@@ -111,7 +112,8 @@ class ImageProvider:
 class AudioProvider:
     """Provider descriptor for speech-to-text and text-to-speech APIs."""
 
-    name: str
+    id: str  # registry key / credential id (e.g. "openai")
+    name: str  # display name (e.g. "OpenAI")
     api: str
     base_url: str | None = None
     auth_type: AuthType = AuthType.ApiKey
@@ -121,7 +123,8 @@ class AudioProvider:
 class VideoProvider:
     """Provider descriptor for video generation APIs."""
 
-    name: str
+    id: str  # registry key / credential id (e.g. "fal")
+    name: str  # display name (e.g. "fal.ai")
     api: str
     base_url: str | None = None
     auth_type: AuthType = AuthType.ApiKey

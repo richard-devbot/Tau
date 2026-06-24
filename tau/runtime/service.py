@@ -217,10 +217,7 @@ class Runtime:
 
         sm = self._context.settings_manager
         if sm is not None:
-            if provider:
-                sm.set_model_and_provider(provider, model_id)
-            else:
-                sm.set_model(model_id)
+            sm.set_model_ref("text", new_llm.provider_id, model_id)
 
     async def execute_terminal(self, cmd: str, exclude: bool = False) -> None:
         """Run a shell command, stream output chunks, persist to session, and emit events."""

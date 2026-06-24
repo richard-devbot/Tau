@@ -21,7 +21,7 @@ def register(tau):
     timeout = config.get("timeout_ms", 5000)
 ```
 
-In `~/.tau/settings.json` or `.tau/settings.json`:
+The values are stored in `~/.tau/settings.json` (global) or `.tau/settings.json` (project-local):
 
 ```json
 {
@@ -38,6 +38,71 @@ In `~/.tau/settings.json` or `.tau/settings.json`:
   }
 }
 ```
+
+### Where settings live
+
+Settings for an extension are stored in the `settings` object of its entry inside `extensions.list`. Tau matches entries by path — the path in the list must match the path or directory the extension was loaded from.
+
+**Project-local** — `.tau/settings.json` (only applies in this directory):
+
+```json
+{
+  "extensions": {
+    "list": [
+      {
+        "path": ".tau/extensions/lsp",
+        "settings": {
+          "lsp": true,
+          "eager": [],
+          "servers": {
+            "pyright": { "enabled": true },
+            "ruff": { "enabled": true },
+            "typescript-language-server": { "enabled": false }
+          }
+        }
+      },
+      {
+        "path": ".tau/extensions/voice",
+        "settings": {
+          "enabled": true,
+          "stt_model": "whisper-1",
+          "stt_provider": "openai",
+          "hold_seconds": 2,
+          "sample_rate": 16000
+        }
+      }
+    ]
+  }
+}
+```
+
+**Global** — `~/.tau/settings.json` (applies to every project):
+
+```json
+{
+  "extensions": {
+    "list": [
+      {
+        "path": "~/.tau/extensions/web-search",
+        "settings": {
+          "enabled": true,
+          "engine": "ddgs",
+          "results": 10
+        }
+      },
+      {
+        "path": "~/.tau/extensions/my_ext.py",
+        "settings": {
+          "api_key": "sk-...",
+          "timeout_ms": 5000
+        }
+      }
+    ]
+  }
+}
+```
+
+Both files can coexist — project settings are merged on top of global settings at startup. Extensions loaded from `.tau/extensions/` read from the project file; extensions loaded from `~/.tau/extensions/` read from the global file.
 
 ## Nested Structures
 
@@ -237,7 +302,147 @@ def register(tau):
 
 Extensions can register settings items that appear as a named sub-panel at the bottom of the interactive `/settings` panel. Users can then edit extension settings from the TUI without touching JSON.
 
-### Basic example
+There are two ways to do this: declare the schema in `manifest.json` (recommended for directory extensions) or register it imperatively with `tau.register_settings()` (useful for single-file extensions).
+
+---
+
+### Option A — manifest.json schema (recommended)
+
+Add a `"settings"` block under the `"tau"` key in `manifest.json`. Tau reads it at load time, builds the `/settings` sub-panel automatically, reads current values from the extension's config, and persists changes back to `settings.json` (reloading just that extension so the change applies live — no restart needed).
+
+```json
+{
+  "tau": {
+    "extensions": ["__init__.py"],
+    "dependencies": ["requests"],
+    "settings": {
+      "title": "Web search",
+      "fields": [
+        {
+          "key": "enabled",
+          "label": "Enabled",
+          "type": "bool",
+          "default": true,
+          "description": "Enable or disable the web search extension."
+        },
+        {
+          "key": "engine",
+          "label": "Search engine",
+          "type": "enum",
+          "values": ["ddgs", "exa", "tavily"],
+          "default": "ddgs",
+          "description": "Which search backend to use."
+        },
+        {
+          "key": "results",
+          "label": "Max results",
+          "type": "int",
+          "default": 10,
+          "min": 1,
+          "max": 50,
+          "description": "Number of results returned per query."
+        },
+        {
+          "key": "api_key",
+          "label": "API key",
+          "type": "secret",
+          "default": "",
+          "description": "Provider API key (stored in settings.json)."
+        },
+        {
+          "key": "exa",
+          "label": "Exa settings",
+          "type": "group",
+          "fields": [
+            {
+              "key": "base_url",
+              "label": "Base URL",
+              "type": "string",
+              "default": "https://api.exa.ai"
+            },
+            {
+              "key": "highlights",
+              "label": "Highlights",
+              "type": "bool",
+              "default": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+The corresponding `.tau/settings.json` entry that stores the current values:
+
+```json
+{
+  "extensions": {
+    "list": [
+      {
+        "path": ".tau/extensions/web-search",
+        "settings": {
+          "enabled": true,
+          "engine": "exa",
+          "results": 20,
+          "api_key": "sk-exa-...",
+          "exa": {
+            "base_url": "https://api.exa.ai",
+            "highlights": false
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+#### Field types
+
+| Type | UI control | Notes |
+|------|-----------|-------|
+| `bool` | Toggle `off` / `on` | Stored as a JSON boolean in settings |
+| `int` | Text input (numeric) | Optional `min` and `max` clamps |
+| `string` | Text input | Optional `pattern` (regex the value must match) |
+| `secret` | Text input | Same as `string`; signals sensitive content |
+| `text` | Text input | Same as `string`; intended for longer values |
+| `enum` or `select` | Cycle through values on Enter | Requires a non-empty `"values"` list |
+| `group` | Opens a nested sub-panel | Contains a `"fields"` list; keys are prefixed |
+
+#### Field properties
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `key` | Yes | Setting key. Supports dot-notation: `"exa.api_key"` is equivalent to nesting under a `"exa"` group |
+| `label` | Yes | Display text shown in the `/settings` panel |
+| `type` | No (defaults to `string`) | One of the types listed above |
+| `default` | No | Fallback value when the key is absent from settings |
+| `description` | No | Dimmed help text shown below the label |
+| `values` | `enum`/`select` only | List of allowed values to cycle through |
+| `min` / `max` | `int` only | Clamp the entered value to this range |
+| `pattern` | `string`/`secret`/`text` | Regex the value must fully match; invalid input is silently ignored |
+| `fields` | `group` only | Nested list of field definitions |
+
+#### Summary badge
+
+The first top-level `bool` field is automatically used as an on/off summary badge on the extension's parent row in the main `/settings` list. This lets users see at a glance whether an extension is enabled without opening its sub-panel.
+
+#### Dot-notation keys
+
+`"key": "exa.api_key"` at the top level is exactly equivalent to a field with `"key": "api_key"` nested inside a group with `"key": "exa"`. Both read and write the same path in settings:
+
+```json
+{ "exa": { "api_key": "sk-..." } }
+```
+
+Use the explicit `group` type when you want the sub-panel to have a header label. Use dot-notation directly when you just want nested storage without the extra level of UI.
+
+---
+
+### Option B — `tau.register_settings()` (imperative)
+
+#### Basic example
 
 ```python
 from tau.tui.components.settings_modal import SettingItem
@@ -254,7 +459,7 @@ def register(tau):
     ], title="My Extension", on_change=on_change)
 ```
 
-### `tau.register_settings(items, title, on_change)`
+#### `tau.register_settings(items, title, on_change)`
 
 Registers a sub-panel in `/settings` containing the provided items.
 
@@ -264,7 +469,7 @@ Registers a sub-panel in `/settings` containing the provided items.
 | `title` | `str` | The sub-panel title shown in the list |
 | `on_change` | `callable(key, value)` | Called when the user changes a value |
 
-### `SettingItem` fields
+#### `SettingItem` fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -278,7 +483,7 @@ Registers a sub-panel in `/settings` containing the provided items.
 | `submenu_settings` | `list[SettingItem] \| None` | Open a full nested sub-panel with these items (arbitrary depth) |
 | `submenu_on_change` | `callable \| None` | Overrides the parent `on_change` for a nested sub-panel |
 
-### Nested sub-panels
+#### Nested sub-panels
 
 A `SettingItem` with `submenu_settings` opens another level of the settings panel. Nesting can be arbitrarily deep. Use `submenu_on_change` to override the change callback for that level:
 
@@ -298,7 +503,7 @@ tau.register_settings([
 ], title="My Extension", on_change=on_change)
 ```
 
-### `tau.settings.set_extension_config_key(ext_path, key, value)`
+#### `tau.settings.set_extension_config_key(ext_path, key, value)`
 
 Persists a value back to `extensions.list[].settings` in `settings.json`.
 

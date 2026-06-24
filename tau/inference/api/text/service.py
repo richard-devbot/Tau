@@ -170,39 +170,12 @@ class TextLLM:
 
     @classmethod
     def list_available(cls) -> list:
-        """Return all models whose provider has usable auth (stored credential or env var)."""
-        import os
+        """Return all text models whose provider has usable auth (credential or env var)."""
+        from tau.inference.api.availability import available_models
 
-        from tau.auth.types import APICredential, OAuthCredential
-        from tau.inference.provider.types import OAuthProvider
-        from tau.inference.types import AuthType
-
-        cls._auth_manager.reload()  # type: ignore[union-attr]
-        result = []
-        seen: set[str] = set()
-        for candidates in cls._models._models.values():  # type: ignore[union-attr]
-            for candidate in candidates:
-                key = f"{candidate.provider}/{candidate.id}"
-                if key in seen:
-                    continue
-                provider = cls._providers.get(candidate.provider)  # type: ignore[union-attr]
-                if provider is None:
-                    continue
-                if getattr(provider, "auth_type", None) == AuthType.None_:
-                    pass  # no credential required (e.g. local Ollama)
-                elif isinstance(provider, OAuthProvider):
-                    if not isinstance(cls._auth_manager.get(provider.id), OAuthCredential):  # type: ignore[union-attr]
-                        continue
-                else:
-                    cred = cls._auth_manager.get(provider.id)  # type: ignore[union-attr]
-                    if not isinstance(cred, APICredential) and not os.environ.get(
-                        f"{provider.id.upper()}_API_KEY"
-                    ):
-                        # fall back to env var (e.g. ANTHROPIC_API_KEY)
-                        continue
-                seen.add(key)
-                result.append(candidate)
-        return result
+        return available_models(
+            cls._builtin_models(), cls._builtin_providers(), cls._builtin_auth_manager()
+        )
 
     def _merge_options(self, base: LLMOptions, override: LLMOptions | None) -> LLMOptions:
         """Merge base options with override options, preferring non-None override values.

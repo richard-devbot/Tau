@@ -369,15 +369,19 @@ class Terminal:
         self.write_flush("\x1b]11;?\x1b\\")
 
     def enable_kitty_keyboard(self) -> None:
-        """Enable Kitty keyboard protocol (progressive enhancement level 1).
+        """Enable Kitty keyboard protocol (flags 1 + 2).
 
-        Level 1 adds:
-        * Key-release events (``KeyEvent.released=True``)
-        * Unambiguous encoding of modifier combinations
+        Flags pushed (``\\x1b[>3u`` = 1 | 2):
+        * 1 — Disambiguate escape codes: unambiguous encoding of modifier
+          combinations.
+        * 2 — Report event types: emit press / repeat / release events
+          (``KeyEvent.repeat`` / ``KeyEvent.released``). Without this flag the
+          terminal only reports presses, so key-up is never observed — which
+          breaks anything relying on hold-and-release (e.g. the voice extension).
 
         Non-Kitty terminals silently ignore this sequence.
         """
-        self.write("\x1b[>1u")
+        self.write("\x1b[>3u")
 
     def disable_kitty_keyboard(self) -> None:
         """Restore the keyboard protocol to the terminal default."""

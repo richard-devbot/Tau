@@ -23,6 +23,13 @@ class ImageLLM:
         ProviderRegistry(image=ImageProviderRegistry.from_builtins())
     )
 
+    @classmethod
+    def list_available(cls) -> list:
+        """Return all image models whose provider has usable auth (credential or env var)."""
+        from tau.inference.api.availability import available_models
+
+        return available_models(cls._models, cls._providers, cls._auth_manager)
+
     def __init__(
         self,
         model_id: str,
@@ -49,7 +56,7 @@ class ImageLLM:
         api_name = model.api or provider.api
 
         self.model = model
-        self.provider_id = provider.name
+        self.provider_id = provider.id
 
         base_url = model.base_url or provider.base_url
         base_opts = ImageOptions(base_url=base_url)

@@ -423,8 +423,12 @@ class TUI(Container):
 
         Priority (highest → lowest):
         0. System events — BgColorEvent stored silently; window focus toggles
-           the cursor style; key-releases dropped.
-        1. Intercept handlers — may consume before anyone else sees the event.
+           the cursor style.
+        1. Intercept handlers — run for ALL events including key-releases so that
+           handlers registered via on_input_intercept() can observe key-up events.
+           Returning True consumes the event.
+        0c. Key-release events (Kitty protocol) — dropped here so they never reach
+            overlays, focused components, or global handlers.
         2. Focused overlay (if any) — modal; returning True blocks everything below.
            Visibility re-checked on each dispatch to handle terminal resize.
         3. Explicitly focused component (set_focus) — if no overlay has focus.
@@ -443,18 +447,19 @@ class TUI(Container):
             self._request_render()
             return
 
-        # 0c. Key-release events (Kitty protocol) — drop to avoid double-firing.
-        #     Code that explicitly needs releases can use on_input_intercept().
-        if isinstance(event, KeyEvent) and event.released:
-            return
-
-        # 1. Intercept handlers
+        # 1. Intercept handlers — run before the release drop so handlers registered
+        #    via on_input_intercept() can observe key-up events (Kitty protocol).
         for handler in self._intercept_handlers:
             result = handler(event)
             if asyncio.iscoroutine(result):
                 asyncio.ensure_future(result).add_done_callback(_log_task_exception)
             elif result is True:
                 return
+
+        # 0c. Key-release events (Kitty protocol) — drop after intercepts so they
+        #     don't reach overlays, focused components, or global handlers.
+        if isinstance(event, KeyEvent) and event.released:
+            return
 
         # 2. Focused overlay (modal) — re-validate visibility first (terminal resize
         #    may have hidden it); redirect to the topmost still-visible overlay.

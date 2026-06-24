@@ -16,16 +16,16 @@ def _api_provider(id: str = "test", name: str = "Test") -> APIProvider:
     return APIProvider(id=id, name=name, api="tau.inference.api.text.base", options=LLMOptions())
 
 
-def _image_provider(name: str = "imgprov") -> ImageProvider:
-    return ImageProvider(name=name, api="some.api", base_url="https://img.api.com")
+def _image_provider(id: str = "imgprov", name: str | None = None) -> ImageProvider:
+    return ImageProvider(id=id, name=name or id, api="some.api", base_url="https://img.api.com")
 
 
-def _audio_provider(name: str = "audprov") -> AudioProvider:
-    return AudioProvider(name=name, api="some.api")
+def _audio_provider(id: str = "audprov", name: str | None = None) -> AudioProvider:
+    return AudioProvider(id=id, name=name or id, api="some.api")
 
 
-def _video_provider(name: str = "vidprov") -> VideoProvider:
-    return VideoProvider(name=name, api="some.api")
+def _video_provider(id: str = "vidprov", name: str | None = None) -> VideoProvider:
+    return VideoProvider(id=id, name=name or id, api="some.api")
 
 
 class TestTextProviderRegistry:

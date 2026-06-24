@@ -41,6 +41,18 @@ class AudioLLM:
                 ProviderRegistry(audio=AudioProviderRegistry.from_builtins())
             )
 
+    @classmethod
+    def list_available(cls) -> list:
+        """Return all audio models whose provider has usable auth (credential or env var).
+
+        Includes both speech-to-text (``Model.is_stt``) and text-to-speech
+        (``Model.is_tts``) models; callers split them by those flags.
+        """
+        from tau.inference.api.availability import available_models
+
+        cls._ensure_defaults()
+        return available_models(cls._models, cls._providers, cls._auth_manager)  # type: ignore[arg-type]
+
     def __init__(
         self,
         model_id: str,
@@ -77,7 +89,7 @@ class AudioLLM:
         api_name = model.api or prov.api
 
         self.model = model
-        self.provider_id = prov.name
+        self.provider_id = prov.id
         self._auth_manager = _auth_manager
 
         base_url = model.base_url or prov.base_url

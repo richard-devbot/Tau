@@ -30,6 +30,31 @@ _log = logging.getLogger(__name__)
 _ENTRY_POINT = "register"
 
 
+def _venv_python_version(venv_dir: Path) -> str | None:
+    """Return a venv's ``major.minor`` Python version from its ``pyvenv.cfg``.
+
+    Reads the ``version`` / ``version_info`` key without spawning a subprocess.
+    Returns ``None`` if the file is missing or unparseable.
+    """
+    cfg = venv_dir / "pyvenv.cfg"
+    try:
+        text = cfg.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        key, _, value = line.partition("=")
+        if key.strip() in ("version", "version_info"):
+            parts = value.strip().split(".")
+            if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                return f"{parts[0]}.{parts[1]}"
+    return None
+
+
+def _venv_matches_current(venv_dir: Path) -> bool:
+    """True if ``venv_dir`` exists and targets the running interpreter's version."""
+    return _venv_python_version(venv_dir) == f"{sys.version_info.major}.{sys.version_info.minor}"
+
+
 class ExtensionLoader:
     """
     Discovers and loads Python extension files from configured directories.
@@ -209,15 +234,36 @@ class ExtensionLoader:
     def _resolve_venv_dir(self, source: str) -> Path:
         """Pick a venv to install extension dependencies into.
 
-        Project extensions always use the project's own ``.venv`` — reusing it
-        if it already exists, creating it at ``<cwd>/.venv`` if not. No dedicated
-        venv is ever created under ``.tau/``. Everything else (global, explicit,
-        unknown sources) uses the global packages venv at ``~/.tau/venv``.
+        Project extensions prefer the project's own ``.venv`` — but only if its
+        Python version matches the interpreter actually running Tau. Native
+        (C-extension) dependencies are built for a specific Python version, and
+        the resolved venv's site-packages is appended to *this* process's
+        ``sys.path``; a mismatch makes those imports fail (e.g. numpy raising
+        ``No module named 'numpy._core._multiarray_umath'``). This happens when
+        Tau is installed into its own venv (``uv tool install``) while the
+        project ``.venv`` was created with a different Python. In that case we
+        install into the running interpreter's own environment, which is the
+        only target guaranteed to be import-compatible. Everything else
+        (global, explicit, unknown sources) uses ``~/.tau/venv``.
         """
         from tau.settings.paths import get_packages_venv
 
         if source == "project":
-            return self._cwd / ".venv"
+            project_venv = self._cwd / ".venv"
+            # An existing project .venv built for a different Python version would
+            # ship binaries this interpreter can't import — divert to the running
+            # interpreter's own (guaranteed-compatible) environment instead.
+            if project_venv.exists() and not _venv_matches_current(project_venv):
+                _log.warning(
+                    "Project .venv at %s targets Python %s but Tau is running on %s; "
+                    "installing extension dependencies into the running interpreter "
+                    "to keep native packages import-compatible.",
+                    project_venv,
+                    _venv_python_version(project_venv) or "unknown",
+                    f"{sys.version_info.major}.{sys.version_info.minor}",
+                )
+                return Path(sys.prefix)
+            return project_venv
 
         return get_packages_venv(None)
 

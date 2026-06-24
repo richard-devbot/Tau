@@ -13,12 +13,11 @@ _log = logging.getLogger(__name__)
 
 def open_login_selector(ctx: CommandContext) -> None:
     """Step 1 — choose auth type: subscription (OAuth) or API key."""
-    from tau.inference.api.text.service import TextLLM
-    from tau.inference.provider.types import APIProvider, OAuthProvider
     from tau.tui.components.select_list import SelectItem
 
-    has_oauth = any(isinstance(p, OAuthProvider) for p in TextLLM._providers.list())  # type: ignore[union-attr]
-    has_api = any(isinstance(p, APIProvider) for p in TextLLM._providers.list())  # type: ignore[union-attr]
+    provs = _all_providers()
+    has_oauth = any(is_oauth for (_id, _name, is_oauth, _key) in provs)
+    has_api = any((not is_oauth) and needs_key for (_id, _name, is_oauth, needs_key) in provs)
 
     if has_oauth and has_api:
         items = [
@@ -51,6 +50,40 @@ def _provider_items(providers: list) -> list:
     from tau.tui.components.select_list import SelectItem
 
     return [SelectItem(label=p.name, description=p.id, value=p.id) for p in providers]
+
+
+def _all_providers() -> list:
+    """Union of providers across every modality, deduped by id (text first).
+
+    Every provider carries an ``id`` (registry key / credential id) and a display
+    ``name``. Credentials are stored in one shared file keyed by id, so a key
+    saved here works for whichever modalities use that provider. Returns a list
+    of ``(id, name, is_oauth, needs_key)`` tuples.
+    """
+    from tau.inference.api.audio.service import AudioLLM
+    from tau.inference.api.image.service import ImageLLM
+    from tau.inference.api.text.service import TextLLM
+    from tau.inference.api.video.service import VideoLLM
+    from tau.inference.provider.types import OAuthProvider
+    from tau.inference.types import AuthType
+
+    AudioLLM._ensure_defaults()
+    registries = [
+        TextLLM._builtin_providers(),
+        AudioLLM._providers,
+        ImageLLM._providers,
+        VideoLLM._providers,
+    ]
+    seen: set[str] = set()
+    out: list = []
+    for reg in registries:
+        for p in reg.list():
+            if p.id in seen:
+                continue
+            seen.add(p.id)
+            needs_key = getattr(p, "auth_type", None) != AuthType.None_
+            out.append((p.id, p.name, isinstance(p, OAuthProvider), needs_key))
+    return out
 
 
 def open_oauth_provider_selector(ctx: CommandContext) -> None:
@@ -170,24 +203,29 @@ async def run_oauth_login(ctx: CommandContext, provider_id: str) -> None:
 
 
 def open_api_key_provider_selector(ctx: CommandContext) -> None:
-    """Step 2 (API key path) — pick which provider to save a key for."""
-    from tau.inference.api.text.service import TextLLM
-    from tau.inference.provider.types import APIProvider
+    """Step 2 (API key path) — pick which provider to save a key for.
 
-    providers = [p for p in TextLLM._providers.list() if isinstance(p, APIProvider)]  # type: ignore[union-attr]
+    Lists API-key providers across all modalities (text/audio/image/video).
+    """
+    from tau.tui.components.select_list import SelectItem
+
+    providers = [
+        (pid, name)
+        for (pid, name, is_oauth, needs_key) in _all_providers()
+        if not is_oauth and needs_key
+    ]
     if not providers:
         ctx.notify("No API key providers available.")
         return
 
-    items = _provider_items(providers)
+    items = [SelectItem(label=name, description=pid, value=pid) for pid, name in providers]
+    name_by_id = dict(providers)
 
     def on_pick(provider_id: str) -> None:
-        provider = next((p for p in providers if p.id == provider_id), None)
-        if provider is None:
-            return
+        name = name_by_id.get(provider_id, provider_id)
         ctx.layout.open_prompt(
-            label=f"API key for {provider.name}  (literal, $ENV_VAR, or !command):",
-            on_commit=lambda key: _save_api_key(ctx, provider_id, provider.name, key),
+            label=f"API key for {name}  (literal, $ENV_VAR, or !command):",
+            on_commit=lambda key: _save_api_key(ctx, provider_id, name, key),
             on_cancel=lambda: ctx.notify("Login cancelled."),
             secret=True,
         )
@@ -245,12 +283,11 @@ def open_logout_selector(ctx: CommandContext) -> None:
         )
         return
 
-    providers = TextLLM._providers.list()  # type: ignore[union-attr]
-    provider_map = {p.id: p for p in providers}
+    name_by_id = {pid: name for (pid, name, _o, _k) in _all_providers()}
 
     items = [
         SelectItem(
-            label=provider_map[pid].name if pid in provider_map else pid,
+            label=name_by_id.get(pid, pid),
             description=pid,
             value=pid,
         )
@@ -258,7 +295,7 @@ def open_logout_selector(ctx: CommandContext) -> None:
     ]
 
     def on_pick(provider_id: str) -> None:
-        name = provider_map[provider_id].name if provider_id in provider_map else provider_id
+        name = name_by_id.get(provider_id, provider_id)
         TextLLM._auth_manager.remove(provider_id)  # type: ignore[union-attr]
         ctx.notify(f"Removed stored credentials for {name}.")
         if ctx.on_palette_refresh is not None:

@@ -41,6 +41,30 @@ class RetrySettings:
 
 
 @dataclass
+class ModelRef:
+    """A single ``{id, provider}`` model reference used per modality."""
+
+    id: str | None = None
+    provider: str | None = None
+
+
+@dataclass
+class ModelSettings:
+    """Per-modality model selection, each a ``{id, provider}`` reference.
+
+    ``text`` is the chat model; ``voice`` is speech-to-text (input), ``speak``
+    is text-to-speech (output). Legacy flat ``model`` / ``provider`` keys are
+    migrated into ``text`` on load.
+    """
+
+    text: ModelRef | None = None
+    voice: ModelRef | None = None  # STT — voice input
+    speak: ModelRef | None = None  # TTS — spoken output
+    image: ModelRef | None = None
+    video: ModelRef | None = None
+
+
+@dataclass
 class ThinkingBudgetsSettings:
     minimal: int | None = None
     low: int | None = None
@@ -127,9 +151,9 @@ class HTTPProxySettings:
 
 @dataclass
 class Settings:
-    # Model / provider
-    provider: str | None = None
-    model: str | None = None
+    # Per-modality model selection. Legacy flat ``model``/``provider`` string
+    # keys are migrated into ``model.text`` on load (see SettingsManager).
+    model: ModelSettings | None = None
     thinking_level: ThinkingLevel | None = None
     transport: Transport | None = None
     enabled_models: list[str] | None = None

@@ -4,46 +4,115 @@ import asyncio
 
 from tau.tui.commands.context import CommandContext
 
+# (modality, tab label) in display order. "voice" = STT, "speak" = TTS.
+_MODALITIES: list[tuple[str, str]] = [
+    ("text", "Text"),
+    ("voice", "Voice"),
+    ("speak", "Speak"),
+    ("image", "Image"),
+    ("video", "Video"),
+]
+_MODALITY_ALIASES: dict[str, str] = {"stt": "voice", "tts": "speak", "audio": "voice"}
+_MODALITY_DESCRIPTIONS: dict[str, str] = {
+    "text": "Chat model",
+    "voice": "Speech-to-text (dictation)",
+    "speak": "Text-to-speech (read aloud)",
+    "image": "Image generation",
+    "video": "Video generation",
+}
 
-def open_model_selector(ctx: CommandContext) -> None:
-    """Open the model selector modal."""
-    import asyncio
 
-    try:
-        from tau.inference.api.text.service import TextLLM
+def _list_for(modality: str) -> list:
+    """Return the available models for a modality (auth-filtered)."""
+    from tau.inference.api.audio.service import AudioLLM
+    from tau.inference.api.image.service import ImageLLM
+    from tau.inference.api.text.service import TextLLM
+    from tau.inference.api.video.service import VideoLLM
 
-        models = TextLLM.list_available()
-    except Exception as exc:
-        ctx.notify(f"Failed to load models: {exc}")
-        return
+    if modality == "text":
+        return TextLLM.list_available()
+    if modality in ("voice", "speak"):
+        audio = AudioLLM.list_available()
+        return [m for m in audio if (m.is_stt if modality == "voice" else m.is_tts)]
+    if modality == "image":
+        return ImageLLM.list_available()
+    if modality == "video":
+        return VideoLLM.list_available()
+    return []
 
-    if not models:
+
+def _current_key(ctx: CommandContext, modality: str) -> str:
+    """Return ``provider/id`` of the current selection for a modality, or ""."""
+    if modality == "text":
+        # Prefer the live agent model (most accurate); fall back to settings.
+        llm = (
+            getattr(getattr(ctx.runtime.agent, "_engine", None), "llm", None)
+            if ctx.runtime.agent
+            else None
+        )
+        model = getattr(llm, "model", None) if llm is not None else None
+        if model is not None:
+            return f"{model.provider}/{model.id}"
+    sm = ctx.runtime.settings_manager
+    ref = sm.get_model_ref(modality) if sm is not None else None
+    return f"{ref.provider}/{ref.id}" if ref is not None and ref.id else ""
+
+
+def modality_completions(prefix: str) -> list:
+    """Autocomplete for the ``/model <modality>`` argument."""
+    from tau.tui.autocomplete import AutocompleteItem
+
+    p = prefix.lower()
+    return [
+        AutocompleteItem(label=mod, description=_MODALITY_DESCRIPTIONS[mod])
+        for mod, _label in _MODALITIES
+        if mod.startswith(p)
+    ]
+
+
+def open_model_selector(ctx: CommandContext, modality: str | None = None) -> None:
+    """Open the tabbed model selector, optionally focused on ``modality``."""
+    sections: list[tuple[str, str, list, str]] = []
+    for mod, label in _MODALITIES:
+        try:
+            models = _list_for(mod)
+        except Exception:
+            models = []
+        if models:
+            sections.append((mod, label, models, _current_key(ctx, mod)))
+
+    if not sections:
         ctx.notify("No models available. Use /login to add providers.")
         return
 
-    llm = (
-        getattr(getattr(ctx.runtime.agent, "_engine", None), "llm", None)
-        if ctx.runtime.agent
-        else None
-    )
-    model = getattr(llm, "model", None) if llm is not None else None
-    current_key = f"{model.provider}/{model.id}" if model is not None else ""
+    initial = _MODALITY_ALIASES.get(modality, modality) if modality else None
 
-    def commit(value: tuple[str, str]) -> None:
-        model_id, provider = value
-        asyncio.ensure_future(_apply_model(ctx, model_id, provider))
+    def commit(value: tuple[str, str, str]) -> None:
+        model_id, provider, mod = value
+        asyncio.ensure_future(_apply_model(ctx, mod, model_id, provider))
 
     ctx.layout.open_model_selector(
-        models, current_key, commit, lambda: ctx.notify("Model selection cancelled.")
+        sections,
+        commit,
+        lambda: ctx.notify("Model selection cancelled."),
+        initial=initial,
     )
 
 
-async def _apply_model(ctx: CommandContext, model_id: str, provider: str) -> None:
+async def _apply_model(ctx: CommandContext, modality: str, model_id: str, provider: str) -> None:
     try:
-        await ctx.runtime.set_model(model_id, provider)
-        ctx.notify(f"Model set to {provider}/{model_id}")
-        if ctx.on_palette_refresh is not None:
-            ctx.on_palette_refresh()
+        if modality == "text":
+            # Live-swap the chat model (this also persists to settings).
+            await ctx.runtime.set_model(model_id, provider)
+            ctx.notify(f"Model set to {provider}/{model_id}")
+            if ctx.on_palette_refresh is not None:
+                ctx.on_palette_refresh()
+            return
+        sm = ctx.runtime.settings_manager
+        if sm is not None:
+            sm.set_model_ref(modality, provider, model_id)
+        label = dict(_MODALITIES).get(modality, modality)
+        ctx.notify(f"{label} model set to {provider}/{model_id}")
     except Exception as exc:
         ctx.notify(f"Failed to set model: {exc}")
 

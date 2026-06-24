@@ -188,7 +188,7 @@ class App:
         from tau.tui.commands import model as cmd_model
 
         self._track_task(
-            asyncio.ensure_future(cmd_model._apply_model(self._ctx(), model_id, provider))
+            asyncio.ensure_future(cmd_model._apply_model(self._ctx(), "text", model_id, provider))
         )
 
     def _track_task(self, task: asyncio.Task) -> None:
@@ -210,8 +210,12 @@ class App:
         reg = [
             CommandInfo(
                 name="model",
-                description="Switch the active model (interactive picker).",
-                call=lambda _r, _a: cmd_model.open_model_selector(self._ctx()),
+                description="Switch models for any modality (text/voice/speak/image/video).",
+                call=lambda _r, _a: cmd_model.open_model_selector(
+                    self._ctx(), _a[0] if _a else None
+                ),
+                argument_hint="[text|voice|speak|image|video]",
+                get_argument_completions=cmd_model.modality_completions,
             ),
             CommandInfo(
                 name="effort",
