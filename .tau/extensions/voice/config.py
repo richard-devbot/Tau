@@ -1,0 +1,20 @@
+"""Configuration for the voice input extension."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+# How long with no space event before we treat the key as released.
+# Must exceed the OS key-repeat initial delay (typically 300–700 ms on macOS/Linux).
+# On Kitty terminals (Tau default) the real release event fires immediately and
+# cancels the watcher, so this only matters for non-Kitty terminals.
+RELEASE_GAP = 1.0
+
+
+@dataclass
+class VoiceConfig:
+    enabled: bool = True
+    stt_model: str = "whisper-1"
+    stt_provider: str = "openai"
+    hold_seconds: float = 2.0
+    sample_rate: int = 16000
