@@ -204,7 +204,7 @@ class Row(Component):
         self._slots.append((component, align))
 
     def render(self, width: int) -> list[str]:
-        from tau.tui.ansi import truncate, visible_width
+        from tau.tui.utils import truncate, visible_width
 
         left_parts: list[str] = []
         center_parts: list[str] = []
@@ -308,7 +308,7 @@ class Constrained(Component):
         self._align = align
 
     def render(self, width: int) -> list[str]:
-        from tau.tui.ansi import pad, truncate, visible_width
+        from tau.tui.utils import pad, truncate, visible_width
 
         target = max(1, _resolve_width(self._width, width))
         raw = self._child.render(target)
@@ -379,7 +379,7 @@ class Columns(Component):
         return widths
 
     def render(self, width: int) -> list[str]:
-        from tau.tui.ansi import pad, truncate, visible_width
+        from tau.tui.utils import pad, truncate, visible_width
 
         widths = self._column_widths(width)
         columns: list[list[str]] = []

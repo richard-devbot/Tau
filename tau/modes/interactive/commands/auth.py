@@ -6,14 +6,14 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from tau.tui.commands.context import CommandContext
+from tau.modes.interactive.commands.context import CommandContext
 
 _log = logging.getLogger(__name__)
 
 
 def open_login_selector(ctx: CommandContext) -> None:
     """Step 1 — choose auth type: subscription (OAuth) or API key."""
-    from tau.tui.components.primitives.select_list import SelectItem
+    from tau.modes.interactive.components.oauth_selector import OAuthProviderItem
 
     provs = _all_providers()
     has_oauth = any(is_oauth for (_id, _name, is_oauth, _key) in provs)
@@ -21,16 +21,8 @@ def open_login_selector(ctx: CommandContext) -> None:
 
     if has_oauth and has_api:
         items = [
-            SelectItem(
-                label="Subscription",
-                description="OAuth — GitHub Copilot, OpenAI Codex, etc.",
-                value="oauth",
-            ),
-            SelectItem(
-                label="API key",
-                description="A static key, $ENV_VAR, or !command for a provider",
-                value="api_key",
-            ),
+            OAuthProviderItem(id="oauth", name="Subscription", status="OAuth — GitHub Copilot, OpenAI Codex, etc."),
+            OAuthProviderItem(id="api_key", name="API key", status="A static key, $ENV_VAR, or !command"),
         ]
 
         def on_type(auth_type: str) -> None:
@@ -39,17 +31,22 @@ def open_login_selector(ctx: CommandContext) -> None:
             else:
                 open_api_key_provider_selector(ctx)
 
-        ctx.layout.open_tree_selector(items, on_type, lambda: ctx.notify("Login cancelled."))
+        ctx.layout.open_oauth_selector("login", items, on_type, lambda: ctx.notify("Login cancelled."))
     elif has_oauth:
         open_oauth_provider_selector(ctx)
     else:
         open_api_key_provider_selector(ctx)
 
 
-def _provider_items(providers: list) -> list:
-    from tau.tui.components.primitives.select_list import SelectItem
+def _provider_items(providers: list, stored_ids: set | None = None) -> list:
+    from tau.modes.interactive.components.oauth_selector import OAuthProviderItem
 
-    return [SelectItem(label=p.name, description=p.id, value=p.id) for p in providers]
+    stored = stored_ids or set()
+    items = []
+    for p in providers:
+        status = "✓ configured" if p.id in stored else None
+        items.append(OAuthProviderItem(id=p.id, name=p.name, status=status))
+    return items
 
 
 def _all_providers() -> list:
@@ -96,12 +93,13 @@ def open_oauth_provider_selector(ctx: CommandContext) -> None:
         ctx.notify("No subscription providers available.")
         return
 
-    items = _provider_items(providers)
+    stored = set(TextLLM._auth_manager.list())  # type: ignore[union-attr]
+    items = _provider_items(providers, stored)
 
     def on_pick(provider_id: str) -> None:
         asyncio.ensure_future(run_oauth_login(ctx, provider_id))
 
-    ctx.layout.open_tree_selector(items, on_pick, lambda: ctx.notify("Login cancelled."))
+    ctx.layout.open_oauth_selector("login", items, on_pick, lambda: ctx.notify("Login cancelled."))
 
 
 async def run_oauth_login(ctx: CommandContext, provider_id: str) -> None:
@@ -111,7 +109,7 @@ async def run_oauth_login(ctx: CommandContext, provider_id: str) -> None:
     from tau.inference.api.text.service import TextLLM
     from tau.inference.provider.oauth.types import OAuthAuthInfo, OAuthLoginCallbacks, OAuthPrompt
     from tau.inference.provider.types import OAuthProvider
-    from tau.tui.ansi import BOLD, DIM, RESET
+    from tau.tui.utils import BOLD, DIM, RESET
 
     provider = next(
         (
@@ -207,7 +205,8 @@ def open_api_key_provider_selector(ctx: CommandContext) -> None:
 
     Lists API-key providers across all modalities (text/audio/image/video).
     """
-    from tau.tui.components.primitives.select_list import SelectItem
+    from tau.inference.api.text.service import TextLLM
+    from tau.modes.interactive.components.oauth_selector import OAuthProviderItem
 
     providers = [
         (pid, name)
@@ -218,7 +217,11 @@ def open_api_key_provider_selector(ctx: CommandContext) -> None:
         ctx.notify("No API key providers available.")
         return
 
-    items = [SelectItem(label=name, description=pid, value=pid) for pid, name in providers]
+    stored = set(TextLLM._auth_manager.list())  # type: ignore[union-attr]
+    items = [
+        OAuthProviderItem(id=pid, name=name, status="✓ configured" if pid in stored else None)
+        for pid, name in providers
+    ]
     name_by_id = dict(providers)
 
     def on_pick(provider_id: str) -> None:
@@ -230,7 +233,7 @@ def open_api_key_provider_selector(ctx: CommandContext) -> None:
             secret=True,
         )
 
-    ctx.layout.open_tree_selector(items, on_pick, lambda: ctx.notify("Login cancelled."))
+    ctx.layout.open_oauth_selector("login", items, on_pick, lambda: ctx.notify("Login cancelled."))
 
 
 def _save_api_key(ctx: CommandContext, provider_id: str, provider_name: str, key: str) -> None:
@@ -272,7 +275,7 @@ def get_palette_overrides() -> dict[str, str]:
 
 def open_logout_selector(ctx: CommandContext) -> None:
     from tau.inference.api.text.service import TextLLM
-    from tau.tui.components.primitives.select_list import SelectItem
+    from tau.modes.interactive.components.oauth_selector import OAuthProviderItem
 
     TextLLM._auth_manager.reload()  # type: ignore[union-attr]
     stored = TextLLM._auth_manager.list()  # type: ignore[union-attr]
@@ -286,11 +289,7 @@ def open_logout_selector(ctx: CommandContext) -> None:
     name_by_id = {pid: name for (pid, name, _o, _k) in _all_providers()}
 
     items = [
-        SelectItem(
-            label=name_by_id.get(pid, pid),
-            description=pid,
-            value=pid,
-        )
+        OAuthProviderItem(id=pid, name=name_by_id.get(pid, pid), status="✓ configured")
         for pid in stored
     ]
 
@@ -301,4 +300,4 @@ def open_logout_selector(ctx: CommandContext) -> None:
         if ctx.on_palette_refresh is not None:
             ctx.on_palette_refresh()
 
-    ctx.layout.open_tree_selector(items, on_pick, lambda: ctx.notify("Logout cancelled."))
+    ctx.layout.open_oauth_selector("logout", items, on_pick, lambda: ctx.notify("Logout cancelled."))

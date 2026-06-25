@@ -79,7 +79,7 @@ def _parse_hunks(diff: str) -> list[list[tuple[str, int, int, str]]]:
 
 
 def _render_edit_result(content: str, opts: Any) -> list[str]:
-    from tau.tui.ansi import DIM, GREEN, RED, RESET
+    from tau.tui.utils import DIM, GREEN, RED, RESET
 
     metadata = opts.metadata or {}
     added = metadata.get("lines_added", 0)

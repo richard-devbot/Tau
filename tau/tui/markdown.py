@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from mistletoe.base_renderer import BaseRenderer
 from mistletoe.block_token import Document
 
-from tau.tui.ansi import RESET, visible_width, wrap
+from tau.tui.utils import RESET, visible_width, wrap
 
 if TYPE_CHECKING:
     from tau.tui.theme import MarkdownTheme
@@ -378,3 +378,39 @@ class _Renderer:
         if children:
             return "".join(getattr(c, "content", "") for c in children)
         return getattr(node, "content", "")
+
+
+# ---------------------------------------------------------------------------
+# Message renderer registry
+# ---------------------------------------------------------------------------
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING as _TYPE_CHECKING
+
+if _TYPE_CHECKING:
+    from tau.message.types import CustomMessage
+    from tau.tui.theme import MessageTheme
+
+RendererFn = Callable[["CustomMessage", "MessageTheme", int], list[str]]
+
+
+class MessageRendererRegistry:
+    def __init__(self) -> None:
+        self._registry: dict[str, RendererFn] = {}
+
+    def register(self, custom_type: str, fn: RendererFn) -> None:
+        self._registry[custom_type] = fn
+
+    def render(
+        self,
+        message: "CustomMessage",
+        theme: "MessageTheme",
+        width: int,
+    ) -> list[str] | None:
+        fn = self._registry.get(message.custom_type)
+        if fn is None:
+            return None
+        return fn(message, theme, width)
+
+
+message_renderer_registry = MessageRendererRegistry()

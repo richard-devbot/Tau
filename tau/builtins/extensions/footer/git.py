@@ -17,7 +17,7 @@ class GitBadge:
         self._text = f"{display} ({branch})" if branch else display
 
     def render(self, width: int) -> list[str]:  # noqa: ARG002
-        from tau.tui.ansi import DIM, RESET
+        from tau.tui.utils import DIM, RESET
 
         return [DIM + self._text + RESET]
 

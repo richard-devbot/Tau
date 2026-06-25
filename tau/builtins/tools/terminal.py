@@ -28,7 +28,7 @@ _PREVIEW_LINES = 5
 
 
 def _render_terminal_result(content: str, opts: Any) -> list[str]:
-    from tau.tui.ansi import DIM, RED, RESET
+    from tau.tui.utils import DIM, RED, RESET
 
     metadata = opts.metadata or {}
     exit_code = metadata.get("exit_code", 0)

@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from tau.tui.ansi import BOLD, RESET, cursor_block, visible_width, wrap
+from tau.tui.utils import BOLD, RESET, cursor_block, visible_width, wrap
 from tau.tui.component import Component
-from tau.tui.diff import _is_diff
+from tau.tui.utils import _is_diff
 from tau.tui.input import InputEvent, Key, KeyEvent
 from tau.tui.markdown import render_markdown
 from tau.tui.theme import MessageTheme
@@ -102,11 +102,11 @@ class MessageBlock:
 
     def _render_image(self, key: tuple[int, int], b64: str, mime: str, width: int) -> list[str]:
         if not self._theme.show_images:
-            from tau.tui.components.primitives.image import Image
+            from tau.tui.components.image import Image
 
             return [Image(b64, mime)._fallback_text()]
         if key not in self._image_components:
-            from tau.tui.components.primitives.image import Image
+            from tau.tui.components.image import Image
 
             self._image_components[key] = Image(b64, mime)
         return self._image_components[key].render(width)
@@ -328,7 +328,7 @@ class MessageBlock:
 
     def _render_terminal(self, msg: Any, width: int) -> list[str]:
         from tau.message.types import TerminalExecutionMessage
-        from tau.tui.ansi import BRIGHT_RED
+        from tau.tui.utils import BRIGHT_RED
 
         if not isinstance(msg, TerminalExecutionMessage):
             return []
@@ -351,7 +351,7 @@ class MessageBlock:
 
         if not isinstance(msg, CustomMessage):
             return []
-        from tau.tui.message_renderers import message_renderer_registry
+        from tau.tui.markdown import message_renderer_registry
 
         custom = message_renderer_registry.render(msg, self._theme, width)
         if custom is not None:
@@ -392,7 +392,7 @@ class MessageBlock:
 
     def _render_skill_invocation(self, msg: Any, width: int) -> list[str]:
         from tau.message.types import SkillInvocationMessage
-        from tau.tui.ansi import BOLD, RESET
+        from tau.tui.utils import BOLD, RESET
 
         if not isinstance(msg, SkillInvocationMessage):
             return []
@@ -468,7 +468,7 @@ class MessageBlock:
         if not all_lines:
             rendered = [color_fn("(no output)")]
         elif not item.is_error and _is_diff(content):
-            from tau.tui.diff import render_diff
+            from tau.tui.utils import render_diff
 
             diff_lines = render_diff(
                 content,

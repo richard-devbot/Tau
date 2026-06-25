@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from tau.tui.component import Component
-from tau.tui.fuzzy import fuzzy_filter
+from tau.tui.utils import fuzzy_filter
 from tau.tui.input import InputEvent, Key, KeyEvent
 
 if TYPE_CHECKING:

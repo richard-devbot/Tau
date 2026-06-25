@@ -1,7 +1,7 @@
 """Tests for the /login provider union (tau/tui/commands/auth.py)."""
 from __future__ import annotations
 
-from tau.tui.commands.auth import _all_providers
+from tau.modes.interactive.commands.auth import _all_providers
 
 
 def _by_id() -> dict[str, tuple]:

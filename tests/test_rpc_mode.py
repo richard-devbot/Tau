@@ -7,7 +7,7 @@ import json
 import sys
 from io import StringIO
 
-from tau.rpc.mode import RpcExtensionUIContext, _serialize_event, _write
+from tau.modes.rpc.mode import RpcExtensionUIContext, _serialize_event, _write
 
 
 def capture_write(fn, *args, **kwargs):

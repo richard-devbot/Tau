@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from tau.tui.commands.context import CommandContext
+from tau.modes.interactive.commands.context import CommandContext
 
 # (modality, tab label) in display order. "voice" = STT, "speak" = TTS.
 _MODALITIES: list[tuple[str, str]] = [
@@ -132,12 +132,12 @@ def open_effort_selector(ctx: CommandContext) -> None:
     current_level = None
     if agent is not None:
         current_level = agent._engine.llm.api.options.thinking_level
-    current = current_level.value if current_level else ThinkingLevel.Off.value
+    current = current_level if current_level is not None else ThinkingLevel.Off
 
-    levels = [lv.value for lv in ThinkingLevel]
+    levels = list(ThinkingLevel)
 
-    def commit(level_val: str) -> None:
-        asyncio.ensure_future(_apply_effort(ctx, level_val))
+    def commit(level: ThinkingLevel) -> None:
+        asyncio.ensure_future(_apply_effort(ctx, level.value))
 
     ctx.layout.open_effort_selector(
         levels, current, commit, lambda: ctx.notify("Effort selection cancelled.")

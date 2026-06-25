@@ -1,3 +1,4 @@
+"""Session resume selector component."""
 from __future__ import annotations
 
 import contextlib
@@ -70,7 +71,7 @@ def _age(dt: datetime) -> str:
         return f"{days}d"
     if days < 30:
         return f"{days // 7}w"
-    if days < 365:
+    if days < 30:
         return f"{days // 30}mo"
     return f"{days // 365}y"
 
@@ -83,7 +84,13 @@ def _shorten(path: Path) -> str:
         return str(path)
 
 
-class ResumeModal:
+def _visible_len(s: str) -> int:
+    """Approximate visible terminal width of a string (strips ANSI escapes)."""
+    plain = re.sub(r"\x1b\[[0-9;]*[mK]|\x1b\][^\x07]*\x07", "", s)
+    return len(plain)
+
+
+class ResumeSelector:
     """Session resume selector.
 
     - Up/Down    navigate
@@ -238,7 +245,6 @@ class ResumeModal:
         sort_label = f"{t.muted('Sort:')} {t.accent(self._SORT_LABELS[self._sort_idx])}"
         header_right = f"{scope_label}  {sort_label}"
         title_left = f"  {t.emphasis('Resume Session')}"
-        # Truncate right to fit
         right_plain_len = _visible_len(header_right)
         pad = max(0, width - _visible_len(title_left) - right_plain_len - 1)
         lines.append(title_left + " " * pad + header_right)
@@ -348,7 +354,6 @@ class ResumeModal:
         else:
             filtered = list(sessions)
 
-        # Exclude active session from resume list
         if self._cur_path:
             filtered = [
                 s
@@ -356,7 +361,6 @@ class ResumeModal:
                 if (Path(s.path) if not isinstance(s.path, Path) else s.path) != self._cur_path
             ]
 
-        # Sort
         label = self._SORT_LABELS[self._sort_idx]
         if label == "Recent":
             filtered.sort(key=lambda s: s.modified.timestamp(), reverse=True)
@@ -367,11 +371,3 @@ class ResumeModal:
 
         self._filtered = filtered
         self._selected = min(self._selected, max(0, len(filtered) - 1))
-
-
-def _visible_len(s: str) -> int:
-    """Approximate visible terminal width of a string (strips ANSI escapes)."""
-    import re
-
-    plain = re.sub(r"\x1b\[[0-9;]*[mK]|\x1b\][^\x07]*\x07", "", s)
-    return len(plain)

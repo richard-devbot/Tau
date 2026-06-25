@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from tau.tui.input import KeyEvent
-from tau.tui.keybindings import (
+from tau.tui.input import (
     KeybindingsManager,
     configure_keybindings,
     get_keybindings,
@@ -17,10 +17,10 @@ def _key(key: str, ctrl: bool = False, alt: bool = False, shift: bool = False, m
 
 @pytest.fixture(autouse=True)
 def _reset_singleton():
-    import tau.tui.keybindings as kb
-    original = kb._instance
+    import tau.tui.input as kb
+    original = kb._keybindings_instance
     yield
-    kb._instance = original
+    kb._keybindings_instance = original
 
 
 class TestKeybindingsManagerConstruction:

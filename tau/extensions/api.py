@@ -657,14 +657,14 @@ class ExtensionAPI:
         """Expose extension settings in the /settings panel as a nested sub-panel.
 
         ``items`` is a list of ``SettingItem`` objects (from
-        ``tau.tui.components.modals.settings_modal``).  ``on_change(key, value)`` is
+        ``tau.modes.interactive.components.settings_selector``).  ``on_change(key, value)`` is
         called whenever the user changes a value in the sub-panel; use it to
         persist changes via ``tau.settings``.
 
         Example::
 
             from dataclasses import dataclass
-            from tau.tui.components.modals.settings_modal import SettingItem
+            from tau.modes.interactive.components.settings_selector import SettingItem
 
             def register(tau):
                 def on_change(key, value):

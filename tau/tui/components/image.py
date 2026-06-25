@@ -142,7 +142,7 @@ class Image(Component):
         if self._cache is not None and self._cache_width == width:
             return self._cache
 
-        from tau.tui.capabilities import get_capabilities, get_cell_dimensions
+        from tau.tui.terminal import get_capabilities, get_cell_dimensions
 
         caps = get_capabilities()
         cell = get_cell_dimensions()

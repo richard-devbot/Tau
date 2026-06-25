@@ -1,7 +1,7 @@
 """Tests for tau/tui/fuzzy.py — fuzzy matching and filtering."""
 from __future__ import annotations
 
-from tau.tui.fuzzy import FuzzyMatch, fuzzy_filter, fuzzy_match
+from tau.tui.utils import FuzzyMatch, fuzzy_filter, fuzzy_match
 
 
 class TestFuzzyMatch:

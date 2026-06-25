@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tau.tui.ansi import BOLD, DIM, RESET
+from tau.tui.utils import BOLD, DIM, RESET
 
 _TOOL_INDENT = "  "
 

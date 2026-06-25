@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from tau.tui.commands.context import CommandContext
+from tau.modes.interactive.commands.context import CommandContext
 
 
 def cmd_copy(ctx: CommandContext) -> None:

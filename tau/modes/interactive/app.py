@@ -6,12 +6,12 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from tau.extensions import ExtensionContext
-from tau.tui.agent_hooks import AgentHookHandler
-from tau.tui.commands.context import CommandContext
-from tau.tui.components.primitives.layout import Layout
+from tau.modes.interactive.agent_hooks import AgentHookHandler
+from tau.modes.interactive.commands.context import CommandContext
+from tau.modes.interactive.components.layout import Layout
 from tau.tui.input import InputEvent, KeyEvent
-from tau.tui.input_handler import InputHandler
-from tau.tui.keybindings import KeyMap, configure_keybindings
+from tau.tui.input import InputHandler
+from tau.tui.input import KeyMap, configure_keybindings
 from tau.tui.theme import LayoutTheme
 from tau.tui.tui import TUI
 
@@ -29,7 +29,7 @@ class App:
     Delegates to focused collaborators:
       - AgentHookHandler  — subscribes to agent events, drives spinner/messages
       - InputHandler      — submit, paste, clipboard, steer, history
-      - tau.tui.commands.* — slash command logic, each receiving a CommandContext
+      - tau.modes.interactive.commands.* — slash command logic, each receiving a CommandContext
 
     Usage::
 
@@ -182,7 +182,7 @@ class App:
 
         ext = runtime.extension_runtime
         if ext is not None:
-            from tau.tui.message_renderers import message_renderer_registry
+            from tau.tui.markdown import message_renderer_registry
 
             for ctype, fn in ext.get_message_renderers().items():
                 message_renderer_registry.register(ctype, fn)
@@ -225,11 +225,12 @@ class App:
 
     def _register_ui_commands(self) -> None:
         from tau.commands.types import CommandInfo
-        from tau.tui.commands import appearance as cmd_appearance
-        from tau.tui.commands import auth as cmd_auth
-        from tau.tui.commands import misc as cmd_misc
-        from tau.tui.commands import model as cmd_model
-        from tau.tui.commands import session as cmd_session
+        from tau.modes.interactive.commands import appearance as cmd_appearance
+        from tau.modes.interactive.commands import auth as cmd_auth
+        from tau.modes.interactive.commands import extensions as cmd_extensions
+        from tau.modes.interactive.commands import misc as cmd_misc
+        from tau.modes.interactive.commands import model as cmd_model
+        from tau.modes.interactive.commands import session as cmd_session
 
         reg = [
             CommandInfo(
@@ -255,6 +256,11 @@ class App:
                 name="settings",
                 description="Show current settings.",
                 call=lambda _r, _a: cmd_appearance.open_settings_panel(self._ctx()),
+            ),
+            CommandInfo(
+                name="extensions",
+                description="Enable or disable extensions by scope.",
+                call=lambda _r, _a: cmd_extensions.open_config_panel(self._ctx()),
             ),
             CommandInfo(
                 name="resume",
@@ -459,7 +465,7 @@ class App:
 
             self._track_task(_asyncio.ensure_future(_reload()))
 
-        from tau.tui.components.trust_screen import TrustScreen
+        from tau.modes.interactive.components.trust_screen import TrustScreen
 
         screen = TrustScreen(str(cwd), options, _on_commit, theme=self._layout.theme)
         self._layout.detach(self._tui)
@@ -532,11 +538,11 @@ class App:
             case "none":
                 return
             case "tree":
-                from tau.tui.commands import session as cmd_session
+                from tau.modes.interactive.commands import session as cmd_session
 
                 cmd_session.open_tree_selector(self._ctx())
             case "fork" | _:
-                from tau.tui.commands import session as cmd_session
+                from tau.modes.interactive.commands import session as cmd_session
 
                 cmd_session.cmd_clone(self._ctx())
 
@@ -602,8 +608,8 @@ class App:
         return entries
 
     def _palette_dynamic_descriptions(self) -> dict[str, str]:
-        from tau.tui.commands import auth as cmd_auth
-        from tau.tui.commands import model as cmd_model
+        from tau.modes.interactive.commands import auth as cmd_auth
+        from tau.modes.interactive.commands import model as cmd_model
 
         overrides = cmd_model.get_palette_overrides(self._runtime.agent)
         overrides.update(cmd_auth.get_palette_overrides())
@@ -631,9 +637,9 @@ class App:
         latest = await task
         if latest is None:
             return
-        from tau.tui.ansi import BOLD, RESET
+        from tau.tui.utils import BOLD, RESET
         from tau.tui.component import Column, StaticComponent
-        from tau.tui.components.primitives.dynamic_border import DynamicBorder
+        from tau.tui.components.box import DynamicBorder
 
         theme = self._layout.theme
         banner = Column(

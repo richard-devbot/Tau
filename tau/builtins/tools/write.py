@@ -38,7 +38,7 @@ _PREVIEW_LINES = 5
 
 
 def _render_write_result(content: str, opts: Any) -> list[str]:
-    from tau.tui.ansi import DIM, GREEN, RESET
+    from tau.tui.utils import DIM, GREEN, RESET
 
     metadata = opts.metadata or {}
     total_lines = metadata.get("total_lines", 0)

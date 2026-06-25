@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from tau.settings.manager import SettingsManager
     from tau.tui.component import Component
-    from tau.tui.components.primitives.layout import Layout
+    from tau.modes.interactive.components.layout import Layout
     from tau.tui.input import InputEvent
     from tau.tui.theme import LayoutTheme
 
@@ -237,7 +237,7 @@ class UIContext:
         layout = self._layout()
         if layout is None:
             return None
-        from tau.tui.components.primitives.select_list import SelectItem
+        from tau.tui.components.select_list import SelectItem
 
         items: list[SelectItem[str]] = [
             SelectItem(label=o, description=title if i == 0 else "", value=o)
@@ -343,7 +343,7 @@ class UIContext:
 
         Usage::
 
-            from tau.tui.overlay import CustomOptions, OverlayOptions
+            from tau.tui.tui import CustomOptions, OverlayOptions
 
             class CounterComponent(Component):
                 def __init__(self, done):
@@ -374,8 +374,8 @@ class UIContext:
         if layout is None:
             return None
 
-        from tau.tui.keybindings import get_keybindings
-        from tau.tui.overlay import CustomOptions as _CO
+        from tau.tui.input import get_keybindings
+        from tau.tui.tui import CustomOptions as _CO
 
         opts = options if options is not None else _CO()
         loop = asyncio.get_running_loop()
@@ -414,7 +414,7 @@ class UIContext:
 
         Usage::
 
-            from tau.tui.components.overlays.picker_overlay import TextOverlay
+            from tau.modes.interactive.components.overlays import TextOverlay
 
             handle = ctx.ui.show_overlay(
                 TextOverlay(["Hello!", "Press Esc to close"]),
@@ -430,7 +430,7 @@ class UIContext:
             return _NullHandle()
         from typing import cast as _cast
 
-        from tau.tui.overlay import OverlayAnchor, OverlayOptions
+        from tau.tui.tui import OverlayAnchor, OverlayOptions
 
         opts = OverlayOptions(
             width=width,
@@ -857,7 +857,7 @@ class UIContext:
 
     def reset_input_cursor(self) -> None:
         """Restore the editor's default (block) text cursor."""
-        from tau.tui.ansi import cursor_block
+        from tau.tui.utils import cursor_block
 
         layout = self._layout()
         if layout is None:

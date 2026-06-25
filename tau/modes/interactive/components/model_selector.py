@@ -120,8 +120,8 @@ class _Section:
             self.selected = min(self.selected, len(self.filtered) - 1)
 
 
-class ModelSelectorModal:
-    """Tabbed model selector modal — one tab per modality.
+class ModelSelector:
+    """Tabbed model selector — one tab per modality.
 
     Owns the modality tabs (Text / Voice / Speak / Image / Video), and per-tab
     search, scope toggle, navigation, and rendering. Designed to be wrapped in

@@ -1,7 +1,7 @@
 """Tests for tau/tui/diff.py — unified diff rendering."""
 from __future__ import annotations
 
-from tau.tui.diff import _is_diff, _word_diff, render_diff
+from tau.tui.utils import _is_diff, _word_diff, render_diff
 
 
 # Identity styling functions for test assertions

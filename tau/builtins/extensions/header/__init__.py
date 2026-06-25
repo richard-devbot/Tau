@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 def register(tau: ExtensionAPI) -> None:
     from tau.settings.paths import get_app_name, get_app_version
-    from tau.tui.ansi import BOLD, CYAN, DIM, RESET
+    from tau.tui.utils import BOLD, CYAN, DIM, RESET
     from tau.tui.component import StaticComponent
 
     def _build() -> StaticComponent:

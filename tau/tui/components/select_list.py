@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from tau.tui.ansi import visible_width
+from tau.tui.utils import visible_width
 from tau.tui.component import Component
-from tau.tui.fuzzy import fuzzy_filter
+from tau.tui.utils import fuzzy_filter
 from tau.tui.input import InputEvent, KeyEvent
-from tau.tui.keybindings import get_keybindings
+from tau.tui.input import get_keybindings
 
 if TYPE_CHECKING:
     from tau.tui.theme import SelectListTheme
@@ -226,3 +226,40 @@ class SelectList[T](Component):
             self._scroll_offset = self._selected - visible + 1
         # ensure scroll_offset valid
         self._scroll_offset = max(0, min(self._scroll_offset, max(0, count - visible)))
+
+
+# ── InlineSelector ────────────────────────────────────────────────────────────
+
+
+@dataclass
+class InlineSelector[T]:
+    """
+    Generic wrapper for an inline selector modal.
+
+    Handles the open/nav/commit/cancel lifecycle for model, resume, tree,
+    and settings selectors. Theme and effort selectors manage their own
+    callbacks via Component.handle_input and do not use on_commit/on_cancel.
+    """
+
+    kind: str  # "model" | "theme" | "effort" | "resume" | "tree" | "settings"
+    selector: Any  # inner selector — kept as Any to avoid circular import
+    on_commit: Callable[[T], None] | None = None
+    on_cancel: Callable[[], None] | None = None
+
+    # -------------------------------------------------------------------------
+    # Navigation
+    # -------------------------------------------------------------------------
+
+    def nav(self, direction: int) -> None:
+        self.selector.move_up() if direction < 0 else self.selector.move_down()
+
+    def selected_value(self) -> T | None:
+        item = self.selector.selected_item
+        return item.value if item is not None else None
+
+    # -------------------------------------------------------------------------
+    # Render
+    # -------------------------------------------------------------------------
+
+    def render(self, width: int) -> list[str]:
+        return self.selector.render(width)

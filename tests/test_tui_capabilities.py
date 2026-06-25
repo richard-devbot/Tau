@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from tau.tui.capabilities import (
+from tau.tui.terminal import (
     CellDimensions,
     TerminalCapabilities,
     detect_capabilities,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from tau.tui.commands.context import CommandContext
+from tau.modes.interactive.commands.context import CommandContext
 
 
 def open_resume_selector(ctx: CommandContext) -> None:
@@ -113,7 +113,7 @@ def open_tree_selector(ctx: CommandContext) -> None:
         ModelChangeEntry,
         ThinkingLevelChangeEntry,
     )
-    from tau.tui.components.primitives.tree_select_list import TreeRow
+    from tau.modes.interactive.components.tree_selector import TreeRow
 
     sm = ctx.runtime.session_manager
     if sm is None:
@@ -334,7 +334,7 @@ async def _apply_tree_branch(ctx: CommandContext, entry_id: str) -> None:
 
     summarize = False
     if summary_enabled and not skip_prompt:
-        from tau.tui.components.primitives.select_list import SelectItem
+        from tau.tui.components.select_list import SelectItem
 
         summary_items: list[SelectItem[str]] = [
             SelectItem(
@@ -411,7 +411,7 @@ async def _apply_clone(ctx: CommandContext) -> None:
 def cmd_session(ctx: CommandContext) -> None:
     from tau.message.types import AssistantMessage, ToolMessage, UserMessage
     from tau.session.types import MessageEntry as SessionMessageEntry
-    from tau.tui.ansi import BOLD, DIM, RESET
+    from tau.tui.utils import BOLD, DIM, RESET
 
     sm = ctx.runtime.session_manager
     if sm is None:

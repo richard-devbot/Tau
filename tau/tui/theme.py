@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from tau.tui.ansi import (
+from tau.tui.utils import (
     BOLD,
     BRIGHT_BLACK,
     BRIGHT_CYAN,
@@ -155,7 +155,7 @@ class LayoutTheme:
     Pass a custom instance to App.create() or Layout() to restyle the whole UI:
 
         from tau.tui.theme import LayoutTheme, SpinnerTheme, MessageTheme
-        from tau.tui.ansi import BRIGHT_MAGENTA, RESET
+        from tau.tui.utils import BRIGHT_MAGENTA, RESET
 
         theme = LayoutTheme(
             divider=lambda s: BRIGHT_MAGENTA + s + RESET,

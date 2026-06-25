@@ -230,7 +230,7 @@ async def _start(opts: dict) -> None:
             case "json":
                 await _run_json(runtime, opts["prompt"], quiet=opts.get("quiet", False))
             case "rpc":
-                from tau.rpc.mode import run_rpc_mode
+                from tau.modes.rpc.mode import run_rpc_mode
 
                 await run_rpc_mode(runtime)
     finally:
@@ -241,7 +241,7 @@ async def _start(opts: dict) -> None:
 
 async def _run_interactive(runtime: Runtime, theme: str | None) -> None:
     """Run the interactive TUI mode."""
-    from tau.tui.app import App
+    from tau.modes.interactive.app import App
 
     app = await App.create(runtime, theme=theme)
     await app.run()

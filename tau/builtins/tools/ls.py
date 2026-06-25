@@ -36,7 +36,7 @@ class LsParams(BaseModel):
 
 
 def _render_ls_result(content: str, opts: Any) -> list[str]:
-    from tau.tui.ansi import DIM, RESET
+    from tau.tui.utils import DIM, RESET
 
     metadata = opts.metadata or {}
     path = metadata.get("path", "")

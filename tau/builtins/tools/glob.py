@@ -30,7 +30,7 @@ _PREVIEW_LINES = 5
 
 
 def _render_glob_result(content: str, opts: Any) -> list[str]:
-    from tau.tui.ansi import DIM, RESET
+    from tau.tui.utils import DIM, RESET
 
     metadata = opts.metadata or {}
     match_count = metadata.get("match_count", 0)

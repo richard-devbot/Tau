@@ -517,3 +517,51 @@ class ExtensionContext:
             "tools": tool_names,
             "system_prompt_length": prompt_len,
         }
+
+    # ── Extension UI helpers ───────────────────────────────────────────────────
+
+    async def select(self, title: str, options: list[str]) -> str | None:
+        """Show an option picker to the user and return the selected string.
+
+        Returns ``None`` if the user cancels or the app is running headless.
+
+        Example::
+
+            choice = await ctx.select("Pick an action", ["Summarize", "Explain", "Translate"])
+            if choice == "Summarize":
+                ...
+        """
+        import asyncio
+
+        layout = self._layout
+        if layout is None:
+            return None
+        open_fn = getattr(layout, "open_extension_selector", None)
+        if open_fn is None:
+            return None
+
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future[str | None] = loop.create_future()
+
+        def _on_select(option: str) -> None:
+            if not future.done():
+                future.set_result(option)
+
+        def _on_cancel() -> None:
+            if not future.done():
+                future.set_result(None)
+
+        open_fn(title, options, _on_select, _on_cancel)
+        return await future
+
+    async def confirm(self, title: str, message: str = "") -> bool:
+        """Show a Yes/No confirmation dialog and return True if the user picks Yes.
+
+        Example::
+
+            if await ctx.confirm("Delete branch?", "This cannot be undone."):
+                ctx.notify("Branch deleted.")
+        """
+        prompt = f"{title}\n{message}" if message else title
+        result = await self.select(prompt, ["Yes", "No"])
+        return result == "Yes"

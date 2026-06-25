@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import grapheme
 
-from tau.tui.ansi import BOLD, CURSOR_MARKER, DIM, RESET, cursor_block, visible_width
+from tau.tui.utils import BOLD, CURSOR_MARKER, DIM, RESET, cursor_block, visible_width
 from tau.tui.component import Component
 from tau.tui.input import InputEvent, Key, KeyEvent, PasteEvent
 

@@ -1,3 +1,3 @@
-from tau.tui.commands.context import CommandContext
+from tau.modes.interactive.commands.context import CommandContext
 
 __all__ = ["CommandContext"]

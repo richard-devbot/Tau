@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from tau.tui.ansi import visible_width
+from tau.tui.utils import BRIGHT_BLACK, RESET, visible_width
 from tau.tui.component import Component
 from tau.tui.input import InputEvent
 
@@ -89,3 +89,19 @@ class Box(Component):
             out.append(_apply(blank) if self._bg_fn else blank)
 
         return out
+
+
+# ── DynamicBorder ─────────────────────────────────────────────────────────────
+
+
+class DynamicBorder(Component):
+    """Full-width horizontal rule that adapts to the terminal width."""
+
+    def __init__(self, color: Callable[[str], str] | None = None) -> None:
+        self._color = color or (lambda s: BRIGHT_BLACK + s + RESET)
+
+    def render(self, width: int) -> list[str]:
+        return [self._color("─" * max(1, width))]
+
+    def invalidate(self) -> None:
+        pass

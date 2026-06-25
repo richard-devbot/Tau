@@ -14,9 +14,9 @@ from tau.tui.component import (
     Row,
     Rows,
 )
-from tau.tui.components.primitives.box import Box
-from tau.tui.components.primitives.select_list import SelectItem, SelectList
-from tau.tui.keybindings import (
+from tau.tui.components.box import Box
+from tau.tui.components.select_list import SelectItem, SelectList
+from tau.tui.input import (
     KeybindingsManager,
     KeyMap,
     configure_keybindings,

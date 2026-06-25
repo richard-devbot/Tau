@@ -49,7 +49,7 @@ class ModelBadge:
             self.set_context(tokens, window)
 
     def render(self, width: int) -> list[str]:  # noqa: ARG002
-        from tau.tui.ansi import DIM, RESET
+        from tau.tui.utils import DIM, RESET
 
         if not self._provider and not self._model:
             return []

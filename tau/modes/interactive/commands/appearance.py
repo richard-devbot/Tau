@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 
-from tau.tui.commands.context import CommandContext
+from tau.modes.interactive.commands.context import CommandContext
 
 
 def _headers_to_str(headers: dict | None) -> str:
@@ -57,7 +57,7 @@ def open_settings_panel(ctx: CommandContext) -> None:
     from tau.engine.types import FollowupMode, SteeringMode
     from tau.inference.types import ThinkingLevel, Transport
     from tau.themes.registry import AUTO_THEME, DEFAULT_THEME, theme_registry
-    from tau.tui.components.modals.settings_modal import SettingItem, SettingsModal
+    from tau.modes.interactive.components.settings_selector import SettingItem, SettingsSelector
 
     sm = ctx.runtime.settings_manager
     if sm is None:
@@ -533,5 +533,5 @@ def open_settings_panel(ctx: CommandContext) -> None:
         if ctx.on_palette_refresh is not None:
             ctx.on_palette_refresh()
 
-    modal = SettingsModal(items, on_change=on_change, theme=ctx.layout.theme)
+    modal = SettingsSelector(items, on_change=on_change, theme=ctx.layout.theme)
     ctx.layout.open_settings_selector(modal, on_cancel=on_close)

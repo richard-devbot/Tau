@@ -5,17 +5,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from tau.tui.component import Component, Container
-from tau.tui.components.autocomplete_manager import AutocompleteManager
-from tau.tui.components.overlays.command_palette import CommandPalette
-from tau.tui.components.primitives.editor import EditorComponent, EditorExtras
-from tau.tui.components.file_picker import FilePicker
-from tau.tui.components.primitives.inline_selector import InlineSelector
-from tau.tui.components.message_list import MessageBlock, MessageList
-from tau.tui.components.primitives.select_list import SelectItem, SelectList
-from tau.tui.components.primitives.spinner import Spinner
-from tau.tui.components.primitives.text_input import TextInput
-from tau.tui.components.text_prompt import TextPrompt
-from tau.tui.components.primitives.tree_select_list import TreeRow, TreeSelectList
+from tau.tui.autocomplete import AutocompleteManager
+from tau.modes.interactive.components.command_palette import CommandPalette
+from tau.tui.components.editor import EditorComponent, EditorExtras
+from tau.modes.interactive.components.file_picker import FilePicker
+from tau.modes.interactive.components.message_list import MessageBlock, MessageList
+from tau.tui.components.select_list import InlineSelector, SelectItem, SelectList
+from tau.tui.components.spinner import Spinner
+from tau.tui.components.text_input import TextInput
+from tau.modes.interactive.components.tree_selector import TreeRow, TreeSelectList
 from tau.tui.input import (
     InputEvent,
     KeyEvent,
@@ -27,7 +25,7 @@ from tau.tui.theme import LayoutTheme
 if TYPE_CHECKING:
     from tau.commands.types import CommandInfo
     from tau.tui.autocomplete import AutocompleteRegistration
-    from tau.tui.overlay import CustomOptions, OverlayHandle
+    from tau.tui.tui import CustomOptions, OverlayHandle
     from tau.tui.tui import TUI
 
 
@@ -54,6 +52,90 @@ def _validate_editor(editor: object) -> None:
             "misbehave. See tau.tui.components.primitives.editor.",
             type(editor).__name__,
         )
+
+
+# ── TextPrompt ────────────────────────────────────────────────────────────────
+
+
+class TextPrompt:
+    """
+    Inline single-line text prompt shown below the editor.
+
+    Previously lived as 5 raw state vars + open/close/handle_input/render
+    spread across Layout.  Layout now holds one instance and delegates:
+
+        prompt.open(label, on_commit, on_cancel, secret=False)
+        prompt.handle_input(event) -> bool   # True = consumed (modal)
+        prompt.render(width) -> list[str]
+        prompt.active                        # True while visible
+    """
+
+    def __init__(self) -> None:
+        self._label: str = ""
+        self._value: str = ""
+        self._secret: bool = False
+        self._on_commit: Callable[[str], None] | None = None
+        self._on_cancel: Callable[[], None] | None = None
+
+    @property
+    def active(self) -> bool:
+        return self._on_commit is not None
+
+    def open(
+        self,
+        label: str,
+        on_commit: Callable[[str], None],
+        on_cancel: Callable[[], None],
+        *,
+        secret: bool = False,
+    ) -> None:
+        self._label = label
+        self._value = ""
+        self._secret = secret
+        self._on_commit = on_commit
+        self._on_cancel = on_cancel
+
+    def handle_input(self, event: InputEvent) -> bool:
+        """Handle a key event. Always returns True — prompt is modal."""
+        if not self.active:
+            return False
+        if not isinstance(event, KeyEvent):
+            return True
+        match event.key:
+            case "enter":
+                cb, val = self._on_commit, self._value
+                self._close()
+                if cb is not None:
+                    cb(val)
+            case "escape":
+                cb = self._on_cancel
+                self._close()
+                if cb is not None:
+                    cb()
+            case "backspace":
+                self._value = self._value[:-1]
+            case ch if len(ch) == 1 and ch.isprintable():
+                self._value += ch
+        return True
+
+    def render(self, width: int) -> list[str]:  # noqa: ARG002
+        from tau.tui.utils import BOLD, DIM, RESET
+
+        display = ("*" * len(self._value)) if self._secret else self._value
+        return [
+            f"  {BOLD}{self._label}{RESET}  {DIM}(Enter to confirm · Esc to cancel){RESET}",
+            f"  {display}█",
+        ]
+
+    def _close(self) -> None:
+        self._label = ""
+        self._value = ""
+        self._secret = False
+        self._on_commit = None
+        self._on_cancel = None
+
+
+# ── Layout internals ──────────────────────────────────────────────────────────
 
 
 class _PendingLines(Component):
@@ -230,7 +312,7 @@ class Layout(Component):
 
         # Status zone — keyed status lines above the editor
         if self._status_map:
-            from tau.tui.ansi import DIM, RESET
+            from tau.tui.utils import DIM, RESET
 
             for text in self._status_map.values():
                 content.append(f"  {DIM}{text}{RESET}")
@@ -322,7 +404,8 @@ class Layout(Component):
                 sel = self._active_selector
                 tree_sel = sel.selector if sel.kind == "tree" else None
                 model_sel = sel.selector if sel.kind == "model" else None
-                simple_sel = sel.selector if sel.kind in ("theme", "effort") else None
+                effort_sel = sel.selector if sel.kind == "effort" else None
+                theme_sel = sel.selector if sel.kind == "theme" else None
 
                 # Tree label-editing sub-mode: route all keys directly
                 if tree_sel is not None and getattr(tree_sel, "label_editing", False):
@@ -330,25 +413,30 @@ class Layout(Component):
                     self._tui.request_render()
                     return True
 
-                # Simple list modal (theme, effort): owns navigation
-                if simple_sel is not None:
-                    match event.key:
-                        case "up":
-                            simple_sel.move_up()
-                        case "down":
-                            simple_sel.move_down()
-                        case "enter":
-                            val = simple_sel.selected_value()
-                            cb, cancel_cb = sel.on_commit, sel.on_cancel
-                            self._active_selector = None
-                            if val is not None:
-                                cb(val)
-                            else:
-                                cancel_cb()
-                        case "escape":
-                            cb = sel.on_cancel
-                            self._active_selector = None
-                            cb()
+                # OAuthSelector / ExtensionSelector / ConfigSelector: own callbacks via handle_input
+                oauth_sel = sel.selector if sel.kind == "oauth" else None
+                ext_sel = sel.selector if sel.kind == "extension" else None
+                config_sel = sel.selector if sel.kind == "config" else None
+                if oauth_sel is not None:
+                    oauth_sel.handle_input(event)
+                    self._tui.request_render()
+                    return True
+                if ext_sel is not None:
+                    ext_sel.handle_input(event)
+                    self._tui.request_render()
+                    return True
+                if config_sel is not None:
+                    config_sel.handle_input(event)
+                    self._tui.request_render()
+                    return True
+
+                # ThinkingSelector / ThemeSelector: delegate to Component.handle_input
+                if effort_sel is not None:
+                    effort_sel.handle_input(event)
+                    self._tui.request_render()
+                    return True
+                if theme_sel is not None:
+                    theme_sel.handle_input(event)
                     self._tui.request_render()
                     return True
 
@@ -367,16 +455,15 @@ class Layout(Component):
                             model_sel.toggle_scope()
                         case "enter":
                             val = model_sel.selected_value()
-                            cb, cancel_cb = sel.on_commit, sel.on_cancel
                             self._active_selector = None
-                            if val is not None:
-                                cb(val)
-                            else:
-                                cancel_cb()
+                            if val is not None and sel.on_commit is not None:
+                                sel.on_commit(val)
+                            elif sel.on_cancel is not None:
+                                sel.on_cancel()
                         case "escape":
-                            cb = sel.on_cancel
                             self._active_selector = None
-                            cb()
+                            if sel.on_cancel is not None:
+                                sel.on_cancel()
                         case "backspace":
                             model_sel.backspace_search()
                         case ch if len(ch) == 1 and ch.isprintable():
@@ -398,9 +485,9 @@ class Layout(Component):
                             if settings_sel.in_submenu:
                                 settings_sel.cancel_submenu()
                             else:
-                                cb = sel.on_cancel
                                 self._active_selector = None
-                                cb()
+                                if sel.on_cancel is not None:
+                                    sel.on_cancel()
                         case "backspace":
                             settings_sel.backspace_search()
                         case ch if len(ch) == 1 and ch.isprintable():
@@ -429,19 +516,18 @@ class Layout(Component):
                                 resume_sel.confirm_delete()
                             else:
                                 path = resume_sel.selected_path()
-                                cb, cancel_cb = sel.on_commit, sel.on_cancel
                                 self._active_selector = None
-                                if path is not None:
-                                    cb(path)
-                                else:
-                                    cancel_cb()
+                                if path is not None and sel.on_commit is not None:
+                                    sel.on_commit(path)
+                                elif sel.on_cancel is not None:
+                                    sel.on_cancel()
                         case "escape":
                             if resume_sel.confirming_delete:
                                 resume_sel.cancel_delete()
                             else:
-                                cb = sel.on_cancel
                                 self._active_selector = None
-                                cb()
+                                if sel.on_cancel is not None:
+                                    sel.on_cancel()
                         case "backspace":
                             resume_sel.backspace_search()
                         case ch if len(ch) == 1 and ch.isprintable():
@@ -470,16 +556,15 @@ class Layout(Component):
                         tree_sel.unfold_or_down()
                     case "enter" | "tab":
                         val = sel.selected_value()
-                        cb, cancel_cb = sel.on_commit, sel.on_cancel
                         self._active_selector = None
-                        if val is not None:
-                            cb(val)
-                        else:
-                            cancel_cb()
+                        if val is not None and sel.on_commit is not None:
+                            sel.on_commit(val)
+                        elif sel.on_cancel is not None:
+                            sel.on_cancel()
                     case "escape":
-                        cb = sel.on_cancel
                         self._active_selector = None
-                        cb()
+                        if sel.on_cancel is not None:
+                            sel.on_cancel()
                     # Tree filter shortcuts (Ctrl+D/T/U/L/A)
                     case "d" if event.ctrl and tree_sel is not None:
                         tree_sel.set_filter("default")
@@ -500,10 +585,10 @@ class Layout(Component):
                     # Label timestamp toggle (shift+T)
                     case "t" if event.shift and tree_sel is not None:
                         tree_sel.toggle_label_timestamps()
-                    case "backspace" if sel.searchable:
-                        sel.backspace_search()
-                    case ch if sel.searchable and len(ch) == 1 and ch.isprintable():
-                        sel.append_search(ch)
+                    case "backspace" if tree_sel is not None:
+                        tree_sel.backspace_search()
+                    case ch if tree_sel is not None and len(ch) == 1 and ch.isprintable():
+                        tree_sel.append_search(ch)
                 self._tui.request_render()
                 return True
 
@@ -924,7 +1009,7 @@ class Layout(Component):
         """
         import asyncio
 
-        from tau.tui.overlay import CustomOptions as _CustomOptions
+        from tau.tui.tui import CustomOptions as _CustomOptions
 
         opts = options or _CustomOptions()
         loop = asyncio.get_event_loop()
@@ -972,11 +1057,11 @@ class Layout(Component):
 
     def set_custom_input(self, factory: Callable[[Any, Any], Any] | None) -> None:
         """Replace the input widget with a custom implementation."""
-        from tau.tui.keybindings import get_keybindings
+        from tau.tui.input import get_keybindings
 
         self._custom_input_factory = factory
         if factory is None:
-            from tau.tui.components.primitives.text_input import TextInput
+            from tau.tui.components.text_input import TextInput
 
             new_input: Any = TextInput(
                 prefix=self._theme.input.prefix,
@@ -1012,7 +1097,7 @@ class Layout(Component):
 
     def _rebuild_pending(self, dequeue_hint: str = "Alt+↑ to edit queued") -> None:
         """Rebuild the pending-messages display between spinner and input."""
-        from tau.tui.ansi import DIM, RESET
+        from tau.tui.utils import DIM, RESET
 
         lines: list[str] = []
         for label, msgs in (
@@ -1087,9 +1172,9 @@ class Layout(Component):
         ``initial`` selects the starting modality tab. ``on_commit`` receives
         ``(model_id, provider, modality)``.
         """
-        from tau.tui.components.overlays.model_palette import ModelSelectorModal
+        from tau.modes.interactive.components.model_selector import ModelSelector
 
-        modal = ModelSelectorModal(sections, initial=initial, theme=self._theme)
+        modal = ModelSelector(sections, initial=initial, theme=self._theme)
         self._active_selector = InlineSelector(
             kind="model",
             selector=modal,
@@ -1111,38 +1196,57 @@ class Layout(Component):
         on_cancel: Callable[[], None],
     ) -> None:
         """Open a theme selector with live preview support."""
-        from tau.tui.components.modals.list_modal import ListModal
+        from tau.modes.interactive.components.theme_selector import ThemeSelector
 
-        modal = ListModal(
-            names, current, "Theme", "Select color theme", on_preview=on_preview, theme=self._theme
+        def _on_select(name: str) -> None:
+            self._active_selector = None
+            on_commit(name)
+            self._tui.request_render()
+
+        def _on_cancel() -> None:
+            self._active_selector = None
+            on_cancel()
+            self._tui.request_render()
+
+        sel = ThemeSelector(
+            names=names,
+            current=current,
+            on_select=_on_select,
+            on_cancel=_on_cancel,
+            on_preview=on_preview,
+            theme=self._theme,
         )
-        self._active_selector = InlineSelector(
-            kind="theme",
-            selector=modal,
-            on_commit=on_commit,
-            on_cancel=on_cancel,
-        )
+        self._active_selector = InlineSelector(kind="theme", selector=sel)
         self._tui.request_render()
 
     def open_effort_selector(
         self,
-        levels: list[str],
-        current: str,
-        on_commit: Callable[[str], None],
+        levels: list,
+        current: Any,
+        on_commit: Callable,
         on_cancel: Callable[[], None],
     ) -> None:
         """Open an effort/thinking level selector modal."""
-        from tau.tui.components.modals.list_modal import ListModal
+        from tau.modes.interactive.components.thinking_selector import ThinkingSelector
 
-        modal = ListModal(
-            levels, current, "Thinking Effort", "Select effort level", theme=self._theme
+        def _on_select(level: Any) -> None:
+            self._active_selector = None
+            on_commit(level)
+            self._tui.request_render()
+
+        def _on_cancel() -> None:
+            self._active_selector = None
+            on_cancel()
+            self._tui.request_render()
+
+        sel = ThinkingSelector(
+            current=current,
+            available=levels,
+            on_select=_on_select,
+            on_cancel=_on_cancel,
+            theme=self._theme,
         )
-        self._active_selector = InlineSelector(
-            kind="effort",
-            selector=modal,
-            on_commit=on_commit,
-            on_cancel=on_cancel,
-        )
+        self._active_selector = InlineSelector(kind="effort", selector=sel)
         self._tui.request_render()
 
     def open_settings_selector(
@@ -1154,7 +1258,6 @@ class Layout(Component):
         self._active_selector = InlineSelector(
             kind="settings",
             selector=modal,
-            on_commit=lambda _: None,
             on_cancel=on_cancel,
         )
         self._tui.request_render()
@@ -1168,9 +1271,9 @@ class Layout(Component):
         current_session_path: Path | None = None,
     ) -> None:
         """Open the session resume selector with search, scope toggle, and delete."""
-        from tau.tui.components.modals.resume_modal import ResumeModal
+        from tau.modes.interactive.components.session_selector import ResumeSelector
 
-        modal = ResumeModal(
+        modal = ResumeSelector(
             current_sessions=sessions,
             all_sessions_loader=all_sessions_loader or (lambda: []),
             current_session_path=current_session_path,
@@ -1198,6 +1301,93 @@ class Layout(Component):
             on_commit=on_commit,
             on_cancel=on_cancel,
         )
+        self._tui.request_render()
+
+    def open_oauth_selector(
+        self,
+        mode: str,
+        providers: list,
+        on_select: Callable[[str], None],
+        on_cancel: Callable[[], None],
+    ) -> None:
+        """Open an OAuth/API-key provider picker with fuzzy search and status indicators."""
+        from tau.modes.interactive.components.oauth_selector import OAuthSelector
+
+        def _on_select(provider_id: str) -> None:
+            self._active_selector = None
+            on_select(provider_id)
+            self._tui.request_render()
+
+        def _on_cancel() -> None:
+            self._active_selector = None
+            on_cancel()
+            self._tui.request_render()
+
+        sel = OAuthSelector(
+            mode=mode,  # type: ignore[arg-type]  # callers pass Literal["login","logout"]
+            providers=providers,
+            on_select=_on_select,
+            on_cancel=_on_cancel,
+            theme=self._theme,
+        )
+        self._active_selector = InlineSelector(kind="oauth", selector=sel)
+        self._tui.request_render()
+
+    def open_extension_selector(
+        self,
+        title: str,
+        options: list[str],
+        on_select: Callable[[str], None],
+        on_cancel: Callable[[], None],
+    ) -> None:
+        """Open a generic option picker for extension commands."""
+        from tau.modes.interactive.components.extension_selector import ExtensionSelector
+
+        def _on_select(option: str) -> None:
+            self._active_selector = None
+            on_select(option)
+            self._tui.request_render()
+
+        def _on_cancel() -> None:
+            self._active_selector = None
+            on_cancel()
+            self._tui.request_render()
+
+        sel = ExtensionSelector(
+            title=title,
+            options=options,
+            on_select=_on_select,
+            on_cancel=_on_cancel,
+            theme=self._theme,
+        )
+        self._active_selector = InlineSelector(kind="extension", selector=sel)
+        self._tui.request_render()
+
+    def open_config_selector(
+        self,
+        entries: list,
+        on_toggle: Callable,
+        on_close: Callable[[], None],
+    ) -> None:
+        """Open the extension config selector (enable/disable per scope)."""
+        from tau.modes.interactive.components.config_selector import ConfigSelector
+
+        def _on_toggle(entry, enabled: bool) -> None:
+            on_toggle(entry, enabled)
+            self._tui.request_render()
+
+        def _on_close() -> None:
+            self._active_selector = None
+            on_close()
+            self._tui.request_render()
+
+        sel = ConfigSelector(
+            entries=entries,
+            on_toggle=_on_toggle,
+            on_close=_on_close,
+            theme=self._theme,
+        )
+        self._active_selector = InlineSelector(kind="config", selector=sel)
         self._tui.request_render()
 
     def open_branch_tree_selector(
@@ -1235,7 +1425,6 @@ class Layout(Component):
             selector=selector,
             on_commit=on_commit,
             on_cancel=on_cancel,
-            searchable=True,
         )
         self._tui.request_render()
 
@@ -1263,8 +1452,8 @@ class Layout(Component):
         on_cancel: Callable[[], None],
     ) -> None:
         """Open a floating multi-line text editor overlay."""
-        from tau.tui.components.overlays.prompt_overlay import EditorOverlay
-        from tau.tui.overlay import OverlayOptions
+        from tau.modes.interactive.components.overlays import EditorOverlay
+        from tau.tui.tui import OverlayOptions
 
         handle_ref: list[OverlayHandle] = []
 

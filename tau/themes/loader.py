@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 from tau.themes.types import LoadThemesResult, ThemeLoadError
-from tau.tui.ansi import (
+from tau.tui.utils import (
     BLACK,
     BLUE,
     BOLD,

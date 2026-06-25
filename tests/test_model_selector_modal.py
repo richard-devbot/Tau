@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from tau.inference.model.types import Cost, Model
-from tau.tui.components.overlays.model_palette import ModelSelectorModal
+from tau.modes.interactive.components.model_selector import ModelSelectorModal
 
 
 def _m(id: str, provider: str) -> Model:

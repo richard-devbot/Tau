@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from tau.tool.render import call_line, display_name
 from tau.tool.types import ToolKind, ToolResult
-from tau.tui.ansi import strip_ansi
+from tau.tui.utils import strip_ansi
 
 
 class TestDisplayName:
