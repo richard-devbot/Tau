@@ -12,6 +12,7 @@ from tau.tui.input import InputEvent, KeyEvent
 if TYPE_CHECKING:
     from tau.commands.types import CommandInfo
     from tau.tui.autocomplete import AutocompleteRegistration
+    from tau.tui.theme import SelectListTheme
 
 _log = logging.getLogger(__name__)
 
@@ -32,18 +33,27 @@ class AutocompleteManager:
     - Command arg completions (_cmd_arg_picker) — activated by '/cmd <space>'
     """
 
-    def __init__(self, max_visible: int, request_render: Callable[[], None]) -> None:
-        self._ac_picker = AutocompletePicker(max_visible=max_visible)
+    def __init__(
+        self,
+        max_visible: int,
+        request_render: Callable[[], None],
+        theme: SelectListTheme | None = None,
+    ) -> None:
+        self._ac_picker = AutocompletePicker(max_visible=max_visible, theme=theme)
         self._ac_providers: list[AutocompleteRegistration] = []
         self._ac_trigger_pos: int = -1
         self._ac_active_trigger: str = ""
         self._ac_pending_task: asyncio.Task | None = None  # type: ignore[type-arg]
 
-        self._cmd_arg_picker = AutocompletePicker(max_visible=max_visible)
+        self._cmd_arg_picker = AutocompletePicker(max_visible=max_visible, theme=theme)
         self._cmd_arg_active: str = ""
         self._cmd_arg_pending_task: asyncio.Task | None = None  # type: ignore[type-arg]
 
         self._request_render = request_render
+
+    def set_theme(self, theme: SelectListTheme) -> None:
+        self._ac_picker.set_theme(theme)
+        self._cmd_arg_picker.set_theme(theme)
 
     # -------------------------------------------------------------------------
     # Public API

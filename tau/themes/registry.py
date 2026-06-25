@@ -26,6 +26,21 @@ if TYPE_CHECKING:
 #: builtin so the TUI can start even with no global/project themes installed.
 DEFAULT_THEME = "dark"
 
+#: Special theme setting that picks light/dark from the terminal background.
+AUTO_THEME = "auto"
+
+
+def mode_for_background(color: tuple[int, int, int] | None, default: str = DEFAULT_THEME) -> str:
+    """Return ``"light"`` or ``"dark"`` for a terminal background RGB.
+
+    Uses perceived luminance (ITU-R BT.601). ``color`` of ``None`` (terminal
+    didn't answer the OSC 11 query) falls back to ``default``.
+    """
+    if color is None:
+        return default
+    r, g, b = color
+    return "light" if (0.299 * r + 0.587 * g + 0.114 * b) > 127 else "dark"
+
 
 class ThemeRegistry:
     def __init__(self) -> None:

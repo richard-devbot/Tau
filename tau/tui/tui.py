@@ -90,9 +90,12 @@ class TUI(Container):
         # Explicit focus target for non-overlay components
         self._focused: Component | None = None
 
-        # Terminal background color — populated after startup OSC 11 query
+        # Terminal background color — populated after startup OSC 11 query.
+        # ``on_background_color`` (if set) fires once with the result (or None on
+        # timeout); used for auto light/dark theme selection.
         self.background_color: tuple[int, int, int] | None = None
         self._bg_color_future: asyncio.Future | None = None
+        self.on_background_color: Callable[[tuple[int, int, int] | None], None] | None = None
 
         # Wire resize → immediate full re-render (bypasses the streaming throttle)
         self._unsub_resize = self._terminal.on_resize(self._on_terminal_resize)
@@ -144,10 +147,14 @@ class TUI(Container):
 
             self._terminal.enable_kitty_keyboard()
             loop.add_reader(sys.stdin.fileno(), self._on_stdin_ready)
-            # Fire-and-forget: query terminal background colour for theme hints
-            asyncio.ensure_future(self.query_background_color()).add_done_callback(
-                _log_task_exception
-            )
+            # Query terminal background colour for theme hints, then notify any
+            # listener (e.g. auto light/dark theme selection).
+            async def _query_bg() -> None:
+                color = await self.query_background_color()
+                if self.on_background_color is not None:
+                    self.on_background_color(color)
+
+            asyncio.ensure_future(_query_bg()).add_done_callback(_log_task_exception)
             try:
                 await self._stop_event.wait()
             finally:

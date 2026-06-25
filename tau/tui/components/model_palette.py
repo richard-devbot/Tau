@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, GREEN, RESET
+from typing import TYPE_CHECKING
+
 from tau.tui.component import Component
 from tau.tui.input import InputEvent
+
+if TYPE_CHECKING:
+    from tau.tui.theme import LayoutTheme
 
 VISIBLE_ROWS = 10
 
@@ -136,7 +140,12 @@ class ModelSelectorModal:
       Model Name: Whisper 1
     """
 
-    def __init__(self, sections: list[tuple[str, str, list, str]], initial: str | None = None):
+    def __init__(
+        self,
+        sections: list[tuple[str, str, list, str]],
+        initial: str | None = None,
+        theme: LayoutTheme | None = None,
+    ):
         """``sections`` is a list of ``(modality, label, models, current_key)``.
 
         Empty sections (no models) are dropped. ``initial`` selects the starting
@@ -148,6 +157,14 @@ class ModelSelectorModal:
             if models
         ]
         self._active: int = 0
+
+        if theme is None:
+            from tau.tui.theme import LayoutTheme as _LT
+
+            theme = _LT()
+        self._muted = theme.muted
+        self._emphasis = theme.emphasis
+        self._success = theme.success
         if initial is not None:
             for i, s in enumerate(self._sections):
                 if s.modality == initial:
@@ -201,54 +218,43 @@ class ModelSelectorModal:
     # ── Render ────────────────────────────────────────────────────────────────
 
     def render(self, width: int) -> list[str]:  # noqa: ARG002
+        muted, emphasis, success = self._muted, self._emphasis, self._success
+
         lines: list[str] = []
         sec = self._section
         if sec is None:
-            msg = "No models available. Use /login to add providers."
-            lines.append(f"  {BRIGHT_BLACK}{msg}{RESET}")
+            lines.append("  " + muted("No models available. Use /login to add providers."))
             return lines
 
         # Tab strip
-        tabs = []
-        for i, s in enumerate(self._sections):
-            if i == self._active:
-                tabs.append(f"{BRIGHT_WHITE}{BOLD}{s.label}{RESET}")
-            else:
-                tabs.append(f"{BRIGHT_BLACK}{s.label}{RESET}")
-        sep = f"{BRIGHT_BLACK} │ {RESET}"
-        lines.append(f"  {sep.join(tabs)}  {BRIGHT_BLACK}←/→ modality{RESET}")
+        tabs = [
+            (emphasis(s.label) if i == self._active else muted(s.label))
+            for i, s in enumerate(self._sections)
+        ]
+        lines.append(f"  {muted(' │ ').join(tabs)}  {muted('←/→ modality')}")
 
         # Scope header — shown on any tab that spans multiple providers.
         if sec.can_scope:
-            all_t = (
-                (BRIGHT_WHITE + BOLD + "all" + RESET)
-                if sec.scope == "all"
-                else (BRIGHT_BLACK + "all" + RESET)
-            )
+            all_t = emphasis("all") if sec.scope == "all" else muted("all")
             scoped_label = "scoped"
             if sec.scope == "scoped" and sec.scope_provider:
                 scoped_label = f"scoped ({sec.scope_provider})"
-            sc_t = (
-                (BRIGHT_WHITE + BOLD + scoped_label + RESET)
-                if sec.scope == "scoped"
-                else (BRIGHT_BLACK + scoped_label + RESET)
-            )
+            sc_t = emphasis(scoped_label) if sec.scope == "scoped" else muted(scoped_label)
             lines.append(
-                f"  {BRIGHT_BLACK}Scope:{RESET} {all_t}"
-                f"{BRIGHT_BLACK} | {RESET}{sc_t}  {BRIGHT_BLACK}tab: toggle{RESET}"
+                f"  {muted('Scope:')} {all_t}{muted(' | ')}{sc_t}  {muted('tab: toggle')}"
             )
         else:
-            lines.append(f"  {BRIGHT_BLACK}↑/↓: navigate  enter: select  esc: cancel{RESET}")
+            lines.append("  " + muted("↑/↓: navigate  enter: select  esc: cancel"))
 
         # Search line
         cursor = "█"
         if sec.search:
-            lines.append(f"  {BRIGHT_BLACK}Search:{RESET} {sec.search}{cursor}")
+            lines.append(f"  {muted('Search:')} {sec.search}{cursor}")
         else:
-            lines.append(f"  {BRIGHT_BLACK}Search: {cursor}{RESET}")
+            lines.append("  " + muted(f"Search: {cursor}"))
 
         if not sec.filtered:
-            lines.append(f"  {BRIGHT_BLACK}No models match{RESET}")
+            lines.append("  " + muted("No models match"))
             return lines
 
         count = len(sec.filtered)
@@ -259,20 +265,20 @@ class ModelSelectorModal:
             m = sec.filtered[i]
             is_sel = i == sec.selected
             is_current = f"{m.provider}/{m.id}" == sec.current_key
-            check = f" {GREEN}✓{RESET}" if is_current else ""
-            badge = f"{BRIGHT_BLACK}[{m.provider}]{RESET}"
+            check = f" {success('✓')}" if is_current else ""
+            badge = muted(f"[{m.provider}]")
 
             if is_sel:
-                lines.append(f"  {BRIGHT_WHITE}{BOLD}→ {m.id}{RESET} {badge}{check}")
+                lines.append(f"  {emphasis(f'→ {m.id}')} {badge}{check}")
             else:
                 lines.append(f"    {m.id} {badge}{check}")
 
         if count > visible:
-            lines.append(f"  {BRIGHT_BLACK}({sec.selected + 1}/{count}){RESET}")
+            lines.append("  " + muted(f"({sec.selected + 1}/{count})"))
 
         sel_m = sec.filtered[sec.selected]
         name = getattr(sel_m, "name", None) or sel_m.id
-        lines.append(f"  {BRIGHT_BLACK}Model Name: {name}{RESET}")
+        lines.append("  " + muted(f"Model Name: {name}"))
 
         return lines
 

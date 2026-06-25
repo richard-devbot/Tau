@@ -116,6 +116,78 @@ class TextInput(Component):
     def line_count(self) -> int:
         return self._text.count("\n") + 1
 
+    # ── Public editor interface (see tau/tui/components/editor.py) ─────────────
+    # Public accessors over the private storage so the Layout/UIContext talk to a
+    # documented surface (EditorComponent / EditorExtras) rather than internals.
+
+    @property
+    def cursor(self) -> int:
+        return self._cursor
+
+    @property
+    def prefix(self) -> str:
+        return self._prefix
+
+    @prefix.setter
+    def prefix(self, value: str) -> None:
+        self._prefix = value
+
+    @property
+    def placeholder(self) -> str:
+        return self._placeholder
+
+    @placeholder.setter
+    def placeholder(self, value: str) -> None:
+        self._placeholder = value
+
+    @property
+    def arg_hint(self) -> str:
+        return self._arg_hint
+
+    @arg_hint.setter
+    def arg_hint(self, value: str) -> None:
+        self._arg_hint = value
+
+    @property
+    def visual_strip(self) -> int:
+        return self._visual_strip
+
+    @visual_strip.setter
+    def visual_strip(self, value: int) -> None:
+        self._visual_strip = value
+
+    @property
+    def history_idx(self) -> int:
+        return self._history_idx
+
+    @property
+    def on_submit(self) -> Callable[[str], None] | None:
+        return self._on_submit
+
+    @on_submit.setter
+    def on_submit(self, cb: Callable[[str], None] | None) -> None:
+        self._on_submit = cb
+
+    @property
+    def on_followup(self) -> Callable[[str], None] | None:
+        return self._on_followup
+
+    @on_followup.setter
+    def on_followup(self, cb: Callable[[str], None] | None) -> None:
+        self._on_followup = cb
+
+    @property
+    def on_dequeue(self) -> Callable[[], None] | None:
+        return self._on_dequeue
+
+    @on_dequeue.setter
+    def on_dequeue(self, cb: Callable[[], None] | None) -> None:
+        self._on_dequeue = cb
+
+    def submit(self) -> None:
+        """Submit the current buffer (as if Enter were pressed)."""
+        self._submit()
+
     def clear(self) -> None:
         self._text = ""
         self._cursor = 0

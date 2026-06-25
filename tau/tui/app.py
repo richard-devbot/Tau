@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from tau.extensions import ExtensionContext
 from tau.tui.agent_hooks import AgentHookHandler
@@ -56,6 +56,44 @@ class App:
         self._last_ctrl_c: float = 0.0
         self._last_escape: float = 0.0
 
+        # Auto light/dark: when the theme setting is "auto", the active theme is
+        # refined from the terminal background colour once it's known at runtime.
+        self._auto_theme: bool = False
+        self._theme_name: str = "dark"
+
+    # -------------------------------------------------------------------------
+    # Theme
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_message_flags(theme: LayoutTheme, sm: Any) -> None:
+        """Re-apply the user's message-display prefs onto a (possibly swapped) theme."""
+        if sm is not None:
+            theme.message.show_thinking = sm.get_show_thinking()
+            theme.message.show_tool_calls = sm.get_show_tool_calls()
+            theme.message.show_images = sm.get_show_images()
+
+    def _on_terminal_background(self, color: tuple[int, int, int] | None) -> None:
+        """Auto-select the light/dark builtin theme from the terminal background.
+
+        Fires once at startup (via ``TUI.on_background_color``) when the theme
+        setting is ``"auto"``. No reply → keep the provisional default.
+        """
+        if color is None:
+            return
+        from tau.themes.registry import mode_for_background, theme_registry
+
+        mode = mode_for_background(color)
+        if mode == self._theme_name:
+            return
+        try:
+            new_theme = theme_registry.get(mode)
+        except ValueError:
+            return
+        self._apply_message_flags(new_theme, self._runtime.settings_manager)
+        self._theme_name = mode
+        self._layout.set_theme(new_theme)
+
     # -------------------------------------------------------------------------
     # Factory
     # -------------------------------------------------------------------------
@@ -80,12 +118,19 @@ class App:
 
         resolved_theme: LayoutTheme | None
         theme_name = DEFAULT_THEME
-        if isinstance(theme, str):
-            theme_name = theme
-            resolved_theme = theme_registry.get(theme_name)
-        elif theme is None:
-            sm = runtime.settings_manager
-            theme_name = (sm.get_theme() if sm is not None else None) or DEFAULT_THEME
+        auto_theme = False
+        if isinstance(theme, LayoutTheme):
+            resolved_theme = theme
+        else:
+            if isinstance(theme, str):
+                requested = theme
+            else:
+                _sm = runtime.settings_manager
+                requested = (_sm.get_theme() if _sm is not None else None) or DEFAULT_THEME
+            # "auto" selects light/dark from the terminal background at runtime;
+            # start on the default theme until the OSC 11 reply arrives.
+            auto_theme = requested == "auto"
+            theme_name = DEFAULT_THEME if auto_theme else requested
             try:
                 resolved_theme = theme_registry.get(theme_name)
             except ValueError:
@@ -94,16 +139,12 @@ class App:
                 # is guaranteed to load instead of crashing on startup.
                 theme_name = DEFAULT_THEME
                 resolved_theme = theme_registry.get_default()
-        else:
-            resolved_theme = theme
 
         sm = runtime.settings_manager
         picker_max_visible = 8
         autocomplete_max_visible = 5
+        cls._apply_message_flags(resolved_theme, sm)
         if sm is not None:
-            resolved_theme.message.show_thinking = sm.get_show_thinking()
-            resolved_theme.message.show_tool_calls = sm.get_show_tool_calls()
-            resolved_theme.message.show_images = sm.get_show_images()
             picker_max_visible = sm.get_picker_max_visible()
             autocomplete_max_visible = sm.get_autocomplete_max_visible()
 
@@ -126,6 +167,8 @@ class App:
         )
         tui.set_focus(layout)
         app = cls(runtime, tui, layout)
+        app._auto_theme = auto_theme
+        app._theme_name = theme_name
 
         # ESC clears the editor only while idle; mid-stream it must fall through
         # to the global key handler so it can abort the run.
@@ -370,6 +413,9 @@ class App:
 
         self._track_task(asyncio.ensure_future(self._announce_update()))
 
+        if self._auto_theme:
+            self._tui.on_background_color = self._on_terminal_background
+
         await self._runtime.hooks.emit(TuiStartEvent())
         try:
             await self._tui.run()
@@ -439,7 +485,7 @@ class App:
 
         from tau.tui.components.trust_screen import TrustScreen
 
-        screen = TrustScreen(str(cwd), options, _on_commit)
+        screen = TrustScreen(str(cwd), options, _on_commit, theme=self._layout.theme)
         self._layout.detach(self._tui)
         self._tui.add_child(screen)
         self._tui.set_focus(screen)
@@ -609,21 +655,21 @@ class App:
         latest = await task
         if latest is None:
             return
-        from tau.tui.ansi import BOLD, BRIGHT_YELLOW, DIM, RESET
+        from tau.tui.ansi import BOLD, RESET
         from tau.tui.component import Column, StaticComponent
         from tau.tui.components.dynamic_border import DynamicBorder
 
-        color = lambda s: BRIGHT_YELLOW + s + RESET  # noqa: E731
+        theme = self._layout.theme
         banner = Column(
             [
-                DynamicBorder(color),
+                DynamicBorder(theme.warning),
                 StaticComponent(
                     [
-                        f"  {BRIGHT_YELLOW}⚡{RESET} Update available: {BOLD}v{latest}{RESET}"
-                        f"{DIM}  ·  run: tau update{RESET}",
+                        f"  {theme.warning('⚡')} Update available: {BOLD}v{latest}{RESET}"
+                        f"{theme.muted('  ·  run: tau update')}",
                     ]
                 ),
-                DynamicBorder(color),
+                DynamicBorder(theme.warning),
             ]
         )
         self._layout.set_widget("version_update", banner, placement="above_editor")
@@ -652,5 +698,5 @@ class App:
         if session_mgr.session_file is None or not session_mgr.session_file.exists():
             return
         sid = session_mgr.session_id
-        print(f"\n\x1b[2mResume this session with:\x1b[0m")
+        print("\n\x1b[2mResume this session with:\x1b[0m")
         print(f"\x1b[1mtau --resume {sid}\x1b[0m\n")

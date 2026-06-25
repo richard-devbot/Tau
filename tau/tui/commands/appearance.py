@@ -14,26 +14,33 @@ def _headers_to_str(headers: dict | None) -> str:
 
 def open_theme_selector(ctx: CommandContext) -> None:
     """Open the theme selector modal with live preview."""
-    from tau.themes.registry import DEFAULT_THEME, theme_registry
+    from tau.themes.registry import AUTO_THEME, DEFAULT_THEME, mode_for_background, theme_registry
 
-    names = theme_registry.list()
+    # "auto" tracks the terminal background (light/dark); offer it first.
+    names = [AUTO_THEME, *theme_registry.list()]
     sm = ctx.runtime.settings_manager
     original = (sm.get_theme() if sm is not None else None) or DEFAULT_THEME
+
+    def _resolve(name: str) -> str:
+        """Map "auto" to the concrete builtin for the current terminal background."""
+        if name == AUTO_THEME:
+            return mode_for_background(ctx.tui.background_color)
+        return name
 
     def preview(name: str) -> None:
         """Preview the selected theme."""
         with contextlib.suppress(ValueError):
-            ctx.layout.set_theme(theme_registry.get(name))
+            ctx.layout.set_theme(theme_registry.get(_resolve(name)))
 
     def commit(name: str) -> None:
         """Apply the selected theme."""
         try:
-            theme = theme_registry.get(name)
+            theme = theme_registry.get(_resolve(name))
         except ValueError:
             return
         ctx.layout.set_theme(theme)
         if sm is not None:
-            sm.set_theme(name)
+            sm.set_theme(name)  # persist "auto" verbatim so it re-detects next launch
         ctx.notify(f"Theme set to {name}")
 
     def cancel() -> None:
@@ -49,7 +56,7 @@ def open_settings_panel(ctx: CommandContext) -> None:
     """Open the interactive settings modal."""
     from tau.engine.types import FollowupMode, SteeringMode
     from tau.inference.types import ThinkingLevel, Transport
-    from tau.themes.registry import DEFAULT_THEME, theme_registry
+    from tau.themes.registry import AUTO_THEME, DEFAULT_THEME, theme_registry
     from tau.tui.components.settings_modal import SettingItem, SettingsModal
 
     sm = ctx.runtime.settings_manager
@@ -138,7 +145,7 @@ def open_settings_panel(ctx: CommandContext) -> None:
             label="Theme",
             description="Color theme for the interface",
             current_value=sm.get_theme() or DEFAULT_THEME,
-            submenu_items=theme_registry.list(),
+            submenu_items=[AUTO_THEME, *theme_registry.list()],
             submenu_title="Theme",
         ),
         SettingItem(
@@ -426,10 +433,16 @@ def open_settings_panel(ctx: CommandContext) -> None:
             sm.set_thinking_level(ThinkingLevel(value))
         elif item_id == "theme":
             try:
+                from tau.themes.registry import AUTO_THEME, mode_for_background
                 from tau.themes.registry import theme_registry as _tr
 
-                ctx.layout.set_theme(_tr.get(value))
-                sm.set_theme(value)
+                resolved = (
+                    mode_for_background(ctx.tui.background_color)
+                    if value == AUTO_THEME
+                    else value
+                )
+                ctx.layout.set_theme(_tr.get(resolved))
+                sm.set_theme(value)  # persist "auto" verbatim
             except ValueError:
                 pass
         elif item_id == "proxy_url":
@@ -520,5 +533,5 @@ def open_settings_panel(ctx: CommandContext) -> None:
         if ctx.on_palette_refresh is not None:
             ctx.on_palette_refresh()
 
-    modal = SettingsModal(items, on_change=on_change)
+    modal = SettingsModal(items, on_change=on_change, theme=ctx.layout.theme)
     ctx.layout.open_settings_selector(modal, on_cancel=on_close)

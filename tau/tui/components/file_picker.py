@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, CYAN, RESET
 from tau.tui.component import Component
 from tau.tui.fuzzy import fuzzy_filter
 from tau.tui.input import InputEvent, Key, KeyEvent
+
+if TYPE_CHECKING:
+    from tau.tui.theme import SelectListTheme
 
 VISIBLE_ROWS = 6
 
@@ -28,7 +31,7 @@ class FilePicker(Component):
     Backspace on empty query in the parent layout calls go_up().
     """
 
-    def __init__(self, cwd: Path | None = None) -> None:
+    def __init__(self, cwd: Path | None = None, theme: SelectListTheme | None = None) -> None:
         self._root = cwd or Path.cwd()
         self._cwd = self._root
         self._all_entries: list[FileEntry] = []
@@ -36,6 +39,13 @@ class FilePicker(Component):
         self._selected = 0
         self._query = ""
         self._active = False
+
+        from tau.tui.theme import SelectListTheme as _ST
+
+        self._theme = theme or _ST()
+
+    def set_theme(self, theme: SelectListTheme) -> None:
+        self._theme = theme
 
     # -------------------------------------------------------------------------
     # Public API
@@ -148,6 +158,7 @@ class FilePicker(Component):
         if not self._active:
             return []
 
+        t = self._theme
         lines: list[str] = []
 
         if self._cwd != self._root:
@@ -155,10 +166,10 @@ class FilePicker(Component):
                 rel = str(self._cwd.relative_to(self._root))
             except ValueError:
                 rel = str(self._cwd)
-            lines.append(BRIGHT_BLACK + f"  @ {rel}/" + RESET)
+            lines.append(t.indicator(f"  @ {rel}/"))
 
         if not self._entries:
-            lines.append(BRIGHT_BLACK + "  (no matches)" + RESET)
+            lines.append(t.empty("  (no matches)"))
             return lines
 
         count = len(self._entries)
@@ -177,7 +188,7 @@ class FilePicker(Component):
         )
 
         if start > 0:
-            lines.append(BRIGHT_BLACK + f"  ↑ {start} more" + RESET)
+            lines.append(t.indicator(f"  ↑ {start} more"))
 
         for i in range(start, start + visible):
             entry = self._entries[i]
@@ -185,16 +196,16 @@ class FilePicker(Component):
             label = (entry.name + ("/" if entry.is_dir else ""))[:label_w].ljust(label_w)
 
             if is_sel:
-                color = CYAN if entry.is_dir else BRIGHT_WHITE
-                row = "  " + BOLD + color + label + RESET
+                style = t.selected_dir if entry.is_dir else t.selected_label
+                row = "  " + style(label)
             else:
-                row = "  " + BRIGHT_BLACK + label + RESET
+                row = "  " + t.normal_label(label)
 
             lines.append(row)
 
         remaining = count - (start + visible)
         if remaining > 0:
-            lines.append(BRIGHT_BLACK + f"  ↓ {remaining} more" + RESET)
+            lines.append(t.indicator(f"  ↓ {remaining} more"))
 
         return lines
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, DIM, GREEN, RESET
+if TYPE_CHECKING:
+    from tau.tui.theme import LayoutTheme
 
 
 class ListModal:
@@ -30,6 +32,7 @@ class ListModal:
         title: str,
         subtitle: str = "",
         on_preview: Callable[[str], None] | None = None,
+        theme: LayoutTheme | None = None,
     ) -> None:
         self._items = list(items)
         self._current = current
@@ -37,6 +40,12 @@ class ListModal:
         self._subtitle = subtitle
         self._preview = on_preview
         self._selected = 0
+
+        if theme is None:
+            from tau.tui.theme import LayoutTheme as _LT
+
+            theme = _LT()
+        self._theme = theme
 
         # Start cursor on the current item
         for i, it in enumerate(self._items):
@@ -66,32 +75,33 @@ class ListModal:
     # ── Render ────────────────────────────────────────────────────────────────
 
     def render(self, width: int) -> list[str]:
-        divider = BRIGHT_BLACK + "─" * width + RESET
+        t = self._theme
+        divider = t.border("─" * width)
         lines: list[str] = []
 
         # Title block
-        lines.append(f"  {BOLD}{BRIGHT_WHITE}{self._title}{RESET}")
+        lines.append("  " + t.emphasis(self._title))
         if self._subtitle:
-            lines.append(f"  {BRIGHT_BLACK}{self._subtitle}{RESET}")
+            lines.append("  " + t.muted(self._subtitle))
 
         lines.append(divider)
 
         # List
         if not self._items:
-            lines.append(f"  {BRIGHT_BLACK}(no items){RESET}")
+            lines.append("  " + t.muted("(no items)"))
         else:
             for i, item in enumerate(self._items):
                 is_sel = i == self._selected
                 is_current = item == self._current
-                check = f" {GREEN}✓{RESET}" if is_current else ""
+                check = f" {t.success('✓')}" if is_current else ""
                 if is_sel:
-                    lines.append(f"  {BRIGHT_WHITE}{BOLD}→ {item}{RESET}{check}")
+                    lines.append(f"  {t.emphasis(f'→ {item}')}{check}")
                 else:
                     lines.append(f"    {item}{check}")
 
         lines.append(divider)
 
         # Help
-        lines.append(f"  {DIM}{self.HELP.strip()}{RESET}")
+        lines.append("  " + t.muted(self.HELP.strip()))
 
         return lines

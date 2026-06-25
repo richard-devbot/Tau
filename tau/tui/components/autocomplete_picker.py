@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, RESET
+from tau.tui.ansi import visible_width
 from tau.tui.component import Component
 from tau.tui.fuzzy import fuzzy_filter
 from tau.tui.input import InputEvent, Key, KeyEvent
 
 if TYPE_CHECKING:
     from tau.tui.autocomplete import AutocompleteItem
+    from tau.tui.theme import SelectListTheme
 
 _DEFAULT_VISIBLE_ROWS = 5
 
@@ -22,13 +23,22 @@ class AutocompletePicker(Component):
     commit (Tab/Enter) and dismiss (Escape) are handled by Layout.
     """
 
-    def __init__(self, max_visible: int = _DEFAULT_VISIBLE_ROWS) -> None:
+    def __init__(
+        self, max_visible: int = _DEFAULT_VISIBLE_ROWS, theme: SelectListTheme | None = None
+    ) -> None:
         self._all_items: list[AutocompleteItem] = []
         self._items: list[AutocompleteItem] = []
         self._selected: int = 0
         self._query: str = ""
         self._active: bool = False
         self._max_visible = max_visible
+
+        from tau.tui.theme import SelectListTheme as _ST
+
+        self._theme = theme or _ST()
+
+    def set_theme(self, theme: SelectListTheme) -> None:
+        self._theme = theme
 
     # -------------------------------------------------------------------------
     # Public API
@@ -93,10 +103,11 @@ class AutocompletePicker(Component):
         )
         desc_w = max(0, width - label_w - 4)
 
+        t = self._theme
         lines: list[str] = []
 
         if start > 0:
-            lines.append(BRIGHT_BLACK + f"  ↑ {start} more" + RESET)
+            lines.append(t.indicator(f"  ↑ {start} more"))
 
         for i in range(start, start + visible):
             item = self._items[i]
@@ -105,17 +116,18 @@ class AutocompletePicker(Component):
             desc = item.description[:desc_w] if desc_w > 0 else ""
 
             if is_sel:
-                row = (
-                    "  " + BOLD + BRIGHT_WHITE + label + RESET + "  " + BRIGHT_BLACK + desc + RESET
-                )
+                row = "  " + t.selected_label(label) + "  " + t.selected_desc(desc)
+                if t.selected_bg:
+                    fill = max(0, width - visible_width(row))
+                    row = t.selected_bg(row + " " * fill)
             else:
-                row = "  " + BRIGHT_BLACK + label + "  " + desc + RESET
+                row = "  " + t.normal_label(label) + "  " + t.normal_desc(desc)
 
             lines.append(row)
 
         remaining = count - (start + visible)
         if remaining > 0:
-            lines.append(BRIGHT_BLACK + f"  ↓ {remaining} more" + RESET)
+            lines.append(t.indicator(f"  ↓ {remaining} more"))
 
         return lines
 

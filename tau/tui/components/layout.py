@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from tau.tui.component import Component, Container
 from tau.tui.components.autocomplete_manager import AutocompleteManager
 from tau.tui.components.command_palette import CommandPalette
+from tau.tui.components.editor import EditorComponent, EditorExtras
 from tau.tui.components.file_picker import FilePicker
 from tau.tui.components.inline_selector import InlineSelector
 from tau.tui.components.message_list import MessageBlock, MessageList
@@ -29,6 +30,31 @@ if TYPE_CHECKING:
     from tau.tui.autocomplete import AutocompleteRegistration
     from tau.tui.overlay import CustomOptions, OverlayHandle
     from tau.tui.tui import TUI
+
+
+def _has_editor_extras(editor: object) -> bool:
+    """True if the editor provides the optional :class:`EditorExtras` surface.
+
+    Taking ``object`` keeps the check off the concrete ``TextInput`` type, so the
+    Layout's own ``self.input`` access stays fully type-checked while still
+    feature-detecting custom editors at runtime.
+    """
+    return isinstance(editor, EditorExtras)
+
+
+def _validate_editor(editor: object) -> None:
+    """Warn if a custom editor doesn't satisfy the :class:`EditorComponent` core.
+
+    Typed ``object`` so the check doesn't widen the caller's editor type.
+    """
+    if not isinstance(editor, EditorComponent):
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Custom editor %r does not satisfy EditorComponent; the prompt may "
+            "misbehave. See tau.tui.components.editor.",
+            type(editor).__name__,
+        )
 
 
 class _PendingLines(Component):
@@ -94,7 +120,7 @@ class Layout(Component):
         )
         self.spinner = Spinner(tui, theme=self._theme.spinner)
         self.footer: Container = Container()
-        self.palette = CommandPalette()
+        self.palette = CommandPalette(theme=self._theme.select_list)
         self.input = TextInput(
             prefix=self._theme.input.prefix,
             placeholder=self._theme.input.placeholder,
@@ -147,7 +173,7 @@ class Layout(Component):
         self._custom_input_factory: Callable[[Any, Any], Any] | None = None
 
         # File picker — shown when user types '@'
-        self.file_picker = FilePicker()
+        self.file_picker = FilePicker(theme=self._theme.select_list)
         self._at_pos: int = 0  # char index of '@' in input text when picker opened
 
         # Inline pickers — rendered in the content stream below the input
@@ -162,6 +188,7 @@ class Layout(Component):
         self._autocomplete = AutocompleteManager(
             max_visible=autocomplete_max_visible,
             request_render=tui.request_render,
+            theme=self._theme.select_list,
         )
 
         # Register zones with TUI in render order.  widgets_above, widgets_below,
@@ -512,7 +539,7 @@ class Layout(Component):
 
             # Autocomplete navigation (extension triggers + command arg completions)
             consumed, new_text = self._autocomplete.handle_input(
-                event, self.input.text, self.input._cursor
+                event, self.input.text, self.input.cursor
             )
             if consumed:
                 if new_text is not None:
@@ -594,7 +621,7 @@ class Layout(Component):
         import shlex
 
         if not text.startswith("/") or " " not in text:
-            self.input._arg_hint = ""
+            self.input.arg_hint = ""
             return
         space_idx = text.index(" ")
         cmd_name = text[1:space_idx]
@@ -604,12 +631,12 @@ class Layout(Component):
             None,
         )
         if cmd is None or not cmd.argument_hint:
-            self.input._arg_hint = ""
+            self.input.arg_hint = ""
             return
         hint_raw = cmd.argument_hint.strip()
         placeholders = re.findall(r"<[^>]+>", hint_raw)
         if not placeholders:
-            self.input._arg_hint = "" if args_part.strip() else hint_raw
+            self.input.arg_hint = "" if args_part.strip() else hint_raw
             return
         # Use shlex so quoted "multi word arg" counts as one token (matches expand.py)
         try:
@@ -620,12 +647,17 @@ class Layout(Component):
         remaining = placeholders[n_started:]
         if remaining:
             mid_token = bool(args_part) and not args_part[-1].isspace()
-            self.input._arg_hint = (" " if mid_token else "") + " ".join(remaining)
+            self.input.arg_hint = (" " if mid_token else "") + " ".join(remaining)
         else:
-            self.input._arg_hint = ""
+            self.input.arg_hint = ""
 
     def _sync_pickers(self) -> None:
         """After every keystroke, decide which picker (if any) should be visible."""
+        # Arg-hints, the dynamic prefix, and history-aware pickers all need the
+        # optional editor surface; a custom editor without it keeps working, just
+        # without these enrichments.
+        if not _has_editor_extras(self.input):
+            return
         text = self.input.text
         self._update_arg_hint(text)
 
@@ -636,14 +668,14 @@ class Layout(Component):
         in_shell = text.startswith("!")
         desired_prefix = "! " if in_shell else self._theme.input.prefix
         desired_strip = 1 if in_shell else 0
-        if self.input._prefix != desired_prefix:
-            self.input._prefix = desired_prefix
-        if self.input._visual_strip != desired_strip:
-            self.input._visual_strip = desired_strip
+        if self.input.prefix != desired_prefix:
+            self.input.prefix = desired_prefix
+        if self.input.visual_strip != desired_strip:
+            self.input.visual_strip = desired_strip
 
         # File picker: activated by '@' with no space between '@' and cursor.
         # Suppressed while browsing history so past @mentions don't hijack focus.
-        at_info = self._find_at_query(text) if self.input._history_idx == -1 else None
+        at_info = self._find_at_query(text) if self.input.history_idx == -1 else None
         if at_info is not None:
             at_pos, query = at_info
             if not self.file_picker.active:
@@ -662,7 +694,7 @@ class Layout(Component):
         # Command palette: activated by leading '/' with no space.
         # Suppressed while the user is browsing history so navigating past
         # a previously-run slash command doesn't hijack focus.
-        if text.startswith("/") and " " not in text and self.input._history_idx == -1:
+        if text.startswith("/") and " " not in text and self.input.history_idx == -1:
             self.palette.set_commands(self._all_commands)
             self.palette.set_query(text[1:])
             self._autocomplete.clear()
@@ -671,14 +703,14 @@ class Layout(Component):
         self.palette.set_commands([])
 
         # Delegate all autocomplete logic (cmd args + extension triggers) to the manager
-        self._autocomplete.sync(text, self.input._cursor, self._all_commands)
+        self._autocomplete.sync(text, self.input.cursor, self._all_commands)
 
     def _find_at_query(self, text: str) -> tuple[int, str] | None:
         """
         Find the rightmost '@' before the cursor whose following text has no spaces.
         Returns (at_pos, query_after_@) or None.
         """
-        cursor = self.input._cursor
+        cursor = self.input.cursor
         before = text[:cursor]
         at_pos = before.rfind("@")
         if at_pos == -1:
@@ -694,7 +726,7 @@ class Layout(Component):
         """Tab pressed while file picker is active."""
         entry = self.file_picker.enter_selected()
         text = self.input.text
-        cursor = self.input._cursor
+        cursor = self.input.cursor
 
         if entry is None:
             rel = self.file_picker.cwd_relative_path
@@ -721,7 +753,7 @@ class Layout(Component):
         if sel:
             self.input.set_text(f"/{sel.name}")
             self.palette.set_commands([])
-            self.input._submit()
+            self.input.submit()
 
     # -------------------------------------------------------------------------
     # Helpers for the app layer
@@ -741,17 +773,17 @@ class Layout(Component):
     def on_submit(self, callback: Callable[[str], None]) -> None:
         """Register callback for user submission."""
         self._stored_submit_cb = callback
-        self.input._on_submit = callback
+        self.input.on_submit = callback
 
     def on_followup(self, callback: Callable[[str], None]) -> None:
         """Register callback for follow-up messages."""
         self._stored_followup_cb = callback
-        self.input._on_followup = callback
+        self.input.on_followup = callback
 
     def on_dequeue(self, callback: Callable[[], None]) -> None:
         """Register callback for dequeue action."""
         self._stored_dequeue_cb = callback
-        self.input._on_dequeue = callback
+        self.input.on_dequeue = callback
 
     # -------------------------------------------------------------------------
     # Extension customization
@@ -960,13 +992,14 @@ class Layout(Component):
             )
         else:
             new_input = factory(self._theme.input, get_keybindings())
+            _validate_editor(new_input)
         self.input = new_input
         if self._stored_submit_cb is not None:
-            self.input._on_submit = self._stored_submit_cb
+            self.input.on_submit = self._stored_submit_cb
         if self._stored_followup_cb is not None:
-            self.input._on_followup = self._stored_followup_cb
+            self.input.on_followup = self._stored_followup_cb
         if self._stored_dequeue_cb is not None:
-            self.input._on_dequeue = self._stored_dequeue_cb
+            self.input.on_dequeue = self._stored_dequeue_cb
         self._tui.request_render()
 
     def set_pending_queue(
@@ -1013,14 +1046,23 @@ class Layout(Component):
     # Theme
     # -------------------------------------------------------------------------
 
+    @property
+    def theme(self) -> LayoutTheme:
+        """The active layout theme."""
+        return self._theme
+
     def set_theme(self, theme: LayoutTheme) -> None:
         """Swap the active theme and propagate it to every child component."""
         self._theme = theme
         self.messages.set_theme(theme.message)
         self.messages.set_user_prefix(theme.input.prefix)
         self.spinner.set_theme(theme.spinner)
-        self.input._prefix = theme.input.prefix
-        self.input._placeholder = theme.input.placeholder
+        self.palette.set_theme(theme.select_list)
+        self.file_picker.set_theme(theme.select_list)
+        self._autocomplete.set_theme(theme.select_list)
+        if _has_editor_extras(self.input):
+            self.input.prefix = theme.input.prefix
+            self.input.placeholder = theme.input.placeholder
         self._tui.request_render()
 
     # -------------------------------------------------------------------------
@@ -1055,7 +1097,7 @@ class Layout(Component):
         """
         from tau.tui.components.model_palette import ModelSelectorModal
 
-        modal = ModelSelectorModal(sections, initial=initial)
+        modal = ModelSelectorModal(sections, initial=initial, theme=self._theme)
         self._active_selector = InlineSelector(
             kind="model",
             selector=modal,
@@ -1079,7 +1121,9 @@ class Layout(Component):
         """Open a theme selector with live preview support."""
         from tau.tui.components.modal import ListModal
 
-        modal = ListModal(names, current, "Theme", "Select color theme", on_preview=on_preview)
+        modal = ListModal(
+            names, current, "Theme", "Select color theme", on_preview=on_preview, theme=self._theme
+        )
         self._active_selector = InlineSelector(
             kind="theme",
             selector=modal,
@@ -1098,7 +1142,9 @@ class Layout(Component):
         """Open an effort/thinking level selector modal."""
         from tau.tui.components.modal import ListModal
 
-        modal = ListModal(levels, current, "Thinking Effort", "Select effort level")
+        modal = ListModal(
+            levels, current, "Thinking Effort", "Select effort level", theme=self._theme
+        )
         self._active_selector = InlineSelector(
             kind="effort",
             selector=modal,
@@ -1137,6 +1183,7 @@ class Layout(Component):
             all_sessions_loader=all_sessions_loader or (lambda: []),
             current_session_path=current_session_path,
             max_visible=self._picker_max_visible,
+            theme=self._theme,
         )
         self._active_selector = InlineSelector(
             kind="resume",

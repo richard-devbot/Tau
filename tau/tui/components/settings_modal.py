@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, DIM, RESET, cursor_block
+from tau.tui.ansi import cursor_block
+
+if TYPE_CHECKING:
+    from tau.tui.theme import LayoutTheme
 
 
 @dataclass
@@ -36,6 +40,7 @@ class SettingsModal:
         on_change: Callable[[str, str], None],
         max_visible: int = 10,
         title: str = "",
+        theme: LayoutTheme | None = None,
     ) -> None:
         self._all_items = items
         self._filtered: list[SettingItem] = list(items)
@@ -44,6 +49,12 @@ class SettingsModal:
         self._title = title
         self._selected = 0
         self._search = ""
+
+        if theme is None:
+            from tau.tui.theme import LayoutTheme as _LT
+
+            theme = _LT()
+        self._theme = theme
 
         # Submenu state — either a ListModal (for submenu_items) or a nested SettingsModal
         self._submenu: object | None = None
@@ -106,6 +117,7 @@ class SettingsModal:
                 item.submenu_settings,
                 item.submenu_on_change or self._on_change,
                 title=item.submenu_title or item.label,
+                theme=self._theme,
             )
             self._submenu_id = item.id
         elif item.submenu_items:
@@ -116,6 +128,7 @@ class SettingsModal:
                 item.current_value,
                 item.submenu_title or item.label,
                 item.description,
+                theme=self._theme,
             )
             self._submenu_id = item.id
         elif item.text_input:
@@ -175,23 +188,24 @@ class SettingsModal:
         if self._submenu is not None:
             return self._submenu.render(width)  # type: ignore[attr-defined]
 
-        divider = BRIGHT_BLACK + "─" * width + RESET
+        t = self._theme
+        divider = t.border("─" * width)
         lines: list[str] = []
 
         if self._title:
-            lines.append(f"  {BOLD}{self._title}{RESET}")
+            lines.append("  " + t.emphasis(self._title))
             lines.append(divider)
 
         if self._editing:
-            lines.append(f"  {DIM}editing — enter to confirm, esc to cancel{RESET}")
+            lines.append("  " + t.muted("editing — enter to confirm, esc to cancel"))
         elif self._search:
-            lines.append(f"  {DIM}/{RESET}{self._search}█")
+            lines.append(f"  {t.muted('/')}{self._search}█")
         else:
-            lines.append(f"  {DIM}type to search…{RESET}")
+            lines.append("  " + t.muted("type to search…"))
         lines.append(divider)
 
         if not self._filtered:
-            lines.append(f"  {DIM}No matching settings{RESET}")
+            lines.append("  " + t.muted("No matching settings"))
         else:
             max_label = min(28, max(len(i.label) for i in self._filtered))
             count = len(self._filtered)
@@ -199,7 +213,7 @@ class SettingsModal:
             start = max(0, min(self._selected - visible // 2, count - visible))
 
             if start > 0:
-                lines.append(f"  {DIM}↑ {start} more{RESET}")
+                lines.append("  " + t.muted(f"↑ {start} more"))
 
             for i in range(start, min(start + visible, count)):
                 item = self._filtered[i]
@@ -209,10 +223,7 @@ class SettingsModal:
 
                 if is_sel and self._editing:
                     val_display = self._edit_buffer + cursor_block()
-                    row = (
-                        f"  {BOLD}{BRIGHT_WHITE}→ {label_padded}{RESET}"
-                        f"  {BRIGHT_WHITE}{val_display}{RESET}"
-                    )
+                    row = f"  {t.emphasis(f'→ {label_padded}')}  {t.emphasis(val_display)}"
                 else:
                     val_display = (
                         (item.current_value.replace("_", " ") + " ▸")
@@ -220,32 +231,29 @@ class SettingsModal:
                         else item.current_value.replace("_", " ")
                     )
                     if is_sel:
-                        row = (
-                            f"  {BOLD}{BRIGHT_WHITE}→ {label_padded}{RESET}"
-                            f"  {BRIGHT_WHITE}{val_display}{RESET}"
-                        )
+                        row = f"  {t.emphasis(f'→ {label_padded}')}  {t.emphasis(val_display)}"
                     else:
-                        row = f"    {DIM}{label_padded}{RESET}  {val_display}"
+                        row = f"    {t.muted(label_padded)}  {val_display}"
                 lines.append(row)
 
             remaining = count - (start + visible)
             if remaining > 0:
-                lines.append(f"  {DIM}↓ {remaining} more{RESET}")
+                lines.append("  " + t.muted(f"↓ {remaining} more"))
 
         lines.append(divider)
         desc = ""
         if self._filtered and 0 <= self._selected < len(self._filtered):
             desc = self._filtered[self._selected].description
-        lines.append(f"  {DIM}{desc}{RESET}" if desc else f"  {DIM}—{RESET}")
+        lines.append("  " + t.muted(desc) if desc else "  " + t.muted("—"))
 
         lines.append(divider)
         if self._editing:
-            lines.append(f"  {DIM}enter confirm  esc cancel{RESET}")
+            lines.append("  " + t.muted("enter confirm  esc cancel"))
         elif self._title:
-            lines.append(f"  {DIM}↑/↓ move  enter/spc toggle  esc back  type to search{RESET}")
+            lines.append("  " + t.muted("↑/↓ move  enter/spc toggle  esc back  type to search"))
         else:
             lines.append(
-                f"  {DIM}↑/↓ move  enter/spc toggle  esc save & close  type to search{RESET}"
+                "  " + t.muted("↑/↓ move  enter/spc toggle  esc save & close  type to search")
             )
 
         return lines

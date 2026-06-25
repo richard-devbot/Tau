@@ -11,7 +11,9 @@ from tau.tui.ansi import (
     BRIGHT_RED,
     BRIGHT_WHITE,
     BRIGHT_YELLOW,
+    CYAN,
     DIM,
+    GREEN,
     ITALIC,
     RESET,
     fg,
@@ -138,6 +140,9 @@ class SelectListTheme:
     normal_desc: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_BLACK))
     indicator: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_BLACK))
     empty: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_BLACK))
+    # Emphasised entry — e.g. directories in the file picker. Lists that have no
+    # such distinction simply ignore it.
+    selected_dir: ColorFn = field(default_factory=lambda: lambda s: BOLD + CYAN + s + RESET)
     # Optional full-line background for the selected row (None = no background)
     selected_bg: ColorFn | None = field(default_factory=lambda: None)
 
@@ -165,6 +170,19 @@ class LayoutTheme:
     divider: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_BLACK))
     divider_command: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_CYAN))
     divider_execute: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_YELLOW))
+
+    # Shared semantic roles (named after pi's vocabulary) used by selectors,
+    # modals, and other chrome so a single theme key recolours them everywhere.
+    muted: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_BLACK))  # dim chrome/secondary text
+    emphasis: ColorFn = field(  # highlighted/active item
+        default_factory=lambda: lambda s: BOLD + BRIGHT_WHITE + s + RESET
+    )
+    success: ColorFn = field(default_factory=lambda: _wrap(GREEN))  # positive / current
+    error: ColorFn = field(default_factory=lambda: lambda s: BOLD + BRIGHT_RED + s + RESET)
+    warning: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_YELLOW))  # caution / highlight
+    accent: ColorFn = field(default_factory=lambda: _wrap(CYAN))  # highlighted value/path
+    border: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_BLACK))  # modal/box borders
+
     spinner: SpinnerTheme = field(default_factory=SpinnerTheme)
     message: MessageTheme = field(default_factory=MessageTheme)
     input: InputTheme = field(default_factory=InputTheme)

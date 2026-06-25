@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tau.tui.ansi import BOLD, BRIGHT_BLACK, BRIGHT_WHITE, RESET
+from tau.tui.ansi import visible_width
 from tau.tui.component import Component
 from tau.tui.fuzzy import fuzzy_filter
 from tau.tui.input import InputEvent, Key, KeyEvent
@@ -10,6 +10,7 @@ if True:  # avoid circular at runtime
 
     if TYPE_CHECKING:
         from tau.commands.types import CommandInfo
+        from tau.tui.theme import SelectListTheme
 
 VISIBLE_ROWS = 5
 
@@ -20,11 +21,18 @@ class CommandPalette(Component):
     Up/down arrows (and ctrl+p / ctrl+n) scroll selection.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, theme: SelectListTheme | None = None) -> None:
         self._all_commands: list[CommandInfo] = []
         self._commands: list[CommandInfo] = []
         self._selected = 0
         self._query = ""
+
+        from tau.tui.theme import SelectListTheme as _ST
+
+        self._theme = theme or _ST()
+
+    def set_theme(self, theme: SelectListTheme) -> None:
+        self._theme = theme
 
     # -------------------------------------------------------------------------
     # Public API
@@ -88,11 +96,12 @@ class CommandPalette(Component):
         )
         desc_w = max(0, width - label_w - 4)  # 4 = "  " + " " + margin
 
+        t = self._theme
         lines: list[str] = []
 
         # Scroll-up indicator
         if start > 0:
-            lines.append(BRIGHT_BLACK + f"  ↑ {start} more" + RESET)
+            lines.append(t.indicator(f"  ↑ {start} more"))
 
         for i in range(start, start + visible):
             cmd = self._commands[i]
@@ -103,18 +112,19 @@ class CommandPalette(Component):
             desc = cmd.description[:desc_w] if desc_w > 0 else ""
 
             if is_sel:
-                row = (
-                    "  " + BOLD + BRIGHT_WHITE + label + RESET + "  " + BRIGHT_BLACK + desc + RESET
-                )
+                row = "  " + t.selected_label(label) + "  " + t.selected_desc(desc)
+                if t.selected_bg:
+                    fill = max(0, width - visible_width(row))
+                    row = t.selected_bg(row + " " * fill)
             else:
-                row = "  " + BRIGHT_BLACK + label + "  " + desc + RESET
+                row = "  " + t.normal_label(label) + "  " + t.normal_desc(desc)
 
             lines.append(row)
 
         # Scroll-down indicator
         remaining = count - (start + visible)
         if remaining > 0:
-            lines.append(BRIGHT_BLACK + f"  ↓ {remaining} more" + RESET)
+            lines.append(t.indicator(f"  ↓ {remaining} more"))
 
         return lines
 

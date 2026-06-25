@@ -145,6 +145,32 @@ def _c(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_var_map(raw_vars: dict) -> dict[str, str]:
+    """Flatten a ``vars`` palette, following references between vars (one var may
+    point at another). Cyclic/dangling references resolve to their last value.
+    """
+    resolved: dict[str, str] = {}
+    for key, value in raw_vars.items():
+        seen: set[str] = set()
+        while isinstance(value, str) and value in raw_vars and value not in seen:
+            seen.add(value)
+            value = raw_vars[value]
+        if isinstance(value, str):
+            resolved[key] = value
+    return resolved
+
+
+def _apply_vars(value: Any, var_map: dict[str, str]) -> Any:
+    """Substitute a ``vars`` reference inside a color spec (string or ``{"color": …}``)."""
+    if isinstance(value, str):
+        return var_map.get(value, value)
+    if isinstance(value, dict):
+        c = value.get("color")
+        if isinstance(c, str) and c in var_map:
+            return {**value, "color": var_map[c]}
+    return value
+
+
 def load_theme_from_dict(data: dict) -> tuple[LayoutTheme | None, str | None]:
     """
     Parse a validated theme dict into a LayoutTheme.
@@ -154,7 +180,14 @@ def load_theme_from_dict(data: dict) -> tuple[LayoutTheme | None, str | None]:
     if not name or not isinstance(name, str):
         return None, "missing 'name' field"
 
-    colors: dict = data.get("colors", {})
+    # Resolve the optional ``vars`` palette: a theme can define named colours once
+    # (e.g. {"brand": "#00d7ff"}) and reference them from ``colors`` by name.
+    raw_vars = data.get("vars", {})
+    var_map = _resolve_var_map(raw_vars) if isinstance(raw_vars, dict) else {}
+    colors_in: dict = data.get("colors", {})
+    colors: dict = (
+        {k: _apply_vars(v, var_map) for k, v in colors_in.items()} if var_map else colors_in
+    )
     input_cfg: dict = data.get("input", {})
     spinner_cfg: dict = data.get("spinner", {})
 
@@ -188,12 +221,19 @@ def load_theme_from_dict(data: dict) -> tuple[LayoutTheme | None, str | None]:
         error_label=_c(colors, "error_label", bold=True) or d.message.error_label,
         dim=_c(colors, "dim") or d.message.dim,
         stream_cursor=_c(colors, "stream_cursor") or d.message.stream_cursor,
+        diff_added=_c(colors, "diff_added") or d.message.diff_added,
+        diff_removed=_c(colors, "diff_removed") or d.message.diff_removed,
+        diff_context=_c(colors, "diff_context") or d.message.diff_context,
+        diff_hunk=_c(colors, "diff_hunk") or d.message.diff_hunk,
         show_thinking=bool(data["show_thinking"])
         if "show_thinking" in data
         else d.message.show_thinking,
         show_tool_calls=bool(data["show_tool_calls"])
         if "show_tool_calls" in data
         else d.message.show_tool_calls,
+        show_images=bool(data["show_images"])
+        if "show_images" in data
+        else d.message.show_images,
         markdown=md,
     )
 
@@ -217,6 +257,7 @@ def load_theme_from_dict(data: dict) -> tuple[LayoutTheme | None, str | None]:
         normal_desc=_c(colors, "normal_desc") or d.select_list.normal_desc,
         indicator=_c(colors, "indicator") or d.select_list.indicator,
         empty=_c(colors, "empty") or d.select_list.empty,
+        selected_dir=_c(colors, "selected_dir", bold=True) or d.select_list.selected_dir,
         selected_bg=_c(colors, "selected_bg") or d.select_list.selected_bg,
     )
 
@@ -227,6 +268,15 @@ def load_theme_from_dict(data: dict) -> tuple[LayoutTheme | None, str | None]:
 
     layout = LayoutTheme(
         divider=_c(colors, "divider") or d.divider,
+        divider_command=_c(colors, "divider_command") or d.divider_command,
+        divider_execute=_c(colors, "divider_execute") or d.divider_execute,
+        muted=_c(colors, "muted") or d.muted,
+        emphasis=_c(colors, "emphasis", bold=True) or d.emphasis,
+        success=_c(colors, "success") or d.success,
+        error=_c(colors, "error", bold=True) or d.error,
+        warning=_c(colors, "warning") or d.warning,
+        accent=_c(colors, "accent") or d.accent,
+        border=_c(colors, "border") or d.border,
         spinner=spinner,
         message=msg,
         input=input_theme,
@@ -263,11 +313,13 @@ def _parse_theme_file(path: Path) -> tuple[dict | None, str | None]:
 _VALID_TOP_KEYS = frozenset(
     {
         "name",
+        "vars",
         "colors",
         "input",
         "spinner",
         "show_thinking",
         "show_tool_calls",
+        "show_images",
         "code_syntax_style",
     }
 )
@@ -278,13 +330,26 @@ _VALID_COLOR_KEYS = frozenset(
         "code_block",
         "code_block_border",
         "code_inline",
+        "accent",
+        "border",
+        "diff_added",
+        "diff_context",
+        "diff_hunk",
+        "diff_removed",
         "dim",
         "divider",
+        "divider_command",
+        "divider_execute",
+        "emphasis",
         "empty",
+        "error",
         "error_label",
         "heading",
         "hr",
         "indicator",
+        "muted",
+        "success",
+        "warning",
         "italic",
         "link_text",
         "link_url",
@@ -295,6 +360,7 @@ _VALID_COLOR_KEYS = frozenset(
         "quote_border",
         "selected_bg",
         "selected_desc",
+        "selected_dir",
         "selected_label",
         "spinner_frame",
         "spinner_label",
@@ -326,12 +392,20 @@ def validate_theme_dict(data: dict) -> list[str]:
     for key in data:
         if key not in _VALID_TOP_KEYS:
             warnings.append(f"unknown key '{key}'")
+
+    raw_vars = data.get("vars", {})
+    var_map = _resolve_var_map(raw_vars) if isinstance(raw_vars, dict) else {}
+    if isinstance(raw_vars, dict):
+        for vkey, vval in raw_vars.items():
+            if not _valid_color_value(_apply_vars(vval, var_map)):
+                warnings.append(f"invalid var value for '{vkey}': {vval!r}")
+
     colors = data.get("colors", {})
     if isinstance(colors, dict):
         for key, val in colors.items():
             if key not in _VALID_COLOR_KEYS:
                 warnings.append(f"unknown color '{key}'")
-            elif not _valid_color_value(val):
+            elif not _valid_color_value(_apply_vars(val, var_map)):
                 warnings.append(f"invalid color value for '{key}': {val!r}")
     return warnings
 

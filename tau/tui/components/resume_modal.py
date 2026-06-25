@@ -5,17 +5,10 @@ import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from tau.tui.ansi import (
-    BOLD,
-    BRIGHT_BLACK,
-    BRIGHT_RED,
-    BRIGHT_WHITE,
-    BRIGHT_YELLOW,
-    CYAN,
-    DIM,
-    RESET,
-)
+if TYPE_CHECKING:
+    from tau.tui.theme import LayoutTheme
 
 _MEDIA_UUID_PATTERN = re.compile(r"\[(?:image|audio|video):([^\]]+)\]")
 
@@ -112,12 +105,19 @@ class ResumeModal:
         all_sessions_loader: Callable[[], list],
         current_session_path: Path | None = None,
         max_visible: int = 10,
+        theme: LayoutTheme | None = None,
     ) -> None:
         self._current = list(current_sessions)
         self._all_loader = all_sessions_loader
         self._all: list | None = None
         self._cur_path = current_session_path
         self._max_visible = max_visible
+
+        if theme is None:
+            from tau.tui.theme import LayoutTheme as _LT
+
+            theme = _LT()
+        self._theme = theme
 
         self._scope = "current"  # "current" | "all"
         self._sort_idx = 0  # index into _SORT_LABELS
@@ -225,18 +225,19 @@ class ResumeModal:
     # ── Render ────────────────────────────────────────────────────────────────
 
     def render(self, width: int) -> list[str]:
-        divider = BRIGHT_BLACK + "─" * width + RESET
+        t = self._theme
+        divider = t.border("─" * width)
         lines: list[str] = []
 
         # Header bar
         scope_label = (
-            f"{BRIGHT_WHITE}◉ Folder{RESET}  {DIM}○ All{RESET}"
+            f"{t.emphasis('◉ Folder')}  {t.muted('○ All')}"
             if self._scope == "current"
-            else f"{DIM}○ Folder{RESET}  {BRIGHT_WHITE}◉ All{RESET}"
+            else f"{t.muted('○ Folder')}  {t.emphasis('◉ All')}"
         )
-        sort_label = f"{DIM}Sort:{RESET} {CYAN}{self._SORT_LABELS[self._sort_idx]}{RESET}"
+        sort_label = f"{t.muted('Sort:')} {t.accent(self._SORT_LABELS[self._sort_idx])}"
         header_right = f"{scope_label}  {sort_label}"
-        title_left = f"  {BOLD}{BRIGHT_WHITE}Resume Session{RESET}"
+        title_left = f"  {t.emphasis('Resume Session')}"
         # Truncate right to fit
         right_plain_len = _visible_len(header_right)
         pad = max(0, width - _visible_len(title_left) - right_plain_len - 1)
@@ -246,34 +247,35 @@ class ResumeModal:
         if self._confirming_delete is not None:
             del_path = self._confirming_delete
             short = _shorten(del_path)[: width - 20]
-            lines.append(f"  {BRIGHT_RED}Delete '{short}'? enter=yes  esc=no{RESET}")
+            lines.append("  " + t.error(f"Delete '{short}'? enter=yes  esc=no"))
         elif self._status_msg:
-            lines.append(f"  {BRIGHT_YELLOW}{self._status_msg}{RESET}")
+            lines.append("  " + t.warning(self._status_msg))
         else:
-            hints = f"  {DIM}tab scope  ctrl+r sort  ctrl+d delete  type search  esc cancel{RESET}"
-            lines.append(hints)
+            lines.append(
+                "  " + t.muted("tab scope  ctrl+r sort  ctrl+d delete  type search  esc cancel")
+            )
 
         # Search line
         if self._search:
-            lines.append(f"  {DIM}/{self._search}█{RESET}")
+            lines.append("  " + t.muted(f"/{self._search}█"))
 
         lines.append(divider)
 
         # Session list
         if not self._filtered:
             if self._search:
-                lines.append(f"  {DIM}No sessions match '{self._search}'{RESET}")
+                lines.append("  " + t.muted(f"No sessions match '{self._search}'"))
             elif self._scope == "current":
-                lines.append(f"  {DIM}No sessions in current folder — press Tab for all{RESET}")
+                lines.append("  " + t.muted("No sessions in current folder — press Tab for all"))
             else:
-                lines.append(f"  {DIM}No sessions found{RESET}")
+                lines.append("  " + t.muted("No sessions found"))
         else:
             count = len(self._filtered)
             visible = min(self._max_visible, count)
             start = max(0, min(self._selected - visible // 2, count - visible))
 
             if start > 0:
-                lines.append(f"  {DIM}↑ {start} more{RESET}")
+                lines.append("  " + t.muted(f"↑ {start} more"))
 
             show_cwd = self._scope == "all"
 
@@ -300,26 +302,26 @@ class ResumeModal:
                 msg = display[: max(8, available)]
 
                 if is_del_target:
-                    msg_styled = f"{BRIGHT_RED}{BOLD}{msg}{RESET}"
-                    right_styled = f"{BRIGHT_RED}{right}{RESET}"
+                    msg_styled = t.error(msg)
+                    right_styled = t.error(right)
                 elif is_sel:
-                    msg_styled = f"{BOLD}{BRIGHT_WHITE}{msg}{RESET}"
-                    right_styled = f"{DIM}{right}{RESET}"
+                    msg_styled = t.emphasis(msg)
+                    right_styled = t.muted(right)
                 elif session.name:
-                    msg_styled = f"{BRIGHT_YELLOW}{msg}{RESET}"
-                    right_styled = f"{DIM}{right}{RESET}"
+                    msg_styled = t.warning(msg)
+                    right_styled = t.muted(right)
                 else:
                     msg_styled = msg
-                    right_styled = f"{DIM}{right}{RESET}"
+                    right_styled = t.muted(right)
 
-                cursor_styled = f"{BRIGHT_WHITE}{cursor}{RESET}" if is_sel else cursor
+                cursor_styled = t.emphasis(cursor) if is_sel else cursor
                 left = cursor_styled + msg_styled
                 spacing = max(1, width - _visible_len(left) - right_len)
                 lines.append(left + " " * spacing + right_styled)
 
             remaining = count - (start + visible)
             if remaining > 0:
-                lines.append(f"  {DIM}↓ {remaining} more{RESET}")
+                lines.append("  " + t.muted(f"↓ {remaining} more"))
 
         lines.append(divider)
         return lines
