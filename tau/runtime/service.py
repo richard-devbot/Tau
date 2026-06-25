@@ -190,16 +190,24 @@ class Runtime:
             case t:
                 await self.invoke(t, options)
 
-    async def set_model(self, model_id: str, provider: str | None = None) -> None:
-        """Swap the active model. Only safe to call when the agent is idle."""
+    async def set_model(self, model_id: str, provider: str | None = None) -> bool:
+        """Swap the active model. Only safe to call when the agent is idle.
+
+        Returns ``True`` if the swap succeeded, ``False`` if there is no active
+        agent or the model could not be constructed (e.g. unknown id or missing
+        credentials for its provider).
+        """
         from tau.hooks.tui import ModelSelectEvent
         from tau.inference.api.text.service import TextLLM
 
         agent = self._context.agent
         if agent is None:
-            return
+            return False
         old_model = agent._engine.llm.model
-        new_llm = TextLLM(model_id=model_id, provider=provider)
+        try:
+            new_llm = TextLLM(model_id=model_id, provider=provider)
+        except Exception:
+            return False
         if new_llm.model.thinking:
             new_llm.api.options.thinking_level = new_llm.model.thinking_level
         agent._engine.set_llm(new_llm)
@@ -218,6 +226,7 @@ class Runtime:
         sm = self._context.settings_manager
         if sm is not None:
             sm.set_model_ref("text", new_llm.provider_id, model_id)
+        return True
 
     async def execute_terminal(self, cmd: str, exclude: bool = False) -> None:
         """Run a shell command, stream output chunks, persist to session, and emit events."""

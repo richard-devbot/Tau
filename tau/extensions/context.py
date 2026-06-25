@@ -131,6 +131,26 @@ class ExtensionContext:
         """Whether the active model supports extended thinking."""
         return self._model_thinking
 
+    async def set_model(self, model_id: str, provider: str | None = None) -> bool:
+        """Switch the active model, emitting ``model_select``.
+
+        Returns ``True`` on success, ``False`` when there is no live agent or the
+        model could not be constructed (unknown id, or missing credentials for
+        its provider). Only safe to call when the agent is idle.
+
+        Example::
+
+            @tau.on("session_start")
+            async def pin_model(event, ctx):
+                await ctx.set_model("claude-sonnet-4-6")
+        """
+        if self._runtime is None:
+            return False
+        set_fn = getattr(self._runtime, "set_model", None)
+        if set_fn is None:
+            return False
+        return bool(await set_fn(model_id, provider))
+
     @property
     def llm(self):
         """The active text LLM, or None outside a live agent session.

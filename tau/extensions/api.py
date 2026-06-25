@@ -141,6 +141,79 @@ def _parse_modalities(values: list[str]) -> list:
     return result
 
 
+def _build_stream_api(stream_fn: Callable) -> type:
+    """Wrap a user ``stream`` callable in a ``BaseLLMAPI`` subclass.
+
+    ``stream_fn`` is an async generator ``(context, model, options)`` yielding
+    ``LLMEvent`` objects. The returned class can be passed as a provider's
+    ``api`` so the agent drives a fully custom transport.
+    """
+    from tau.inference.api.text.base import BaseLLMAPI
+
+    class _ConfigStreamAPI(BaseLLMAPI):
+        async def stream(self, context, model):  # type: ignore[override]
+            async for event in stream_fn(context, model, self.options):
+                yield event
+
+    return _ConfigStreamAPI
+
+
+def _build_oauth_provider(provider_id: str, name: str, api_impl: Any, oauth: dict) -> Any:
+    """Build an ``OAuthProvider`` from an extension's ``oauth`` config block.
+
+    Required: ``login`` (async ``(callbacks) -> OAuthCredential``).
+    Optional: ``refresh_token``, ``logout``, ``validate``, ``get_api_key``,
+    ``name``, ``uses_callback_server``.
+    """
+    from tau.inference.provider.types import OAuthProvider
+    from tau.inference.types import AuthType
+
+    login_fn = oauth.get("login")
+    refresh_fn = oauth.get("refresh_token")
+    logout_fn = oauth.get("logout")
+    validate_fn = oauth.get("validate")
+    get_key_fn = oauth.get("get_api_key")
+    disp_name = oauth.get("name", name)
+    callback_server = bool(oauth.get("uses_callback_server", False))
+
+    class _ConfigOAuthProvider(OAuthProvider):
+        def __init__(self) -> None:
+            self.id = provider_id
+            self.name = disp_name
+            self.auth_type = AuthType.OAuth
+            self.uses_callback_server = callback_server
+
+        @property
+        def api(self):
+            return api_impl
+
+        async def login(self, callbacks):
+            if login_fn is None:
+                raise NotImplementedError("oauth config is missing a 'login' callable")
+            return await login_fn(callbacks)
+
+        async def refresh_token(self, credential, signal=None):
+            if refresh_fn is None:
+                return credential
+            return await refresh_fn(credential, signal)
+
+        async def logout(self, credential):
+            if logout_fn is not None:
+                await logout_fn(credential)
+
+        async def validate(self, credential, signal=None):
+            if validate_fn is not None:
+                return await validate_fn(credential, signal)
+            return not self.is_expired(credential)
+
+        def get_api_key(self, credential):
+            if get_key_fn is not None:
+                return get_key_fn(credential)
+            return credential.access
+
+    return _ConfigOAuthProvider()
+
+
 # ── ExtensionAPI ──────────────────────────────────────────────────────────────
 
 
@@ -455,6 +528,18 @@ class ExtensionAPI:
           ``headers``   (dict[str,str])  — extra HTTP headers sent with each
                         request. Values may also be ``"$ENV_VAR"`` / ``"!command"``
                         references, resolved once at runtime (cached).
+          ``auth_header`` (bool)         — when true, adds an
+                        ``Authorization: Bearer <api_key>`` header automatically.
+          ``stream``    (callable)       — custom transport. An async generator
+                        ``(context, model, options)`` yielding ``LLMEvent``
+                        objects. Replaces the built-in ``api`` so the agent talks
+                        to a fully custom backend.
+          ``oauth``     (dict)           — register an OAuth provider for
+                        ``/login`` support instead of a static key. Keys:
+                        ``login`` (async ``(callbacks) -> OAuthCredential``,
+                        required), and optional ``refresh_token``, ``logout``,
+                        ``validate``, ``get_api_key``, ``name``,
+                        ``uses_callback_server``.
           ``models``    (list[dict])     — model definitions, each with at minimum
                         ``{"id": "model-name"}``.
                         Optional fields: ``name`` (str), ``context_window`` (int),
@@ -491,12 +576,22 @@ class ExtensionAPI:
         # they are resolved at request-construction time, once and cached.
         headers: dict | None = config.get("headers")
 
-        provider = APIProvider(
-            id=provider_id,
-            name=name,
-            api=api,
-            options=LLMOptions(base_url=base_url, api_key=api_key, headers=headers),
-        )
+        # Custom transport: a user `stream` callable replaces the built-in api.
+        stream_fn = config.get("stream")
+        api_impl: Any = _build_stream_api(stream_fn) if stream_fn is not None else api
+
+        oauth_cfg = config.get("oauth")
+        if oauth_cfg is not None:
+            provider: Any = _build_oauth_provider(provider_id, name, api_impl, oauth_cfg)
+        else:
+            if config.get("auth_header") and api_key:
+                headers = {**(headers or {}), "Authorization": f"Bearer {api_key}"}
+            provider = APIProvider(
+                id=provider_id,
+                name=name,
+                api=api_impl,
+                options=LLMOptions(base_url=base_url, api_key=api_key, headers=headers),
+            )
         TextLLM._builtin_providers().register(provider)
 
         models = TextLLM._builtin_models()
@@ -731,7 +826,16 @@ class ExtensionAPI:
     def get_all_tools(self) -> list[dict]:
         """Return all registered tools (both active and currently disabled).
 
-        Each dict contains ``name`` and ``description`` keys.
+        Each dict contains:
+          ``name``              — the tool name used in LLM tool calls.
+          ``description``       — the description shown to the model.
+          ``parameters``        — the JSON Schema for the tool's arguments
+                                  (``None`` if the tool exposes no schema).
+          ``prompt_guidelines`` — extra system-prompt guidance for the tool, or
+                                  ``None``.
+
+        Use this to introspect another extension's (or a built-in's) tool
+        contract — e.g. to wrap it, validate against it, or surface it in a UI.
         """
         runtime = self._runtime_ref.runtime if self._runtime_ref is not None else None
         if runtime is None:
@@ -742,8 +846,25 @@ class ExtensionAPI:
         registry = getattr(ctx, "tool_registry", None)
         if registry is None:
             return []
+
+        def _schema(t: Any) -> dict | None:
+            schema = getattr(t, "schema", None)
+            getter = getattr(schema, "model_json_schema", None)
+            if getter is None:
+                return None
+            try:
+                return getter()
+            except Exception:
+                return None
+
         return [
-            {"name": t.name, "description": getattr(t, "description", "")} for t in registry.list()
+            {
+                "name": t.name,
+                "description": getattr(t, "description", ""),
+                "parameters": _schema(t),
+                "prompt_guidelines": getattr(t, "prompt_guidelines", None),
+            }
+            for t in registry.list()
         ]
 
     def set_active_tools(self, tool_names: list[str]) -> None:
@@ -808,6 +929,26 @@ class ExtensionAPI:
         hooks = getattr(runtime, "hooks", None)
         if hooks is not None:
             asyncio.ensure_future(hooks.emit(ThinkingLevelSelectEvent(level=tl)))
+
+    def set_model(self, model_id: str, provider: str | None = None) -> None:
+        """Switch the active model, emitting ``model_select``.
+
+        Fire-and-forget: schedules the swap and returns immediately, so it is
+        safe to call from synchronous handlers (e.g. a shortcut or settings
+        ``on_change``). For an awaitable result use ``ctx.set_model()`` inside an
+        event or command handler instead.
+
+        ``provider`` disambiguates when the same model id is served by more than
+        one provider; omit it to use the default.
+        """
+        import asyncio
+
+        runtime = self._runtime_ref.runtime if self._runtime_ref is not None else None
+        if runtime is None:
+            return
+        set_fn = getattr(runtime, "set_model", None)
+        if set_fn is not None:
+            asyncio.ensure_future(set_fn(model_id, provider))
 
     # ── Prompt ────────────────────────────────────────────────────────────────
 

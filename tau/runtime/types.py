@@ -120,14 +120,15 @@ class RuntimeContext:
                     cwd, config_dir=config_dir, project_trusted=False
                 )
                 policy = _global_sm.get_project_trust()
-                if policy == "always":
-                    project_trusted = True
-                elif policy == "never":
-                    project_trusted = False
-                else:
-                    stored = trust_store.get(cwd)
-                    project_trusted = stored if stored is not None else False
-                    _trust_pending = stored is None  # no prior decision → TrustScreen will show
+                match policy:
+                    case "always":
+                        project_trusted = True
+                    case "never":
+                        project_trusted = False
+                    case "ask"|_:
+                        stored = trust_store.get(cwd)
+                        project_trusted = stored if stored is not None else False
+                        _trust_pending = stored is None  # no prior decision → TrustScreen will show
             settings_manager = SettingsManager.create(
                 cwd, config_dir=config_dir, project_trusted=project_trusted
             )
