@@ -13,7 +13,7 @@ _log = logging.getLogger(__name__)
 
 def open_login_selector(ctx: CommandContext) -> None:
     """Step 1 — choose auth type: subscription (OAuth) or API key."""
-    from tau.tui.components.select_list import SelectItem
+    from tau.tui.components.primitives.select_list import SelectItem
 
     provs = _all_providers()
     has_oauth = any(is_oauth for (_id, _name, is_oauth, _key) in provs)
@@ -47,7 +47,7 @@ def open_login_selector(ctx: CommandContext) -> None:
 
 
 def _provider_items(providers: list) -> list:
-    from tau.tui.components.select_list import SelectItem
+    from tau.tui.components.primitives.select_list import SelectItem
 
     return [SelectItem(label=p.name, description=p.id, value=p.id) for p in providers]
 
@@ -207,7 +207,7 @@ def open_api_key_provider_selector(ctx: CommandContext) -> None:
 
     Lists API-key providers across all modalities (text/audio/image/video).
     """
-    from tau.tui.components.select_list import SelectItem
+    from tau.tui.components.primitives.select_list import SelectItem
 
     providers = [
         (pid, name)
@@ -272,7 +272,7 @@ def get_palette_overrides() -> dict[str, str]:
 
 def open_logout_selector(ctx: CommandContext) -> None:
     from tau.inference.api.text.service import TextLLM
-    from tau.tui.components.select_list import SelectItem
+    from tau.tui.components.primitives.select_list import SelectItem
 
     TextLLM._auth_manager.reload()  # type: ignore[union-attr]
     stored = TextLLM._auth_manager.list()  # type: ignore[union-attr]

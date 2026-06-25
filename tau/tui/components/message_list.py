@@ -102,11 +102,11 @@ class MessageBlock:
 
     def _render_image(self, key: tuple[int, int], b64: str, mime: str, width: int) -> list[str]:
         if not self._theme.show_images:
-            from tau.tui.components.image import Image
+            from tau.tui.components.primitives.image import Image
 
             return [Image(b64, mime)._fallback_text()]
         if key not in self._image_components:
-            from tau.tui.components.image import Image
+            from tau.tui.components.primitives.image import Image
 
             self._image_components[key] = Image(b64, mime)
         return self._image_components[key].render(width)

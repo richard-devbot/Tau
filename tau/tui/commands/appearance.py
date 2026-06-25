@@ -57,7 +57,7 @@ def open_settings_panel(ctx: CommandContext) -> None:
     from tau.engine.types import FollowupMode, SteeringMode
     from tau.inference.types import ThinkingLevel, Transport
     from tau.themes.registry import AUTO_THEME, DEFAULT_THEME, theme_registry
-    from tau.tui.components.settings_modal import SettingItem, SettingsModal
+    from tau.tui.components.modals.settings_modal import SettingItem, SettingsModal
 
     sm = ctx.runtime.settings_manager
     if sm is None:

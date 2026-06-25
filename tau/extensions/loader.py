@@ -410,7 +410,7 @@ class ExtensionLoader:
         if not schema:
             return
 
-        from tau.tui.components.settings_schema import build_manifest_panel
+        from tau.tui.components.modals.settings_schema import build_manifest_panel
 
         ext_dir = path.parent
         try:

@@ -43,7 +43,7 @@ from collections.abc import Callable
 from typing import Any
 
 from tau.extensions.api import ExtensionSettingsRegistration
-from tau.tui.components.settings_modal import SettingItem
+from tau.tui.components.modals.settings_modal import SettingItem
 
 _log = logging.getLogger(__name__)
 

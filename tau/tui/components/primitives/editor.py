@@ -1,9 +1,9 @@
 """Editor (prompt input) contracts.
 
-These Protocols document the interface the :class:`~tau.tui.components.layout.Layout`
+These Protocols document the interface the :class:`~tau.tui.components.primitives.layout.Layout`
 expects from the prompt editor, so an extension can replace it via
 ``ctx.ui.set_editor_component`` against a defined surface instead of mimicking
-:class:`~tau.tui.components.text_input.TextInput`'s private fields.
+:class:`~tau.tui.components.primitives.text_input.TextInput`'s private fields.
 
 Two tiers, by design:
 

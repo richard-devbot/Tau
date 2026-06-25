@@ -12,7 +12,7 @@ _log = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from tau.message.types import UserMessage
     from tau.runtime.service import Runtime
-    from tau.tui.components.layout import Layout
+    from tau.tui.components.primitives.layout import Layout
     from tau.tui.tui import TUI
 
 

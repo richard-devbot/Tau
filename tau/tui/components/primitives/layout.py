@@ -6,17 +6,16 @@ from typing import TYPE_CHECKING, Any
 
 from tau.tui.component import Component, Container
 from tau.tui.components.autocomplete_manager import AutocompleteManager
-from tau.tui.components.command_palette import CommandPalette
-from tau.tui.components.editor import EditorComponent, EditorExtras
+from tau.tui.components.overlays.command_palette import CommandPalette
+from tau.tui.components.primitives.editor import EditorComponent, EditorExtras
 from tau.tui.components.file_picker import FilePicker
-from tau.tui.components.inline_selector import InlineSelector
+from tau.tui.components.primitives.inline_selector import InlineSelector
 from tau.tui.components.message_list import MessageBlock, MessageList
-from tau.tui.components.model_palette import ModelPalette  # noqa: F401  (kept for compat)
-from tau.tui.components.select_list import SelectItem, SelectList
-from tau.tui.components.spinner import Spinner
-from tau.tui.components.text_input import TextInput
+from tau.tui.components.primitives.select_list import SelectItem, SelectList
+from tau.tui.components.primitives.spinner import Spinner
+from tau.tui.components.primitives.text_input import TextInput
 from tau.tui.components.text_prompt import TextPrompt
-from tau.tui.components.tree_select_list import TreeRow, TreeSelectList
+from tau.tui.components.primitives.tree_select_list import TreeRow, TreeSelectList
 from tau.tui.input import (
     InputEvent,
     KeyEvent,
@@ -52,7 +51,7 @@ def _validate_editor(editor: object) -> None:
 
         logging.getLogger(__name__).warning(
             "Custom editor %r does not satisfy EditorComponent; the prompt may "
-            "misbehave. See tau.tui.components.editor.",
+            "misbehave. See tau.tui.components.primitives.editor.",
             type(editor).__name__,
         )
 
@@ -606,13 +605,6 @@ class Layout(Component):
         self.file_picker._root = cwd
         self.file_picker._cwd = cwd
 
-    def set_model_callbacks(
-        self,
-        commit_cb: Callable[[str, str], None],  # noqa: ARG002
-        current_key_cb: Callable[[], str],  # noqa: ARG002
-    ) -> None:
-        pass  # inline model palette removed; /model now opens a modal
-
     def _update_arg_hint(self, text: str) -> None:
         """Show per-placeholder ghost text after the cursor,
         dropping each token as the user types.
@@ -732,7 +724,7 @@ class Layout(Component):
             rel = self.file_picker.cwd_relative_path
             new_text = text[: self._at_pos] + "@" + rel + "/" + text[cursor:]
             self.input.set_text(new_text)
-            self._at_pos = self._at_pos
+            pass
         else:
             rel_path = self.file_picker.relative_path(entry)
             new_text = text[: self._at_pos] + "@" + rel_path + " " + text[cursor:]
@@ -984,7 +976,7 @@ class Layout(Component):
 
         self._custom_input_factory = factory
         if factory is None:
-            from tau.tui.components.text_input import TextInput
+            from tau.tui.components.primitives.text_input import TextInput
 
             new_input: Any = TextInput(
                 prefix=self._theme.input.prefix,
@@ -1095,7 +1087,7 @@ class Layout(Component):
         ``initial`` selects the starting modality tab. ``on_commit`` receives
         ``(model_id, provider, modality)``.
         """
-        from tau.tui.components.model_palette import ModelSelectorModal
+        from tau.tui.components.overlays.model_palette import ModelSelectorModal
 
         modal = ModelSelectorModal(sections, initial=initial, theme=self._theme)
         self._active_selector = InlineSelector(
@@ -1119,7 +1111,7 @@ class Layout(Component):
         on_cancel: Callable[[], None],
     ) -> None:
         """Open a theme selector with live preview support."""
-        from tau.tui.components.modal import ListModal
+        from tau.tui.components.modals.list_modal import ListModal
 
         modal = ListModal(
             names, current, "Theme", "Select color theme", on_preview=on_preview, theme=self._theme
@@ -1140,7 +1132,7 @@ class Layout(Component):
         on_cancel: Callable[[], None],
     ) -> None:
         """Open an effort/thinking level selector modal."""
-        from tau.tui.components.modal import ListModal
+        from tau.tui.components.modals.list_modal import ListModal
 
         modal = ListModal(
             levels, current, "Thinking Effort", "Select effort level", theme=self._theme
@@ -1176,7 +1168,7 @@ class Layout(Component):
         current_session_path: Path | None = None,
     ) -> None:
         """Open the session resume selector with search, scope toggle, and delete."""
-        from tau.tui.components.resume_modal import ResumeModal
+        from tau.tui.components.modals.resume_modal import ResumeModal
 
         modal = ResumeModal(
             current_sessions=sessions,
@@ -1271,7 +1263,7 @@ class Layout(Component):
         on_cancel: Callable[[], None],
     ) -> None:
         """Open a floating multi-line text editor overlay."""
-        from tau.tui.components.prompt_overlay import EditorOverlay
+        from tau.tui.components.overlays.prompt_overlay import EditorOverlay
         from tau.tui.overlay import OverlayOptions
 
         handle_ref: list[OverlayHandle] = []

@@ -29,7 +29,7 @@ from tau.hooks.session import (
 from tau.runtime.types import RuntimeConfig, RuntimeContext
 
 if TYPE_CHECKING:
-    from tau.tui.components.layout import Layout
+    from tau.tui.components.primitives.layout import Layout
 
 _log = logging.getLogger(__name__)
 

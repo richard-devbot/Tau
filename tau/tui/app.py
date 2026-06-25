@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from tau.extensions import ExtensionContext
 from tau.tui.agent_hooks import AgentHookHandler
 from tau.tui.commands.context import CommandContext
-from tau.tui.components.layout import Layout
+from tau.tui.components.primitives.layout import Layout
 from tau.tui.input import InputEvent, KeyEvent
 from tau.tui.input_handler import InputHandler
 from tau.tui.keybindings import KeyMap, configure_keybindings
@@ -215,25 +215,6 @@ class App:
             on_palette_refresh=self.refresh_palette,
         )
 
-    def _get_current_model_key(self) -> str:
-        agent = self._runtime.agent
-        if agent is None:
-            return ""
-        llm = getattr(getattr(agent, "_engine", None), "llm", None)
-        model = getattr(llm, "model", None) if llm is not None else None
-        if model is None:
-            return ""
-        return f"{model.provider}/{model.id}"
-
-    def _on_model_palette_commit(self, model_id: str, provider: str) -> None:
-        import asyncio
-
-        from tau.tui.commands import model as cmd_model
-
-        self._track_task(
-            asyncio.ensure_future(cmd_model._apply_model(self._ctx(), "text", model_id, provider))
-        )
-
     def _track_task(self, task: asyncio.Task) -> None:
         self._pending_tasks.add(task)
         task.add_done_callback(self._pending_tasks.discard)
@@ -388,11 +369,6 @@ class App:
 
         self._register_ui_commands()
         self._layout.set_commands(self._build_palette_entries())
-        self._layout.set_model_callbacks(
-            commit_cb=self._on_model_palette_commit,
-            current_key_cb=self._get_current_model_key,
-        )
-
         sm = self._runtime.session_manager
         if sm is not None:
             self._layout.set_cwd(sm.cwd)
@@ -657,7 +633,7 @@ class App:
             return
         from tau.tui.ansi import BOLD, RESET
         from tau.tui.component import Column, StaticComponent
-        from tau.tui.components.dynamic_border import DynamicBorder
+        from tau.tui.components.primitives.dynamic_border import DynamicBorder
 
         theme = self._layout.theme
         banner = Column(

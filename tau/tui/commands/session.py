@@ -113,7 +113,7 @@ def open_tree_selector(ctx: CommandContext) -> None:
         ModelChangeEntry,
         ThinkingLevelChangeEntry,
     )
-    from tau.tui.components.tree_select_list import TreeRow
+    from tau.tui.components.primitives.tree_select_list import TreeRow
 
     sm = ctx.runtime.session_manager
     if sm is None:
@@ -334,7 +334,7 @@ async def _apply_tree_branch(ctx: CommandContext, entry_id: str) -> None:
 
     summarize = False
     if summary_enabled and not skip_prompt:
-        from tau.tui.components.select_list import SelectItem
+        from tau.tui.components.primitives.select_list import SelectItem
 
         summary_items: list[SelectItem[str]] = [
             SelectItem(

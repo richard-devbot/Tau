@@ -1,8 +1,8 @@
 """The editor (prompt) protocols and TextInput's conformance to them."""
 from __future__ import annotations
 
-from tau.tui.components.editor import EditorComponent, EditorExtras
-from tau.tui.components.text_input import TextInput
+from tau.tui.components.primitives.editor import EditorComponent, EditorExtras
+from tau.tui.components.primitives.text_input import TextInput
 
 
 class TestTextInputConformance:

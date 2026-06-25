@@ -121,7 +121,7 @@ class SettingsModal:
             )
             self._submenu_id = item.id
         elif item.submenu_items:
-            from tau.tui.components.modal import ListModal
+            from tau.tui.components.modals.list_modal import ListModal
 
             self._submenu = ListModal(
                 item.submenu_items,

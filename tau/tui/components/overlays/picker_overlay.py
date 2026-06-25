@@ -5,7 +5,7 @@ from typing import TypeVar
 
 from tau.tui.ansi import BOLD, DIM, RESET, pad, visible_width
 from tau.tui.component import Component
-from tau.tui.components.select_list import SelectItem, SelectList
+from tau.tui.components.primitives.select_list import SelectItem, SelectList
 from tau.tui.input import InputEvent, KeyEvent
 
 T = TypeVar("T")
