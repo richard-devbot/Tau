@@ -8,14 +8,11 @@ installed globally.
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from typing import Any
 
 from . import audio, caret
 from .config import RELEASE_GAP, VoiceConfig
-
-_log = logging.getLogger(__name__)
 
 
 class VoiceController:
@@ -156,7 +153,6 @@ class VoiceController:
         try:
             import sounddevice as sd  # type: ignore[import-untyped]
         except ImportError:
-            _log.error("sounddevice not installed — voice extension cannot record")
             self._set_status("Voice: sounddevice missing (check extension deps)")
             asyncio.ensure_future(self._clear_after(3.0))
             return False
@@ -175,7 +171,6 @@ class VoiceController:
             )
             self._stream.start()
         except Exception as exc:
-            _log.error("failed to open mic: %s", exc)
             self._set_status(f"Voice: mic error — {exc!s:.40}")
             asyncio.ensure_future(self._clear_after(3.0))
             return False
@@ -238,7 +233,6 @@ class VoiceController:
             self._mode = "idle"
 
         except Exception as exc:
-            _log.exception("voice transcription failed")
             self._stop_caret()
             msg = str(exc)
             suffix = "..." if len(msg) > 45 else ""
