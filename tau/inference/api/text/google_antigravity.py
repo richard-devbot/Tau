@@ -66,6 +66,7 @@ _SKIP_KEYS = {
     "minItems",
     "exclusiveMinimum",
     "exclusiveMaximum",
+    "examples",
 }
 
 
