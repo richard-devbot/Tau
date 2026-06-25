@@ -171,7 +171,7 @@ class LayoutTheme:
     divider_command: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_CYAN))
     divider_execute: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_YELLOW))
 
-    # Shared semantic roles (named after pi's vocabulary) used by selectors,
+    # Shared semantic roles used by selectors,
     # modals, and other chrome so a single theme key recolours them everywhere.
     muted: ColorFn = field(default_factory=lambda: _wrap(BRIGHT_BLACK))  # dim chrome/secondary text
     emphasis: ColorFn = field(  # highlighted/active item

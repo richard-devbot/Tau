@@ -7,16 +7,6 @@
           "lsp": true,
           "eager": []
         }
-      },
-      {
-        "path": ".tau/extensions/voice",
-        "settings": {
-          "enabled": true,
-          "stt_model": "whisper-1",
-          "stt_provider": "openai",
-          "hold_ms": 500,
-          "sample_rate": 16000
-        }
       }
     ]
   }
