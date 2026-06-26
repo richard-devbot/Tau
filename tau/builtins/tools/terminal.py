@@ -147,10 +147,11 @@ class TerminalTool(Tool):
             while True:
                 if signal is not None and signal.is_set():
                     break
-                line = await proc.stdout.readline()
-                if not line:
+                # Use read(8192) to avoid LimitOverrunError on very long lines.
+                data = await proc.stdout.read(8192)
+                if not data:
                     break
-                chunks.append(line.decode("utf-8", errors="replace"))
+                chunks.append(data.decode("utf-8", errors="replace"))
                 if tool_execution_update_callback is not None:
                     await tool_execution_update_callback(
                         ToolResult.ok(invocation.id, "".join(chunks))
@@ -167,7 +168,9 @@ class TerminalTool(Tool):
                 proc.kill()
             if proc.stdout is not None:
                 with contextlib.suppress(Exception):
-                    await asyncio.wait_for(proc.stdout.read(), timeout=5)
+                    remaining = await asyncio.wait_for(proc.stdout.read(), timeout=5)
+                    if remaining and tool_execution_update_callback is not None:
+                        chunks.append(remaining.decode("utf-8", errors="replace"))
             await proc.wait()
 
         if timed_out:
