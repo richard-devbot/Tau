@@ -6,9 +6,10 @@ Covers the two bugs fixed in tau/engine/service.py:
    messages are *consumed* (dequeued), not only when they are enqueued, so the
    TUI's pending-queue hint clears the moment a message lands in history.
 
-2. Steering at ``Stop`` — steering that arrives after the last tool call (so the
-   turn ends with a plain text answer) is drained at ``Stop`` and the turn
-   continues, instead of being stranded in the queue and never sent to the model.
+2. Steering on a plain-text turn — the loop re-polls steering after every turn and
+   its condition keeps running while messages are pending, so a steer that arrives
+   when the turn ends with a plain text answer is injected and drives another turn
+   instead of being stranded in the queue and never sent to the model.
 """
 from __future__ import annotations
 
@@ -55,13 +56,20 @@ class ScriptedLLM:
         self.contexts: list[list] = []
         self.model = _Model()
         self.api = _Api()
+        # Optional per-turn async hooks, invoked just before that turn streams.
+        # Used to simulate a user steering *during* a specific turn.
+        self.on_turn: list = []
 
     def stream(self, ctx):
         return self._gen(ctx)
 
     async def _gen(self, ctx):
+        idx = self.calls
         self.calls += 1
         self.contexts.append(list(ctx.messages))
+        hook = self.on_turn[idx] if idx < len(self.on_turn) else None
+        if hook is not None:
+            await hook()
         # Default to a clean Stop once the script is exhausted, so a loop that
         # keeps draining an empty queue terminates instead of hanging.
         turn = self._turns.pop(0) if self._turns else [EndEvent(reason=StopReason.Stop)]
@@ -108,12 +116,18 @@ class TestSteeringAtStop:
 
     def test_steering_at_stop_is_injected_and_model_re_invoked(self):
         # Turn 1 answers with plain text (Stop) — no tool call follows, which is
-        # exactly the case that used to strand the steer.
+        # exactly the case that used to strand the steer. The steer arrives *during*
+        # turn 1, so it must be picked up and drive a second turn.
         history: list[LLMMessage] = [UserMessage.from_text("check weather")]
-        engine, llm, events = _make_engine([_text_turn("weather is 26C")])
+        engine, llm, events = _make_engine([_text_turn("weather is 26C"), _text_turn("i am fine")])
+
+        async def steer_mid_turn():
+            await engine.steer(UserMessage.from_text("how are you"))
+
+        # Fire during turn 1 (index 0); the re-poll after turn 1 should drain it.
+        llm.on_turn = [steer_mid_turn]
 
         async def _test():
-            await engine.steer(UserMessage.from_text("how are you"))
             await engine.run(AgentContext(system_prompt="", messages=history))
 
         run(_test())
@@ -128,10 +142,14 @@ class TestSteeringAtStop:
 
     def test_steering_at_stop_emits_queue_update_clearing_display(self):
         history: list[LLMMessage] = [UserMessage.from_text("hi")]
-        engine, llm, events = _make_engine([_text_turn()])
+        engine, llm, events = _make_engine([_text_turn(), _text_turn()])
+
+        async def steer_mid_turn():
+            await engine.steer(UserMessage.from_text("steer me"))
+
+        llm.on_turn = [steer_mid_turn]
 
         async def _test():
-            await engine.steer(UserMessage.from_text("steer me"))
             await engine.run(AgentContext(system_prompt="", messages=history))
 
         run(_test())
@@ -147,11 +165,16 @@ class TestSteeringAtToolCalls:
 
     def test_steering_injected_after_tool_round_trip(self):
         history: list[LLMMessage] = [UserMessage.from_text("do a thing")]
-        # Turn 1 = tool call (ToolCalls) → steering drained here → Turn 2 = Stop.
+        # Turn 1 = tool call (ToolCalls); steer arrives during it → re-polled after
+        # the tool round-trip → injected before Turn 2 = Stop.
         engine, llm, events = _make_engine([_tool_turn(), _text_turn("done")])
 
-        async def _test():
+        async def steer_mid_turn():
             await engine.steer(UserMessage.from_text("also do this"))
+
+        llm.on_turn = [steer_mid_turn]
+
+        async def _test():
             await engine.run(AgentContext(system_prompt="", messages=history))
 
         run(_test())
@@ -181,6 +204,58 @@ class TestFollowupAtStop:
         assert engine.state.follow_up_queue is not None and engine.state.follow_up_queue.is_empty()
         drains = [e for e in _queue_updates(events, "followup") if not e.messages]
         assert drains, "expected a followup queue_update with empty snapshot after dequeue"
+
+
+class TestRunContinueDrainsLateSteering:
+    """A steer that lands after the loop already stopped is drained by run_continue.
+
+    This is the engine-level mechanism Agent.invoke() now relies on: the submit→
+    steer hop is a separate task, so a steer can enqueue just past the turn's final
+    queue check. run_continue() must surface it (emit it so the UI renders it) and
+    run another turn so the model actually responds.
+    """
+
+    def test_late_steer_is_emitted_and_answered(self):
+        history: list[LLMMessage] = [UserMessage.from_text("weather in tokyo")]
+        # Turn 1 answers Tokyo and stops; turn 2 (the continuation) answers kochi.
+        engine, llm, events = _make_engine([_text_turn("tokyo 28C"), _text_turn("kochi 26C")])
+
+        async def _test():
+            # Turn 1 runs to completion with nothing queued.
+            await engine.run(AgentContext(system_prompt="", messages=history))
+            assert llm.calls == 1
+            # Steer lands *after* the turn stopped (the race the fix targets).
+            await engine.steer(UserMessage.from_text("also in kochi"))
+            # Drain it via continuation, the path Agent.invoke() drives.
+            await engine.run_continue()
+
+        run(_test())
+
+        # The continuation ran a second model turn...
+        assert llm.calls == 2
+        # ...the late steer was emitted as a real user message (so the UI renders
+        # it), is in engine history, and its text reached the model's context.
+        assert any(_texts(m) == "also in kochi" for m in engine.state.messages)
+        assert any(_texts(m) == "also in kochi" for m in llm.contexts[1])
+        starts = [
+            e
+            for e in events
+            if getattr(e, "type", None) == "message_start"
+            and _texts(getattr(e, "message", None)) == "also in kochi"
+        ]
+        assert starts, "expected the late steer to be emitted as a message_start"
+        assert engine.state.steering_queue is not None and engine.state.steering_queue.is_empty()
+
+        # The initial user message is passed as context and never re-emitted, so a
+        # session listener on message_end only sees engine-injected messages — i.e.
+        # persisting injected user messages can't double-write the initial one.
+        initial_starts = [
+            e
+            for e in events
+            if getattr(e, "type", None) == "message_start"
+            and _texts(getattr(e, "message", None)) == "weather in tokyo"
+        ]
+        assert not initial_starts, "context messages must not be re-emitted"
 
 
 class TestNoQueuedMessages:

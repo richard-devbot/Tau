@@ -5,7 +5,7 @@ import logging
 from collections.abc import Callable, Coroutine
 from contextlib import aclosing, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from tau.engine.types import (
     AbortSignal,
@@ -536,9 +536,45 @@ class Engine:
                 with suppress(asyncio.CancelledError):
                     await signal_task
 
+    async def _collect_steering(self) -> list[LLMMessage]:
+        """Drain pending steering messages (queue + options callback).
+
+        Refreshes the pending-queue display so the steering hint reflects what
+        remains (and vanishes when the queue empties).
+        """
+        out: list[LLMMessage] = []
+        if self.state.steering_queue and not self.state.steering_queue.is_empty():
+            out.extend(await self.state.steering_queue.dequeue())
+            await self.hooks.emit(
+                QueueUpdateEvent(queue="steering", messages=self.state.steering_queue.snapshot())
+            )
+        if self.options.get_steering_messages is not None:
+            out.extend(self.options.get_steering_messages())
+        return out
+
+    async def _collect_follow_up(self) -> list[LLMMessage]:
+        """Drain pending follow-up messages (queue + options callback), refreshing the display."""
+        out: list[LLMMessage] = []
+        if self.state.follow_up_queue and not self.state.follow_up_queue.is_empty():
+            out.extend(await self.state.follow_up_queue.dequeue())
+            await self.hooks.emit(
+                QueueUpdateEvent(queue="followup", messages=self.state.follow_up_queue.snapshot())
+            )
+        if self.options.get_follow_up_messages is not None:
+            out.extend(self.options.get_follow_up_messages())
+        return out
+
     async def _loop(self, messages: list[LLMMessage], emit: EmitEvent, signal: AbortSignal) -> None:
         """Core agentic loop: stream LLM → execute tools → inject steering/follow-ups →
         repeat until done.
+
+        Structured as two loops:
+          * inner — runs while there are tool calls to answer *or* queued
+            steering/follow-up messages to inject. Steering is re-polled at the end
+            of every turn, so a steer that lands on a plain-text turn is picked up
+            here with no special-casing.
+          * outer — resumes the inner loop when follow-up messages arrive after the
+            agent would otherwise stop.
 
         Args:
             messages: Conversation history to pass to the LLM.
@@ -554,122 +590,141 @@ class Engine:
         tool_results: list[ToolResultContent] = []
         end_reason: AgentEndReason = AgentEndReason.Completed
 
+        async def inject(pending: list[LLMMessage]) -> None:
+            """Surface queued steering/follow-up as real user turns in history."""
+            for msg in pending:
+                await emit(MessageStartEvent(message=msg))
+                await emit(MessageEndEvent(message=msg))
+                messages.append(msg)
+
         try:
-            while True:
-                _log.debug("turn start: messages=%d", len(messages))
-                await emit(TurnStartEvent())
+            # The user may have steered while waiting for the turn to begin.
+            pending: list[LLMMessage] = await self._collect_steering()
+            stop = False
 
-                # ── Mid-turn compaction / context refresh ──────────────────────
-                # Called before every LLM inference so compaction can fire
-                # between tool iterations, not only at invoke() boundaries.
-                if self.options.transform_context is not None:
-                    from tau.session.compaction import ThresholdCompactionStop
+            while not stop:
+                has_more_tool_calls = True
+                while has_more_tool_calls or pending:
+                    _log.debug("turn start: messages=%d", len(messages))
+                    await emit(TurnStartEvent())
+                    tool_results = []
 
-                    try:
-                        messages = await self.options.transform_context(messages, signal)
-                    except ThresholdCompactionStop:
-                        # Threshold compaction fired mid-turn. Stop cleanly so the
-                        # user can review the compacted context and continue manually.
-                        await emit(TurnEndEvent(message=AssistantMessage(), tool_results=[]))
+                    # Inject queued steering/follow-up ahead of the assistant response.
+                    if pending:
+                        await inject(pending)
+                        pending = []
+
+                    # ── Mid-turn compaction / context refresh ──────────────────
+                    # Called before every LLM inference so compaction can fire
+                    # between tool iterations, not only at invoke() boundaries.
+                    if self.options.transform_context is not None:
+                        from tau.session.compaction import ThresholdCompactionStop
+
+                        try:
+                            messages = await self.options.transform_context(messages, signal)
+                        except ThresholdCompactionStop:
+                            # Threshold compaction fired mid-turn. Stop cleanly so the
+                            # user can review the compacted context and continue.
+                            await emit(TurnEndEvent(message=AssistantMessage(), tool_results=[]))
+                            stop = True
+                            break
+
+                    message = AssistantMessage()
+                    tool_calls.clear()
+                    ctx_messages = list(messages)
+
+                    if signal.is_set():
+                        closing = AssistantMessage(stop_reason=StopReason.Abort)
+                        await emit(MessageStartEvent(message=closing))
+                        await emit(MessageEndEvent(message=closing))
+                        messages.append(closing)
+                        await emit(TurnEndEvent(message=closing, tool_results=tool_results))
+                        stop = True
                         break
 
-                message = AssistantMessage()
-                tool_calls.clear()
-
-                ctx_messages = list(messages)
-
-                if signal.is_set():
-                    closing = AssistantMessage(stop_reason=StopReason.Abort)
-                    await emit(MessageStartEvent(message=closing))
-                    await emit(MessageEndEvent(message=closing))
-                    messages.append(closing)
-                    await emit(TurnEndEvent(message=closing, tool_results=tool_results))
-                    break
-
-                ctx = LLMContext(
-                    messages=ctx_messages,
-                    tools=self.state.tools,
-                    system_prompt=self.state.system_prompt,
-                )
-
-                await emit(MessageStartEvent(message=message))
-                await self.hooks.emit(
-                    BeforeProviderRequestEvent(
-                        model=self.llm.model,
+                    ctx = LLMContext(
                         messages=ctx_messages,
-                        options=self.llm.api.options,
+                        tools=self.state.tools,
+                        system_prompt=self.state.system_prompt,
                     )
-                )
 
-                async with aclosing(self.llm.stream(ctx)) as stream:
-                    _streaming_text: Any = None
-                    _streaming_thinking: Any = None
-                    async for event in self._iter_with_abort(stream, signal):
-                        match event:
-                            case ToolCallEndEvent(tool_call=tool_call):
-                                tool_calls.append(tool_call)
-                                message.contents.append(tool_call)
-                                # Surface the tool call to the UI as it streams and
-                                # mark the turn as having content, so an abort here is
-                                # treated as mid-stream (not a pre-stream undo).
-                                await emit(MessageUpdateEvent(message=message))
-                            case TextDeltaEvent(text=text):
-                                if _streaming_text is None:
-                                    from tau.message.types import TextContent
-
-                                    _streaming_text = TextContent(content=text.content)
-                                    message.contents.append(_streaming_text)
-                                else:
-                                    _streaming_text.content += text.content
-                                await emit(MessageUpdateEvent(message=message))
-                            case ThinkingDeltaEvent(thinking=thinking):
-                                if _streaming_thinking is None:
-                                    from tau.message.types import ThinkingContent
-
-                                    _streaming_thinking = ThinkingContent(content=thinking.content)
-                                    message.contents.append(_streaming_thinking)
-                                else:
-                                    _streaming_thinking.content += thinking.content
-                                await emit(MessageUpdateEvent(message=message))
-                            case TextEndEvent(text=text):
-                                if _streaming_text is not None:
-                                    _streaming_text.content = text.content
-                                    _streaming_text = None
-                                else:
-                                    message.contents.append(text)
-                            case ThinkingEndEvent(thinking=thinking):
-                                if _streaming_thinking is not None:
-                                    _streaming_thinking.content = thinking.content
-                                    _streaming_thinking = None
-                                else:
-                                    message.contents.append(thinking)
-                            case ErrorEvent(reason=reason, error=error, kind=kind):
-                                message.stop_reason = reason
-                                message.error = error
-                                message.error_kind = kind
-                            case EndEvent() as ev:
-                                message.stop_reason = ev.reason
-                                message.usage = Usage(
-                                    input_tokens=ev.input_tokens,
-                                    output_tokens=ev.output_tokens,
-                                    cache_read_tokens=ev.cache_read_tokens,
-                                    cache_write_tokens=ev.cache_write_tokens,
-                                    cache_write_1h_tokens=ev.cache_write_1h_tokens,
-                                )
-
-                # If we broke out of the stream early due to abort, treat as abort
-                if signal.is_set() and message.stop_reason == StopReason.Stop:
-                    message.stop_reason = StopReason.Abort
-
-                await self.hooks.emit(
-                    AfterProviderResponseEvent(
-                        model=self.llm.model,
-                        response=message,
+                    await emit(MessageStartEvent(message=message))
+                    await self.hooks.emit(
+                        BeforeProviderRequestEvent(
+                            model=self.llm.model,
+                            messages=ctx_messages,
+                            options=self.llm.api.options,
+                        )
                     )
-                )
 
-                match message.stop_reason:
-                    case StopReason.Abort:
+                    async with aclosing(self.llm.stream(ctx)) as stream:
+                        _streaming_text: Any = None
+                        _streaming_thinking: Any = None
+                        async for event in self._iter_with_abort(stream, signal):
+                            match event:
+                                case ToolCallEndEvent(tool_call=tool_call):
+                                    tool_calls.append(tool_call)
+                                    message.contents.append(tool_call)
+                                    # Surface the tool call to the UI as it streams and
+                                    # mark the turn as having content, so an abort here is
+                                    # treated as mid-stream (not a pre-stream undo).
+                                    await emit(MessageUpdateEvent(message=message))
+                                case TextDeltaEvent(text=text):
+                                    if _streaming_text is None:
+                                        from tau.message.types import TextContent
+
+                                        _streaming_text = TextContent(content=text.content)
+                                        message.contents.append(_streaming_text)
+                                    else:
+                                        _streaming_text.content += text.content
+                                    await emit(MessageUpdateEvent(message=message))
+                                case ThinkingDeltaEvent(thinking=thinking):
+                                    if _streaming_thinking is None:
+                                        from tau.message.types import ThinkingContent
+
+                                        _streaming_thinking = ThinkingContent(
+                                            content=thinking.content
+                                        )
+                                        message.contents.append(_streaming_thinking)
+                                    else:
+                                        _streaming_thinking.content += thinking.content
+                                    await emit(MessageUpdateEvent(message=message))
+                                case TextEndEvent(text=text):
+                                    if _streaming_text is not None:
+                                        _streaming_text.content = text.content
+                                        _streaming_text = None
+                                    else:
+                                        message.contents.append(text)
+                                case ThinkingEndEvent(thinking=thinking):
+                                    if _streaming_thinking is not None:
+                                        _streaming_thinking.content = thinking.content
+                                        _streaming_thinking = None
+                                    else:
+                                        message.contents.append(thinking)
+                                case ErrorEvent(reason=reason, error=error, kind=kind):
+                                    message.stop_reason = reason
+                                    message.error = error
+                                    message.error_kind = kind
+                                case EndEvent() as ev:
+                                    message.stop_reason = ev.reason
+                                    message.usage = Usage(
+                                        input_tokens=ev.input_tokens,
+                                        output_tokens=ev.output_tokens,
+                                        cache_read_tokens=ev.cache_read_tokens,
+                                        cache_write_tokens=ev.cache_write_tokens,
+                                        cache_write_1h_tokens=ev.cache_write_1h_tokens,
+                                    )
+
+                    # If we broke out of the stream early due to abort, treat as abort
+                    if signal.is_set() and message.stop_reason == StopReason.Stop:
+                        message.stop_reason = StopReason.Abort
+
+                    await self.hooks.emit(
+                        AfterProviderResponseEvent(model=self.llm.model, response=message)
+                    )
+
+                    # ── Terminal stop reasons end the run outright ─────────────
+                    if message.stop_reason == StopReason.Abort:
                         # Partial text gives the LLM context about what it was
                         # generating when interrupted, so keep it. But if the model
                         # had begun a tool call, drop the whole turn — an unfinished
@@ -681,9 +736,10 @@ class Engine:
                         messages.append(message)
                         end_reason = AgentEndReason.Aborted
                         await emit(TurnEndEvent(message=message, tool_results=tool_results))
+                        stop = True
                         break
 
-                    case StopReason.Error:
+                    if message.stop_reason == StopReason.Error:
                         await emit(MessageEndEvent(message=message))
                         err_msg = (
                             message.error or f"Turn failed with reason: {message.stop_reason.value}"
@@ -692,15 +748,17 @@ class Engine:
                         end_reason = AgentEndReason.Error
                         await emit(AgentErrorEvent(error=err_msg))
                         await emit(TurnEndEvent(message=None, tool_results=tool_results))
+                        stop = True
                         break
 
-                    case StopReason.ToolCalls:
-                        await emit(MessageEndEvent(message=message))
-                        messages.append(message)
+                    # Commit the assistant message and answer any tool calls it made.
+                    await emit(MessageEndEvent(message=message))
+                    messages.append(message)
+                    has_more_tool_calls = False
+
+                    if tool_calls:
                         tool_results = await self._execute_tool_calls(
-                            tool_calls=tool_calls,
-                            emit=emit,
-                            signal=signal,
+                            tool_calls=tool_calls, emit=emit, signal=signal
                         )
                         tool_message = ToolMessage.from_results(tool_results)
                         await emit(MessageStartEvent(message=tool_message))
@@ -719,6 +777,7 @@ class Engine:
                                 await emit(MessageEndEvent(message=message))
                                 messages.append(message)
                             await emit(TurnEndEvent(message=message, tool_results=tool_results))
+                            stop = True
                             break
 
                         if signal.is_set():
@@ -735,75 +794,32 @@ class Engine:
                             await emit(MessageEndEvent(message=message))
                             messages.append(message)
                             await emit(TurnEndEvent(message=message, tool_results=[]))
+                            stop = True
                             break
 
-                        steering_messages: list[LLMMessage] = []
-                        if self.state.steering_queue and not self.state.steering_queue.is_empty():
-                            steering_messages.extend(await self.state.steering_queue.dequeue())
-                            # The consumed messages now live in history; refresh the
-                            # pending-queue display so the steering hint reflects what
-                            # actually remains (and vanishes when nothing is left).
-                            await self.hooks.emit(
-                                QueueUpdateEvent(
-                                    queue="steering",
-                                    messages=self.state.steering_queue.snapshot(),
-                                )
-                            )
-                        if self.options.get_steering_messages is not None:
-                            steering_messages.extend(self.options.get_steering_messages())
-                        for msg in steering_messages:
-                            await emit(MessageStartEvent(message=msg))
-                            await emit(MessageEndEvent(message=msg))
-                            messages.append(msg)
+                        has_more_tool_calls = True
 
-                    case StopReason.Stop:
-                        await emit(MessageEndEvent(message=message))
-                        messages.append(message)
-                        continuation_messages: list[LLMMessage] = []
-                        # Steering that arrived after the last tool call never got a
-                        # round-trip to be injected into. Rather than stranding it in
-                        # the queue (shown as pending but never sent to the model),
-                        # drain it here so the turn continues and the model sees it.
-                        if self.state.steering_queue and not self.state.steering_queue.is_empty():
-                            continuation_messages.extend(await self.state.steering_queue.dequeue())
-                            await self.hooks.emit(
-                                QueueUpdateEvent(
-                                    queue="steering",
-                                    messages=self.state.steering_queue.snapshot(),
-                                )
-                            )
-                        if self.state.follow_up_queue and not self.state.follow_up_queue.is_empty():
-                            continuation_messages.extend(await self.state.follow_up_queue.dequeue())
-                            # Refresh the pending-queue display now that these were
-                            # consumed, so the follow-up hint clears (or shows leftovers).
-                            await self.hooks.emit(
-                                QueueUpdateEvent(
-                                    queue="followup",
-                                    messages=self.state.follow_up_queue.snapshot(),
-                                )
-                            )
-                        if self.options.get_follow_up_messages is not None:
-                            continuation_messages.extend(self.options.get_follow_up_messages())
+                    await emit(TurnEndEvent(message=message, tool_results=tool_results))
 
-                        if continuation_messages:
-                            for msg in continuation_messages:
-                                await emit(MessageStartEvent(message=msg))
-                                await emit(MessageEndEvent(message=msg))
-                                messages.append(msg)
-                        else:
-                            await emit(TurnEndEvent(message=message, tool_results=tool_results))
-                            break
-                    case _:
-                        pass
+                    if self.options.should_stop_after_turn and self.options.should_stop_after_turn(
+                        message, tool_results
+                    ):
+                        stop = True
+                        break
 
-                await emit(TurnEndEvent(message=message, tool_results=tool_results))
+                    # Re-poll steering: a message queued during this turn is injected
+                    # on the next inner iteration (so the loop keeps going after a
+                    # plain-text turn when the user steered).
+                    pending = await self._collect_steering()
 
-                if self.options.should_stop_after_turn and self.options.should_stop_after_turn(
-                    message, tool_results
-                ):
+                if stop:
                     break
 
-                tool_results.clear()
+                # Inner loop drained tool calls and steering. Pick up any follow-up
+                # messages for a fresh inner pass; otherwise the agent is done.
+                pending = await self._collect_follow_up()
+                if not pending:
+                    break
         except Exception as e:
             end_reason = AgentEndReason.Error
             await emit(AgentErrorEvent(error=str(e)))
@@ -825,13 +841,39 @@ class Engine:
             self.state.is_streaming = False
             self.state.idle_event.set()
 
-    async def run_continue(self) -> None:
+    async def _inject_queued(
+        self, queue_name: Literal["steering", "followup"], messages: list[LLMMessage]
+    ) -> None:
+        """Surface dequeued steering/follow-up messages as real conversation entries.
+
+        Emits start/end for each so the UI renders them and ``state.messages``
+        (the source of truth a continuation runs from) includes them — matching
+        how the in-loop injection path behaves.
+        """
+        snapshot = (
+            self.state.steering_queue.snapshot()
+            if queue_name == "steering" and self.state.steering_queue
+            else self.state.follow_up_queue.snapshot()
+            if self.state.follow_up_queue
+            else []
+        )
+        await self.hooks.emit(QueueUpdateEvent(queue=queue_name, messages=snapshot))
+        for msg in messages:
+            await self.process_events(MessageStartEvent(message=msg))
+            await self.process_events(MessageEndEvent(message=msg))
+
+    async def run_continue(self, signal: AbortSignal | None = None) -> None:
         """Resume an idle engine from its current message history,
         draining queued steering/follow-up first.
+
+        Args:
+            signal: Abort signal to thread through the continuation turn.
 
         Raises:
             RuntimeError: If the engine is currently streaming or has no messages.
         """
+        from tau.agent.types import AgentContext
+
         if self.state.is_streaming:
             raise RuntimeError(
                 "Agent is already processing. Wait for completion before continuing."
@@ -847,13 +889,12 @@ class Engine:
                         messages=self.state.follow_up_queue.snapshot(),
                     )
                 )
-                from tau.agent.types import AgentContext
-
                 await self.run(
                     AgentContext(
                         system_prompt=self.state.system_prompt or "",
                         messages=follow_up_messages,
-                    )
+                    ),
+                    signal=signal,
                 )
                 return
             raise RuntimeError("No messages to continue from")
@@ -863,37 +904,25 @@ class Engine:
             case Role.ASSISTANT:
                 if self.state.steering_queue and not self.state.steering_queue.is_empty():
                     steering_messages = await self.state.steering_queue.dequeue()
-                    await self.hooks.emit(
-                        QueueUpdateEvent(
-                            queue="steering",
-                            messages=self.state.steering_queue.snapshot(),
-                        )
-                    )
-                    from tau.agent.types import AgentContext
-
+                    await self._inject_queued("steering", steering_messages)
                     await self.run(
                         AgentContext(
                             system_prompt=self.state.system_prompt or "",
-                            messages=self.state.messages + steering_messages,
-                        )
+                            messages=list(self.state.messages),
+                        ),
+                        signal=signal,
                     )
                     return
 
                 if self.state.follow_up_queue and not self.state.follow_up_queue.is_empty():
                     follow_up_messages = await self.state.follow_up_queue.dequeue()
-                    await self.hooks.emit(
-                        QueueUpdateEvent(
-                            queue="followup",
-                            messages=self.state.follow_up_queue.snapshot(),
-                        )
-                    )
-                    from tau.agent.types import AgentContext
-
+                    await self._inject_queued("followup", follow_up_messages)
                     await self.run(
                         AgentContext(
                             system_prompt=self.state.system_prompt or "",
-                            messages=self.state.messages + follow_up_messages,
-                        )
+                            messages=list(self.state.messages),
+                        ),
+                        signal=signal,
                     )
                     return
 

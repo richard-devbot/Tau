@@ -257,6 +257,8 @@ class Agent:
                 self._session_manager.append_message(message)
             case ToolMessage():
                 self._session_manager.append_message(message)
+            case UserMessage():
+                self._session_manager.append_message(message)
             case _:
                 pass
 
@@ -545,6 +547,16 @@ class Agent:
                     if await self._try_overflow_recovery():
                         continue
                     raise
+
+            # A steering / follow-up message can land *after* the engine loop has
+            # already decided to stop: the submit→steer hop runs as a separate
+            # task, so it may enqueue just past the turn's final queue check.
+            # Drain any such leftovers with continuation turns so a mid-flight
+            # message is never silently stranded in the queue.
+            while self._engine.has_pending_messages():
+                self._signal = asyncio.Event()
+                self._engine.llm.api.options.signal = self._signal
+                await self._run_continue()
         finally:
             self._phase = AgentPhase.IDLE
 
@@ -577,6 +589,39 @@ class Agent:
         )
         try:
             await self._engine.run(ctx, signal=self._signal)
+        finally:
+            unsubscribe()
+            unsubscribe_rollback()
+
+        error = self._engine.state.error_message
+        if error is not None:
+            raise RuntimeError(f"Agent failed: {error}.")
+
+    async def _run_continue(self) -> None:
+        """Run a continuation turn that drains queued steering/follow-up messages.
+
+        Mirrors ``_run``'s session-sync wiring so messages injected by the engine
+        continuation are persisted and rendered just like a normal turn's.
+
+        Keeps the continuation within the context window the same way the main turn
+        does: auto-compact if needed, then resync the engine's history from the
+        (possibly compacted) session — ``run_continue`` runs from ``state.messages``,
+        which compaction (which only rewrites the session) would otherwise not touch.
+        """
+        await self._check_compaction()
+        session_ctx = self._session_manager.build_session_context()
+        self._engine.state.messages = _to_llm_messages(session_ctx.messages)
+
+        unsubscribe = self.hooks.register(
+            "message_end",
+            lambda event: self._on_message_end(event),
+        )
+        unsubscribe_rollback = self.hooks.register(
+            "message_rollback",
+            lambda event: self._on_message_rollback(event),
+        )
+        try:
+            await self._engine.run_continue(signal=self._signal)
         finally:
             unsubscribe()
             unsubscribe_rollback()
