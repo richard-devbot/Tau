@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable, Coroutine
-from contextlib import aclosing, suppress
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -507,8 +507,7 @@ class Engine:
         awaiting the network (the initial API call / thinking phase, or between
         sparse chunks) wouldn't take effect until the next chunk. Here each
         ``__anext__`` is raced against ``signal.wait()`` so the in-flight read is
-        cancelled the moment abort fires; the caller's ``aclosing`` then tears
-        down the underlying request.
+        cancelled the moment abort fires.
         """
         stream_iter = stream.__aiter__()
         signal_task = asyncio.ensure_future(signal.wait())
@@ -657,10 +656,10 @@ class Engine:
                         )
                     )
 
-                    async with aclosing(self.llm.stream(ctx)) as stream:
-                        _streaming_text: Any = None
-                        _streaming_thinking: Any = None
-                        async for event in self._iter_with_abort(stream, signal):
+                    stream = self.llm.stream(ctx)
+                    _streaming_text: Any = None
+                    _streaming_thinking: Any = None
+                    async for event in self._iter_with_abort(stream, signal):
                             match event:
                                 case ToolCallEndEvent(tool_call=tool_call):
                                     tool_calls.append(tool_call)
