@@ -1,0 +1,199 @@
+"""Engine-loop tests for steering / follow-up injection and pending-queue display sync.
+
+Covers the two bugs fixed in tau/engine/service.py:
+
+1. Display sync — a ``QueueUpdateEvent`` is emitted when steering / follow-up
+   messages are *consumed* (dequeued), not only when they are enqueued, so the
+   TUI's pending-queue hint clears the moment a message lands in history.
+
+2. Steering at ``Stop`` — steering that arrives after the last tool call (so the
+   turn ends with a plain text answer) is drained at ``Stop`` and the turn
+   continues, instead of being stranded in the queue and never sent to the model.
+"""
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+
+from tau.agent.types import AgentContext
+from tau.engine.service import Engine
+from tau.inference.types import (
+    EndEvent,
+    StopReason,
+    TextEndEvent,
+    ToolCallEndEvent,
+)
+from tau.message.types import LLMMessage, TextContent, ToolCallContent, UserMessage
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+# ── Scripted fake LLM ──────────────────────────────────────────────────────────
+
+
+class _Model:
+    name = "fake-model"
+
+
+class _Api:
+    options: dict = {}
+
+
+class ScriptedLLM:
+    """Replays a pre-programmed list of turns; each turn is a list of stream events.
+
+    Records the message context handed to every ``stream()`` call so tests can
+    assert what the model actually saw, and counts calls so tests can assert the
+    loop continued (or stopped) as expected.
+    """
+
+    def __init__(self, turns: list[list]):
+        self._turns = list(turns)
+        self.calls = 0
+        self.contexts: list[list] = []
+        self.model = _Model()
+        self.api = _Api()
+
+    def stream(self, ctx):
+        return self._gen(ctx)
+
+    async def _gen(self, ctx):
+        self.calls += 1
+        self.contexts.append(list(ctx.messages))
+        # Default to a clean Stop once the script is exhausted, so a loop that
+        # keeps draining an empty queue terminates instead of hanging.
+        turn = self._turns.pop(0) if self._turns else [EndEvent(reason=StopReason.Stop)]
+        for ev in turn:
+            yield ev
+
+
+def _text_turn(text: str = "ok") -> list:
+    return [TextEndEvent(text=TextContent(content=text)), EndEvent(reason=StopReason.Stop)]
+
+
+def _tool_turn(name: str = "missing_tool") -> list:
+    # An unregistered tool yields an error ToolResult but still drives the
+    # StopReason.ToolCalls branch — no real tool needed.
+    return [
+        ToolCallEndEvent(tool_call=ToolCallContent(id="tc1", name=name, args={})),
+        EndEvent(reason=StopReason.ToolCalls),
+    ]
+
+
+def _make_engine(turns: list[list]) -> tuple[Engine, ScriptedLLM, list]:
+    llm = ScriptedLLM(turns)
+    engine = Engine(cwd=Path("."), llm=llm, tools=[], system_prompt="")  # type: ignore[arg-type]
+    events: list = []
+    engine.hooks.subscribe(lambda e: events.append(e))
+    return engine, llm, events
+
+
+def _texts(message) -> str:
+    return "".join(
+        c.content for c in getattr(message, "contents", []) if isinstance(c, TextContent)
+    )
+
+
+def _queue_updates(events: list, queue: str) -> list:
+    return [e for e in events if getattr(e, "type", None) == "queue_update" and e.queue == queue]
+
+
+# ── Tests ──────────────────────────────────────────────────────────────────────
+
+
+class TestSteeringAtStop:
+    """Steering pending when a turn ends on Stop must be injected and seen."""
+
+    def test_steering_at_stop_is_injected_and_model_re_invoked(self):
+        # Turn 1 answers with plain text (Stop) — no tool call follows, which is
+        # exactly the case that used to strand the steer.
+        history: list[LLMMessage] = [UserMessage.from_text("check weather")]
+        engine, llm, events = _make_engine([_text_turn("weather is 26C")])
+
+        async def _test():
+            await engine.steer(UserMessage.from_text("how are you"))
+            await engine.run(AgentContext(system_prompt="", messages=history))
+
+        run(_test())
+
+        # The model was called a second time (the turn continued past Stop)...
+        assert llm.calls == 2
+        # ...and that second call's context contained the steered message.
+        assert any(_texts(m) == "how are you" for m in llm.contexts[1])
+        # The steer is now part of history, and the queue is drained.
+        assert any(_texts(m) == "how are you" for m in history)
+        assert engine.state.steering_queue is not None and engine.state.steering_queue.is_empty()
+
+    def test_steering_at_stop_emits_queue_update_clearing_display(self):
+        history: list[LLMMessage] = [UserMessage.from_text("hi")]
+        engine, llm, events = _make_engine([_text_turn()])
+
+        async def _test():
+            await engine.steer(UserMessage.from_text("steer me"))
+            await engine.run(AgentContext(system_prompt="", messages=history))
+
+        run(_test())
+
+        # A steering queue_update with an empty snapshot is emitted on dequeue,
+        # which drives the TUI to clear the pending hint.
+        drains = [e for e in _queue_updates(events, "steering") if not e.messages]
+        assert drains, "expected a steering queue_update with empty snapshot after dequeue"
+
+
+class TestSteeringAtToolCalls:
+    """Steering consumed mid-task (the original supported path) still works."""
+
+    def test_steering_injected_after_tool_round_trip(self):
+        history: list[LLMMessage] = [UserMessage.from_text("do a thing")]
+        # Turn 1 = tool call (ToolCalls) → steering drained here → Turn 2 = Stop.
+        engine, llm, events = _make_engine([_tool_turn(), _text_turn("done")])
+
+        async def _test():
+            await engine.steer(UserMessage.from_text("also do this"))
+            await engine.run(AgentContext(system_prompt="", messages=history))
+
+        run(_test())
+
+        assert llm.calls == 2
+        assert any(_texts(m) == "also do this" for m in history)
+        assert engine.state.steering_queue is not None and engine.state.steering_queue.is_empty()
+        drains = [e for e in _queue_updates(events, "steering") if not e.messages]
+        assert drains, "expected a steering queue_update with empty snapshot after dequeue"
+
+
+class TestFollowupAtStop:
+    """Follow-up draining at Stop (pre-existing behaviour) is preserved."""
+
+    def test_followup_at_stop_is_injected(self):
+        history: list[LLMMessage] = [UserMessage.from_text("hi")]
+        engine, llm, events = _make_engine([_text_turn()])
+
+        async def _test():
+            await engine.follow_up(UserMessage.from_text("and then this"))
+            await engine.run(AgentContext(system_prompt="", messages=history))
+
+        run(_test())
+
+        assert llm.calls == 2
+        assert any(_texts(m) == "and then this" for m in history)
+        assert engine.state.follow_up_queue is not None and engine.state.follow_up_queue.is_empty()
+        drains = [e for e in _queue_updates(events, "followup") if not e.messages]
+        assert drains, "expected a followup queue_update with empty snapshot after dequeue"
+
+
+class TestNoQueuedMessages:
+    """A plain turn with nothing queued runs exactly once and stops."""
+
+    def test_single_turn_no_continuation(self):
+        history: list[LLMMessage] = [UserMessage.from_text("hi")]
+        engine, llm, events = _make_engine([_text_turn()])
+
+        async def _test():
+            await engine.run(AgentContext(system_prompt="", messages=history))
+
+        run(_test())
+
+        assert llm.calls == 1
+        assert not _queue_updates(events, "steering")

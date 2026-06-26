@@ -740,6 +740,15 @@ class Engine:
                         steering_messages: list[LLMMessage] = []
                         if self.state.steering_queue and not self.state.steering_queue.is_empty():
                             steering_messages.extend(await self.state.steering_queue.dequeue())
+                            # The consumed messages now live in history; refresh the
+                            # pending-queue display so the steering hint reflects what
+                            # actually remains (and vanishes when nothing is left).
+                            await self.hooks.emit(
+                                QueueUpdateEvent(
+                                    queue="steering",
+                                    messages=self.state.steering_queue.snapshot(),
+                                )
+                            )
                         if self.options.get_steering_messages is not None:
                             steering_messages.extend(self.options.get_steering_messages())
                         for msg in steering_messages:
@@ -750,14 +759,34 @@ class Engine:
                     case StopReason.Stop:
                         await emit(MessageEndEvent(message=message))
                         messages.append(message)
-                        follow_up_messages: list[LLMMessage] = []
+                        continuation_messages: list[LLMMessage] = []
+                        # Steering that arrived after the last tool call never got a
+                        # round-trip to be injected into. Rather than stranding it in
+                        # the queue (shown as pending but never sent to the model),
+                        # drain it here so the turn continues and the model sees it.
+                        if self.state.steering_queue and not self.state.steering_queue.is_empty():
+                            continuation_messages.extend(await self.state.steering_queue.dequeue())
+                            await self.hooks.emit(
+                                QueueUpdateEvent(
+                                    queue="steering",
+                                    messages=self.state.steering_queue.snapshot(),
+                                )
+                            )
                         if self.state.follow_up_queue and not self.state.follow_up_queue.is_empty():
-                            follow_up_messages.extend(await self.state.follow_up_queue.dequeue())
+                            continuation_messages.extend(await self.state.follow_up_queue.dequeue())
+                            # Refresh the pending-queue display now that these were
+                            # consumed, so the follow-up hint clears (or shows leftovers).
+                            await self.hooks.emit(
+                                QueueUpdateEvent(
+                                    queue="followup",
+                                    messages=self.state.follow_up_queue.snapshot(),
+                                )
+                            )
                         if self.options.get_follow_up_messages is not None:
-                            follow_up_messages.extend(self.options.get_follow_up_messages())
+                            continuation_messages.extend(self.options.get_follow_up_messages())
 
-                        if follow_up_messages:
-                            for msg in follow_up_messages:
+                        if continuation_messages:
+                            for msg in continuation_messages:
                                 await emit(MessageStartEvent(message=msg))
                                 await emit(MessageEndEvent(message=msg))
                                 messages.append(msg)
@@ -812,6 +841,12 @@ class Engine:
             # Edge case: session was reset but follow-up messages were enqueued before any LLM turn.
             if self.state.follow_up_queue and not self.state.follow_up_queue.is_empty():
                 follow_up_messages = await self.state.follow_up_queue.dequeue()
+                await self.hooks.emit(
+                    QueueUpdateEvent(
+                        queue="followup",
+                        messages=self.state.follow_up_queue.snapshot(),
+                    )
+                )
                 from tau.agent.types import AgentContext
 
                 await self.run(
@@ -828,6 +863,12 @@ class Engine:
             case Role.ASSISTANT:
                 if self.state.steering_queue and not self.state.steering_queue.is_empty():
                     steering_messages = await self.state.steering_queue.dequeue()
+                    await self.hooks.emit(
+                        QueueUpdateEvent(
+                            queue="steering",
+                            messages=self.state.steering_queue.snapshot(),
+                        )
+                    )
                     from tau.agent.types import AgentContext
 
                     await self.run(
@@ -840,6 +881,12 @@ class Engine:
 
                 if self.state.follow_up_queue and not self.state.follow_up_queue.is_empty():
                     follow_up_messages = await self.state.follow_up_queue.dequeue()
+                    await self.hooks.emit(
+                        QueueUpdateEvent(
+                            queue="followup",
+                            messages=self.state.follow_up_queue.snapshot(),
+                        )
+                    )
                     from tau.agent.types import AgentContext
 
                     await self.run(
