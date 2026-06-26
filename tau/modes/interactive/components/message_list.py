@@ -285,6 +285,17 @@ class MessageBlock:
                     lines.extend(self._render_image((idx, i_idx), b64, mime, inner_width))
 
             elif isinstance(item, ToolCallContent) and t.show_tool_calls:
+                # Separate a tool call from preceding assistant text/image with a
+                # blank line so the call block doesn't render flush against the
+                # prose. Thinking blocks already append their own trailing blank,
+                # and consecutive tool calls are spaced below, so only text/image
+                # predecessors need a gap here.
+                prev_item = msg.contents[idx - 1] if idx > 0 else None
+                needs_gap = (
+                    isinstance(prev_item, TextContent) and bool(prev_item.content)
+                ) or isinstance(prev_item, _ImageContent)
+                if needs_gap and lines:
+                    lines.append("")
                 tool = self._tool_lookup(item.name) if self._tool_lookup else None
                 if tool is not None and tool.render_call is not None:
                     custom = tool.render_call(item.args, self._streaming)
